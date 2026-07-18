@@ -1,0 +1,27 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CarbonFootprint.Application/CarbonFootprint.Application.csproj" />
+    <Project Path="src/CarbonFootprint.Domain/CarbonFootprint.Domain.csproj" />
+    <Project Path="src/CarbonFootprint.Infrastructure/CarbonFootprint.Infrastructure.csproj" />
+    <Project Path="src/CarbonFootprint.Web/CarbonFootprint.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/Architecture/">
+    <Project Path="tests/Architecture/CarbonFootprint.Architecture.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Contract/">
+    <Project Path="tests/Contract/CarbonFootprint.Contract.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/GoldenCases/">
+    <Project Path="tests/GoldenCases/CarbonFootprint.GoldenCases.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Integration/">
+    <Project Path="tests/Integration/CarbonFootprint.Integration.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Security/">
+    <Project Path="tests/Security/CarbonFootprint.Security.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/Unit/">
+    <Project Path="tests/Unit/CarbonFootprint.Unit.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -2,7 +2,7 @@
 
 本專案是以 .NET 10、ASP.NET Core 與 PostgreSQL 18 建立的模組化單體，目標是提供可維護、可稽核、可重現的產品碳足跡盤查、計算與查驗準備流程。
 
-目前狀態：Phase 0 repository 基線建置中。實際完成範圍、驗證證據與阻塞項目請見 [實作狀態](docs/IMPLEMENTATION_STATUS.md)。
+目前狀態：Phase 0 已完成，Phase 1 Golden Vertical Slice 建置中。實際完成範圍、驗證證據與阻塞項目請見 [實作狀態](docs/IMPLEMENTATION_STATUS.md)。
 
 ## 開發前置需求
 
@@ -18,9 +18,23 @@ dotnet restore
 dotnet build --configuration Release --no-restore
 dotnet test --configuration Release --no-build
 docker compose config
+docker compose up -d --build
 ```
 
-Docker 服務與應用程式啟動指令會在 Phase 1 完成後補入；未完成前不得將本文件視為可發布證據。
+服務啟動後：
+
+- Web：`http://localhost:8088`
+- Mailpit：`http://localhost:8025`
+- MinIO Console：`http://localhost:9001`
+- Liveness：`http://localhost:8088/health/live`
+- Readiness：`http://localhost:8088/health/ready`
+
+本機 integration test 需明確提供測試資料庫連線字串；不得指向正式資料庫：
+
+```powershell
+$env:CARBON_TEST_DB_CONNECTION='Host=127.0.0.1;Port=5432;Database=carbon_footprint;Username=carbon_app;Password=change-this-local-password;SSL Mode=Disable;GSS Encryption Mode=Disable'
+dotnet test --configuration Release --no-build
+```
 
 ## 專案原則
 

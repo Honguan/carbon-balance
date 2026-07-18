@@ -1,0 +1,14 @@
+.git
+.github
+.analysis
+.dotnet
+**/bin
+**/obj
+TestResults
+coverage
+data
+backups
+public_html_Carbon-master.zip
+CODEX_GOAL.md
+.env
+
