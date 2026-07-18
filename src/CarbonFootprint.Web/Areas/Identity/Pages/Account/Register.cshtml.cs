@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text;
 using CarbonFootprint.Infrastructure.Identity;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.WebUtilities;
 
 namespace CarbonFootprint.Web.Areas.Identity.Pages.Account;
 
+[AllowAnonymous]
 public sealed class RegisterModel : PageModel
 {
     private readonly UserManager<ApplicationUser> _userManager;
@@ -32,13 +34,13 @@ public sealed class RegisterModel : PageModel
     public async Task OnGetAsync()
     {
         await EnsureRolesAsync();
-        CreatesAdministrator = !await HasAdministratorAsync();
+        CreatesAdministrator = !await HasConfirmedAdministratorAsync();
     }
 
     public async Task<IActionResult> OnPostAsync()
     {
         await EnsureRolesAsync();
-        CreatesAdministrator = !await HasAdministratorAsync();
+        CreatesAdministrator = !await HasConfirmedAdministratorAsync();
 
         if (!ModelState.IsValid)
         {
@@ -116,10 +118,10 @@ public sealed class RegisterModel : PageModel
         }
     }
 
-    private async Task<bool> HasAdministratorAsync()
+    private async Task<bool> HasConfirmedAdministratorAsync()
     {
         var administrators = await _userManager.GetUsersInRoleAsync(SystemRoles.Administrator);
-        return administrators.Count > 0;
+        return administrators.Any(user => user.EmailConfirmed);
     }
 
     private void AddIdentityErrors(IdentityResult result)
@@ -128,7 +130,7 @@ public sealed class RegisterModel : PageModel
         {
             var message = error.Code switch
             {
-                "DuplicateUserName" or "DuplicateEmail" => "此 Email 已被使用。",
+                "DuplicateUserName" or "DuplicateEmail" => "此 Email 已註冊；若尚未確認，請使用重寄確認信功能。",
                 "PasswordTooShort" => "密碼至少需要 6 個字元。",
                 _ => error.Description
             };
