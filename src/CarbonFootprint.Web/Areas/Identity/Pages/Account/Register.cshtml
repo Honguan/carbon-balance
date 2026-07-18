@@ -23,7 +23,7 @@
             {
                 <span class="eyebrow">首次設定</span>
                 <h2 id="setup-title">建立初始管理者</h2>
-                <p class="auth-card__intro">目前尚無系統管理者，此帳號確認 Email 後會取得管理者角色。</p>
+                <p class="auth-card__intro">目前尚無已確認的系統管理者，此帳號完成 Email 確認後會取得管理者角色。</p>
             }
             else
             {
@@ -32,7 +32,7 @@
                 <p class="auth-card__intro">新帳號預設為檢視者，完成 Email 確認後即可登入。</p>
             }
 
-            <form method="post" class="auth-form">
+            <form method="post" class="auth-form" novalidate>
                 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
 
                 <div class="field-group">
@@ -80,7 +80,10 @@
                 </button>
             </form>
 
-            <a class="auth-back" asp-page="./Login">← 返回登入</a>
+            <div class="auth-account-links auth-account-links--single">
+                <a class="initial-account-link" href="/Identity/Account/ResendEmailConfirmation">已註冊但沒收到信？重寄確認信</a>
+            </div>
+            <a class="auth-back" href="/Identity/Account/Login" data-history-back>← 返回上一頁</a>
         </div>
     </div>
 </section>
