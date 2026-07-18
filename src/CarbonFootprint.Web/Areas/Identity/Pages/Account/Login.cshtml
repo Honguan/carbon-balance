@@ -47,6 +47,11 @@
             <h2 id="login-title">歡迎回來</h2>
             <p class="auth-card__intro">輸入帳號與密碼，系統會依你的角色顯示可使用的碳足跡功能。</p>
 
+            @if (TempData["AccountMessage"] is string accountMessage)
+            {
+                <div class="status-message" role="status">@accountMessage</div>
+            }
+
             <form method="post" class="auth-form">
                 <input type="hidden" asp-for="ReturnUrl" />
                 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
@@ -88,6 +93,8 @@
                 <span class="auth-note__icon" aria-hidden="true">i</span>
                 <p>此系統不要求 Email 認證或多因素驗證。帳號角色由系統管理者設定。</p>
             </div>
+
+            <a class="initial-account-link" asp-page="./Register">首次使用？建立初始管理者</a>
         </div>
     </div>
 </section>
