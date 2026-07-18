@@ -214,13 +214,71 @@ public sealed class WorkspaceModel : PageModel
             Geography = "TW",
             ValidFrom = new DateOnly(2025, 1, 1),
             ValidTo = new DateOnly(2027, 12, 31),
-            PublicationStatus = "Published",
+            PublicationStatus = FactorPublicationStatus.Draft.ToString(),
             SourceDatasetVersion = sourceDatasetVersion.Trim(),
             LicenseCode = licenseCode.Trim()
         });
-        AddAudit("factor.version.published", "EmissionFactorVersion", factorVersionId);
+        AddAudit("factor.version.created", "EmissionFactorVersion", factorVersionId);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        StatusMessage = "係數版本已建立；此 Golden Slice 資料仍須領域與授權審核。";
+        StatusMessage = "係數草稿已建立；發布後才可用於新計算。";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostPublishFactorAsync(Guid factorVersionId, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
+        {
+            return Forbid();
+        }
+
+        var factor = await _dbContext.EmissionFactorVersions.SingleOrDefaultAsync(
+            item => item.Id == factorVersionId,
+            cancellationToken);
+        if (factor is null)
+        {
+            return NotFound();
+        }
+
+        if (!string.Equals(factor.PublicationStatus, FactorPublicationStatus.Draft.ToString(), StringComparison.Ordinal))
+        {
+            ModelState.AddModelError("factor", "只有草稿係數版本可發布。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        factor.PublicationStatus = FactorPublicationStatus.Published.ToString();
+        AddAudit("factor.version.published", "EmissionFactorVersion", factor.Id);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        StatusMessage = "係數版本已發布。";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostWithdrawFactorAsync(Guid factorVersionId, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
+        {
+            return Forbid();
+        }
+
+        var factor = await _dbContext.EmissionFactorVersions.SingleOrDefaultAsync(
+            item => item.Id == factorVersionId,
+            cancellationToken);
+        if (factor is null)
+        {
+            return NotFound();
+        }
+
+        if (!string.Equals(factor.PublicationStatus, FactorPublicationStatus.Published.ToString(), StringComparison.Ordinal))
+        {
+            ModelState.AddModelError("factor", "只有已發布係數版本可撤回。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        factor.PublicationStatus = FactorPublicationStatus.Withdrawn.ToString();
+        AddAudit("factor.version.withdrawn", "EmissionFactorVersion", factor.Id);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        StatusMessage = "係數版本已撤回；歷史計算不受影響。";
         return RedirectToPage();
     }
 
@@ -249,6 +307,27 @@ public sealed class WorkspaceModel : PageModel
         if (project is null || factor is null)
         {
             return NotFound();
+        }
+
+        var factorVersion = new EmissionFactorVersion(
+            factor.Id,
+            factor.FactorId,
+            factor.VersionNumber,
+            factor.Name,
+            factor.Value,
+            factor.NumeratorUnitCode,
+            factor.DenominatorUnitCode,
+            factor.Geography,
+            factor.ValidFrom,
+            factor.ValidTo,
+            Enum.Parse<FactorPublicationStatus>(factor.PublicationStatus),
+            factor.SourceDatasetVersion,
+            factor.LicenseCode);
+        if (!factorVersion.IsSelectableOn(project.PeriodEnd))
+        {
+            ModelState.AddModelError("activity", "係數版本未發布、已撤回或不在盤查期間有效範圍。");
+            await LoadAsync(cancellationToken);
+            return Page();
         }
 
         if (rawValue is null or < 0m || string.IsNullOrWhiteSpace(activityName))

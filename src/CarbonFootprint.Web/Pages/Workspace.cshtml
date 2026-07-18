@@ -1,5 +1,6 @@
 @page
 @model CarbonFootprint.Web.Pages.WorkspaceModel
+@using CarbonFootprint.Domain.Modules.Factors
 @using CarbonFootprint.Domain.Modules.Inventories
 @{
     ViewData["Title"] = "盤查工作區";
@@ -96,12 +97,28 @@ else
                         <input class="form-control" id="sourceDatasetVersion" name="sourceDatasetVersion" value="golden-dataset-1" required />
                         <label class="form-label mt-2" for="licenseCode">授權識別</label>
                         <input class="form-control" id="licenseCode" name="licenseCode" value="test-fixture" required />
-                        <button class="btn btn-primary mt-3" type="submit">建立測試係數版本</button>
+                        <button class="btn btn-primary mt-3" type="submit">建立係數草稿</button>
                     </form>
                     <ul class="mt-3">
                         @foreach (var factor in Model.Factors)
                         {
-                            <li>@factor.Name：@factor.Value kgCO2e/@factor.DenominatorUnitCode</li>
+                            <li class="mb-2">
+                                @factor.Name：@factor.Value kgCO2e/@factor.DenominatorUnitCode（@factor.PublicationStatus）
+                                @if (factor.PublicationStatus == FactorPublicationStatus.Draft.ToString())
+                                {
+                                    <form class="d-inline" method="post" asp-page-handler="PublishFactor">
+                                        <input type="hidden" name="factorVersionId" value="@factor.Id" />
+                                        <button class="btn btn-sm btn-success" type="submit">發布</button>
+                                    </form>
+                                }
+                                else if (factor.PublicationStatus == FactorPublicationStatus.Published.ToString())
+                                {
+                                    <form class="d-inline" method="post" asp-page-handler="WithdrawFactor">
+                                        <input type="hidden" name="factorVersionId" value="@factor.Id" />
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">撤回</button>
+                                    </form>
+                                }
+                            </li>
                         }
                     </ul>
                 </div>

@@ -122,6 +122,10 @@ $energyFactorId = Get-OptionValue $workspace ([regex]::Escape("$namePrefix Energ
 $transportFactorId = Get-OptionValue $workspace ([regex]::Escape("$namePrefix Transport factor / tonne-km"))
 $wasteFactorId = Get-OptionValue $workspace ([regex]::Escape("$namePrefix Waste factor / kg"))
 
+foreach ($factorId in @($rawFactorId, $energyFactorId, $transportFactorId, $wasteFactorId)) {
+    Post-Workspace 'PublishFactor' @{ factorVersionId = $factorId } | Out-Null
+}
+
 $activities = @(
     @{ Stage = 'RawMaterial'; Name = 'Raw material'; Raw = '1000'; RawUnit = 'g'; CanonicalUnit = 'kg'; Factor = $rawFactorId },
     @{ Stage = 'Manufacturing'; Name = 'Manufacturing electricity'; Raw = '3'; RawUnit = 'kWh'; CanonicalUnit = 'kWh'; Factor = $energyFactorId },
