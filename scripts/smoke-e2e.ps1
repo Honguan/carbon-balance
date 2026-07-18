@@ -32,7 +32,7 @@ function Post-Workspace([string]$Handler, [hashtable]$Fields) {
         return Invoke-WebRequest -UseBasicParsing -WebSession $session -Method Post -Uri "$BaseUrl/Workspace?handler=$Handler" -Body $body
     }
     catch {
-        throw "Workspace handler failed: $Handler. $($_.Exception.Message)"
+        throw "Workspace handler failed: $Handler. Fields=$($Fields | ConvertTo-Json -Compress). $($_.Exception.Message)"
     }
 }
 
@@ -192,7 +192,17 @@ Invoke-WebRequest -UseBasicParsing -WebSession $session -Method Post -Uri "$Base
 Enable-Mfa
 
 Post-Workspace 'CreateOrganization' @{ organizationName = "$namePrefix Organization" } | Out-Null
-Post-Workspace 'CreateProduct' @{ productName = "$namePrefix Product" } | Out-Null
+Post-Workspace 'CreateFacility' @{
+    facilityCode = "$namePrefix-FAC"
+    facilityName = "$namePrefix Facility"
+} | Out-Null
+$workspace = (Invoke-WebRequest -UseBasicParsing -WebSession $session "$BaseUrl/Workspace").Content
+$facilityId = Get-OptionValue $workspace ([regex]::Escape("$namePrefix Facility"))
+Post-Workspace 'CreateProduct' @{
+    productName = "$namePrefix Product"
+    categoryCode = 'CCC-P0'
+    facilityId = $facilityId
+} | Out-Null
 $workspace = (Invoke-WebRequest -UseBasicParsing -WebSession $session "$BaseUrl/Workspace").Content
 $productVersionId = Get-OptionValue $workspace ([regex]::Escape("$namePrefix Product"))
 
@@ -203,9 +213,16 @@ Post-Workspace 'CreatePcr' @{
     validFrom = '2025-01-01'
     validTo = '2027-12-31'
     sourceReference = 'golden-pcr-source-1'
+    standardCode = 'ISO 14067'
+    cccClassification = 'CCC-P0'
+    pcrApplicability = 'P0 golden product'
+    ruleRequirements = 'Five lifecycle stages required'
+    originalDocumentName = 'golden-pcr.txt'
+    originalDocumentSha256 = ('a' * 64)
 } | Out-Null
 $workspace = (Invoke-WebRequest -UseBasicParsing -WebSession $session "$BaseUrl/Workspace").Content
 $pcrVersionId = Get-HiddenValue $workspace 'pcrVersionId'
+Post-Workspace 'ReviewPcr' @{ pcrVersionId = $pcrVersionId } | Out-Null
 Post-Workspace 'PublishPcr' @{ pcrVersionId = $pcrVersionId } | Out-Null
 
 Post-Workspace 'CreateInventory' @{
@@ -213,6 +230,13 @@ Post-Workspace 'CreateInventory' @{
     periodStart = '2026-01-01'
     periodEnd = '2026-12-31'
     functionalUnit = '1 product'
+    declaredUnit = '1 piece'
+    systemBoundary = 'cradle-to-grave'
+    allocationMethod = 'physical-output'
+    allocationReason = 'shared inputs allocated by output quantity'
+    exclusions = 'none'
+    assumptions = 'golden fixture assumptions'
+    estimationReason = 'none'
     pcrVersionId = $pcrVersionId
 } | Out-Null
 $workspace = (Invoke-WebRequest -UseBasicParsing -WebSession $session "$BaseUrl/Workspace").Content
@@ -231,6 +255,9 @@ foreach ($factor in $factorInputs) {
         denominatorUnitCode = $factor.Unit
         sourceDatasetVersion = 'golden-dataset-1'
         licenseCode = 'test-fixture'
+        factorSourceName = 'P0 controlled fixture'
+        datasetName = 'P0 golden factors'
+        factorApplicability = 'Taiwan 2025-2027 golden fixture'
     } | Out-Null
 }
 
@@ -241,6 +268,7 @@ $transportFactorId = Get-OptionValue $workspace ([regex]::Escape("$namePrefix Tr
 $wasteFactorId = Get-OptionValue $workspace ([regex]::Escape("$namePrefix Waste factor / kg"))
 
 foreach ($factorId in @($rawFactorId, $energyFactorId, $transportFactorId, $wasteFactorId)) {
+    Post-Workspace 'ReviewFactor' @{ factorVersionId = $factorId } | Out-Null
     Post-Workspace 'PublishFactor' @{ factorVersionId = $factorId } | Out-Null
 }
 

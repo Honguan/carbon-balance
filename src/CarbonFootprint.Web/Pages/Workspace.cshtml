@@ -32,6 +32,64 @@ else
 {
     <p>目前組織：<code>@Model.OrganizationId</code></p>
 
+    <section class="card mb-4">
+        <div class="card-body">
+            <h2 class="h4">組織成員與廠場</h2>
+            <div class="row g-3">
+                <form class="col-lg-4" method="post" asp-page-handler="CreateFacility">
+                    <label class="form-label" for="facilityCode">廠場代碼</label>
+                    <input class="form-control" id="facilityCode" name="facilityCode" required maxlength="100" />
+                    <label class="form-label mt-2" for="facilityName">廠場名稱</label>
+                    <input class="form-control" id="facilityName" name="facilityName" required maxlength="300" />
+                    <button class="btn btn-primary mt-2" type="submit">建立廠場</button>
+                </form>
+                <form class="col-lg-4" method="post" asp-page-handler="InviteMember">
+                    <label class="form-label" for="invitationEmail">受邀 Email</label>
+                    <input class="form-control" id="invitationEmail" name="invitationEmail" type="email" required maxlength="320" />
+                    <label class="form-label mt-2" for="invitationRole">角色</label>
+                    <select class="form-select" id="invitationRole" name="invitationRole">
+                        @foreach (var role in Enum.GetValues<CarbonFootprint.Domain.Modules.Organizations.OrganizationRole>().Where(role => role != CarbonFootprint.Domain.Modules.Organizations.OrganizationRole.Owner))
+                        {
+                            <option value="@role">@role</option>
+                        }
+                    </select>
+                    <button class="btn btn-primary mt-2" type="submit">寄送邀請</button>
+                </form>
+                <div class="col-lg-4">
+                    <h3 class="h6">成員</h3>
+                    <ul>
+                        @foreach (var membership in Model.Memberships)
+                        {
+                            <li>
+                                @membership.UserId：@membership.Role
+                                @if (membership.RevokedAt is null && membership.Role != CarbonFootprint.Domain.Modules.Organizations.OrganizationRole.Owner.ToString())
+                                {
+                                    <form class="d-inline" method="post" asp-page-handler="RevokeMember">
+                                        <input type="hidden" name="membershipId" value="@membership.Id" />
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">撤銷</button>
+                                    </form>
+                                }
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+            <h3 class="h6 mt-3">待處理邀請</h3>
+            <ul>
+                @foreach (var invitation in Model.Invitations.Where(item => item.AcceptedAt is null && item.RevokedAt is null))
+                {
+                    <li>
+                        @invitation.Email：@invitation.Role（到期 @invitation.ExpiresAt.ToString("u")）
+                        <form class="d-inline" method="post" asp-page-handler="RevokeInvitation">
+                            <input type="hidden" name="invitationId" value="@invitation.Id" />
+                            <button class="btn btn-sm btn-outline-danger" type="submit">撤銷邀請</button>
+                        </form>
+                    </li>
+                }
+            </ul>
+        </div>
+    </section>
+
     <div class="row g-4">
         <div class="col-lg-6">
             <section class="card h-100">
@@ -40,6 +98,15 @@ else
                     <form method="post" asp-page-handler="CreateProduct">
                         <label class="form-label" for="productName">產品名稱</label>
                         <input class="form-control" id="productName" name="productName" required maxlength="300" />
+                        <label class="form-label mt-2" for="categoryCode">產品分類代碼</label>
+                        <input class="form-control" id="categoryCode" name="categoryCode" required maxlength="100" />
+                        <label class="form-label mt-2" for="facilityId">所屬廠場</label>
+                        <select class="form-select" id="facilityId" name="facilityId" required>
+                            @foreach (var facility in Model.Facilities)
+                            {
+                                <option value="@facility.Id">@facility.Code - @facility.Name</option>
+                            }
+                        </select>
                         <button class="btn btn-primary mt-3" type="submit">建立產品第 1 版</button>
                     </form>
                     <ul class="mt-3">
@@ -69,6 +136,18 @@ else
                         <input class="form-control" type="date" id="pcrValidTo" name="validTo" value="2027-12-31" />
                         <label class="form-label mt-2" for="sourceReference">來源參照</label>
                         <input class="form-control" id="sourceReference" name="sourceReference" placeholder="文件編號或受控來源 URI" required />
+                        <label class="form-label mt-2" for="standardCode">標準代碼</label>
+                        <input class="form-control" id="standardCode" name="standardCode" value="ISO 14067" required />
+                        <label class="form-label mt-2" for="cccClassification">CCC 分類</label>
+                        <input class="form-control" id="cccClassification" name="cccClassification" required />
+                        <label class="form-label mt-2" for="pcrApplicability">適用性</label>
+                        <textarea class="form-control" id="pcrApplicability" name="pcrApplicability" required></textarea>
+                        <label class="form-label mt-2" for="ruleRequirements">規則要求模板</label>
+                        <textarea class="form-control" id="ruleRequirements" name="ruleRequirements" required></textarea>
+                        <label class="form-label mt-2" for="originalDocumentName">原始文件名稱</label>
+                        <input class="form-control" id="originalDocumentName" name="originalDocumentName" required />
+                        <label class="form-label mt-2" for="originalDocumentSha256">原始文件 SHA-256</label>
+                        <input class="form-control" id="originalDocumentSha256" name="originalDocumentSha256" pattern="[0-9a-fA-F]{64}" required />
                         <button class="btn btn-primary mt-3" type="submit">建立 PCR 草稿</button>
                     </form>
                     <ul class="mt-3">
@@ -78,6 +157,10 @@ else
                                 @pcr.RegistrationNumber v@pcr.VersionNumber：@pcr.Title（@pcr.PublicationStatus）
                                 @if (pcr.PublicationStatus == PcrPublicationStatus.Draft.ToString())
                                 {
+                                    <form class="d-inline" method="post" asp-page-handler="ReviewPcr">
+                                        <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
+                                        <button class="btn btn-sm btn-outline-primary" type="submit">核准審查</button>
+                                    </form>
                                     <form class="d-inline" method="post" asp-page-handler="PublishPcr">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
                                         <button class="btn btn-sm btn-success" type="submit">發布</button>
@@ -115,6 +198,20 @@ else
                         <input class="form-control" type="date" id="periodEnd" name="periodEnd" value="2026-12-31" required />
                         <label class="form-label mt-2" for="functionalUnit">功能單位</label>
                         <input class="form-control" id="functionalUnit" name="functionalUnit" value="1 個產品" required />
+                        <label class="form-label mt-2" for="declaredUnit">標示單位</label>
+                        <input class="form-control" id="declaredUnit" name="declaredUnit" value="1 件" required />
+                        <label class="form-label mt-2" for="systemBoundary">系統邊界</label>
+                        <textarea class="form-control" id="systemBoundary" name="systemBoundary" required maxlength="1000">搖籃到墳墓</textarea>
+                        <label class="form-label mt-2" for="allocationMethod">分配方法</label>
+                        <input class="form-control" id="allocationMethod" name="allocationMethod" value="物理量分配" required maxlength="200" />
+                        <label class="form-label mt-2" for="allocationReason">分配理由</label>
+                        <textarea class="form-control" id="allocationReason" name="allocationReason" required maxlength="2000">依產品產量比例分配共同投入</textarea>
+                        <label class="form-label mt-2" for="exclusions">排除項目與理由</label>
+                        <textarea class="form-control" id="exclusions" name="exclusions" maxlength="4000"></textarea>
+                        <label class="form-label mt-2" for="assumptions">假設</label>
+                        <textarea class="form-control" id="assumptions" name="assumptions" maxlength="4000"></textarea>
+                        <label class="form-label mt-2" for="estimationReason">估算／替代資料理由</label>
+                        <textarea class="form-control" id="estimationReason" name="estimationReason" maxlength="4000"></textarea>
                         <label class="form-label mt-2" for="pcrVersionId">PCR 版本</label>
                         <select class="form-select" id="pcrVersionId" name="pcrVersionId" required>
                             @foreach (var pcr in Model.PcrVersions)
@@ -174,6 +271,12 @@ else
                         <input class="form-control" id="sourceDatasetVersion" name="sourceDatasetVersion" value="golden-dataset-1" required />
                         <label class="form-label mt-2" for="licenseCode">授權識別</label>
                         <input class="form-control" id="licenseCode" name="licenseCode" value="test-fixture" required />
+                        <label class="form-label mt-2" for="factorSourceName">來源機構／文件</label>
+                        <input class="form-control" id="factorSourceName" name="factorSourceName" required />
+                        <label class="form-label mt-2" for="datasetName">資料集名稱</label>
+                        <input class="form-control" id="datasetName" name="datasetName" required />
+                        <label class="form-label mt-2" for="factorApplicability">適用性</label>
+                        <textarea class="form-control" id="factorApplicability" name="factorApplicability" required></textarea>
                         <button class="btn btn-primary mt-3" type="submit">建立係數草稿</button>
                     </form>
                     <ul class="mt-3">
@@ -183,6 +286,10 @@ else
                                 @factor.Name：@factor.Value kgCO2e/@factor.DenominatorUnitCode（@factor.PublicationStatus）
                                 @if (factor.PublicationStatus == FactorPublicationStatus.Draft.ToString())
                                 {
+                                    <form class="d-inline" method="post" asp-page-handler="ReviewFactor">
+                                        <input type="hidden" name="factorVersionId" value="@factor.Id" />
+                                        <button class="btn btn-sm btn-outline-primary" type="submit">核准審查</button>
+                                    </form>
                                     <form class="d-inline" method="post" asp-page-handler="PublishFactor">
                                         <input type="hidden" name="factorVersionId" value="@factor.Id" />
                                         <button class="btn btn-sm btn-success" type="submit">發布</button>
@@ -193,6 +300,14 @@ else
                                     <form class="d-inline" method="post" asp-page-handler="WithdrawFactor">
                                         <input type="hidden" name="factorVersionId" value="@factor.Id" />
                                         <button class="btn btn-sm btn-outline-danger" type="submit">撤回</button>
+                                    </form>
+                                    <form class="mt-1" method="post" asp-page-handler="SupersedeFactor">
+                                        <input type="hidden" name="factorVersionId" value="@factor.Id" />
+                                        <label class="form-label" for="new-factor-value-@factor.Id">取代版本數值</label>
+                                        <input class="form-control" id="new-factor-value-@factor.Id" name="newFactorValue" type="number" step="any" min="0" required />
+                                        <label class="form-label" for="new-factor-source-@factor.Id">新來源版本</label>
+                                        <input class="form-control" id="new-factor-source-@factor.Id" name="newSourceDatasetVersion" required />
+                                        <button class="btn btn-sm btn-outline-secondary mt-1" type="submit">建立取代草稿</button>
                                     </form>
                                 }
                             </li>

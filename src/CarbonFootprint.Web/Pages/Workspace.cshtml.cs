@@ -24,6 +24,8 @@ public sealed class WorkspaceModel : PageModel
     private readonly CarbonFootprintDbContext _dbContext;
     private readonly IOrganizationScope _organizationScope;
     private readonly OrganizationOnboardingService _onboardingService;
+    private readonly OrganizationInvitationService _invitationService;
+    private readonly SmtpEmailSender _emailSender;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly CalculateInventoryHandler _calculateHandler;
@@ -34,6 +36,8 @@ public sealed class WorkspaceModel : PageModel
         CarbonFootprintDbContext dbContext,
         IOrganizationScope organizationScope,
         OrganizationOnboardingService onboardingService,
+        OrganizationInvitationService invitationService,
+        SmtpEmailSender emailSender,
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
         CalculateInventoryHandler calculateHandler,
@@ -43,6 +47,8 @@ public sealed class WorkspaceModel : PageModel
         _dbContext = dbContext;
         _organizationScope = organizationScope;
         _onboardingService = onboardingService;
+        _invitationService = invitationService;
+        _emailSender = emailSender;
         _userManager = userManager;
         _signInManager = signInManager;
         _calculateHandler = calculateHandler;
@@ -53,6 +59,12 @@ public sealed class WorkspaceModel : PageModel
     public Guid? OrganizationId => _organizationScope.OrganizationId;
 
     public IReadOnlyList<ProductVersionRecord> ProductVersions { get; private set; } = [];
+
+    public IReadOnlyList<FacilityRecord> Facilities { get; private set; } = [];
+
+    public IReadOnlyList<OrganizationMembershipRecord> Memberships { get; private set; } = [];
+
+    public IReadOnlyList<OrganizationInvitationRecord> Invitations { get; private set; } = [];
 
     public IReadOnlyList<InventoryProjectVersionRecord> InventoryProjects { get; private set; } = [];
 
@@ -100,7 +112,140 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
-    public async Task<IActionResult> OnPostCreateProductAsync(string productName, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostCreateFacilityAsync(
+        string facilityCode,
+        string facilityName,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization))
+        {
+            return Forbid();
+        }
+        if (string.IsNullOrWhiteSpace(facilityCode) || string.IsNullOrWhiteSpace(facilityName))
+        {
+            ModelState.AddModelError("facility", "廠場代碼與名稱皆為必填。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var organizationId = RequireOrganization();
+        var normalizedCode = facilityCode.Trim().ToUpperInvariant();
+        if (await _dbContext.Facilities.AnyAsync(item => item.Code == normalizedCode, cancellationToken))
+        {
+            ModelState.AddModelError("facilityCode", "廠場代碼不可重複。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var facilityId = Guid.NewGuid();
+        _dbContext.Facilities.Add(new FacilityRecord
+        {
+            Id = facilityId,
+            OrganizationId = organizationId,
+            Code = normalizedCode,
+            Name = facilityName.Trim(),
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        AddAudit("facility.created", "Facility", facilityId);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        StatusMessage = "廠場已建立。";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostInviteMemberAsync(
+        string invitationEmail,
+        OrganizationRole invitationRole,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
+        {
+            return Forbid();
+        }
+        if (!Guid.TryParse(_userManager.GetUserId(User), out var invitedBy))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var token = await _invitationService.CreateAsync(
+                RequireOrganization(),
+                invitedBy,
+                invitationEmail,
+                invitationRole,
+                cancellationToken);
+            var link = Url.Page("/AcceptInvitation", pageHandler: null, values: new { token }, protocol: Request.Scheme)
+                ?? throw new InvalidOperationException("無法建立邀請連結。");
+            await _emailSender.SendOrganizationInvitationAsync(invitationEmail.Trim(), link);
+            StatusMessage = "組織邀請已寄出。";
+            return RedirectToPage();
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            ModelState.AddModelError("invitation", exception.Message);
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+    }
+
+    public async Task<IActionResult> OnPostRevokeInvitationAsync(Guid invitationId, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
+        {
+            return Forbid();
+        }
+        var invitation = await _dbContext.OrganizationInvitations.SingleOrDefaultAsync(item => item.Id == invitationId, cancellationToken);
+        if (invitation is null)
+        {
+            return NotFound();
+        }
+        if (!invitation.AcceptedAt.HasValue)
+        {
+            invitation.RevokedAt = DateTimeOffset.UtcNow;
+            AddAudit("organization.invitation.revoked", "OrganizationInvitation", invitation.Id);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostRevokeMemberAsync(Guid membershipId, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
+        {
+            return Forbid();
+        }
+        var membership = await _dbContext.OrganizationMemberships.SingleOrDefaultAsync(item => item.Id == membershipId, cancellationToken);
+        if (membership is null)
+        {
+            return NotFound();
+        }
+        if (membership.Role == OrganizationRole.Owner.ToString())
+        {
+            ModelState.AddModelError("membership", "不可撤銷組織擁有者。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        membership.RevokedAt = DateTimeOffset.UtcNow;
+        var claims = await _dbContext.UserClaims
+            .Where(item => item.UserId == membership.UserId && item.ClaimType == "organization_id")
+            .ToArrayAsync(cancellationToken);
+        _dbContext.UserClaims.RemoveRange(claims);
+        AddAudit("organization.membership.revoked", "OrganizationMembership", membership.Id);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        var revokedUser = await _userManager.FindByIdAsync(membership.UserId.ToString());
+        if (revokedUser is not null)
+        {
+            await _userManager.UpdateSecurityStampAsync(revokedUser);
+        }
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostCreateProductAsync(
+        string productName,
+        string categoryCode,
+        Guid facilityId,
+        CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
         {
@@ -108,11 +253,15 @@ public sealed class WorkspaceModel : PageModel
         }
 
         var organizationId = RequireOrganization();
-        if (string.IsNullOrWhiteSpace(productName))
+        if (string.IsNullOrWhiteSpace(productName) || string.IsNullOrWhiteSpace(categoryCode))
         {
             ModelState.AddModelError("productName", "產品名稱不可為空。");
             await LoadAsync(cancellationToken);
             return Page();
+        }
+        if (!await _dbContext.Facilities.AnyAsync(item => item.Id == facilityId, cancellationToken))
+        {
+            return NotFound();
         }
 
         var productId = Guid.NewGuid();
@@ -122,6 +271,8 @@ public sealed class WorkspaceModel : PageModel
             Id = productId,
             OrganizationId = organizationId,
             Name = productName.Trim(),
+            CategoryCode = categoryCode.Trim().ToUpperInvariant(),
+            FacilityId = facilityId,
             CreatedAt = DateTimeOffset.UtcNow
         });
         _dbContext.ProductVersions.Add(new ProductVersionRecord
@@ -144,6 +295,13 @@ public sealed class WorkspaceModel : PageModel
         DateOnly periodStart,
         DateOnly periodEnd,
         string functionalUnit,
+        string declaredUnit,
+        string systemBoundary,
+        string allocationMethod,
+        string allocationReason,
+        string exclusions,
+        string assumptions,
+        string estimationReason,
         Guid pcrVersionId,
         CancellationToken cancellationToken)
     {
@@ -153,7 +311,12 @@ public sealed class WorkspaceModel : PageModel
         }
 
         var organizationId = RequireOrganization();
-        if (periodStart > periodEnd || string.IsNullOrWhiteSpace(functionalUnit))
+        if (periodStart > periodEnd
+            || string.IsNullOrWhiteSpace(functionalUnit)
+            || string.IsNullOrWhiteSpace(declaredUnit)
+            || string.IsNullOrWhiteSpace(systemBoundary)
+            || string.IsNullOrWhiteSpace(allocationMethod)
+            || string.IsNullOrWhiteSpace(allocationReason))
         {
             ModelState.AddModelError("inventory", "請提供有效期間、功能單位與 PCR 版本識別。");
             await LoadAsync(cancellationToken);
@@ -189,6 +352,13 @@ public sealed class WorkspaceModel : PageModel
             PeriodStart = periodStart,
             PeriodEnd = periodEnd,
             FunctionalUnit = functionalUnit.Trim(),
+            DeclaredUnit = declaredUnit.Trim(),
+            SystemBoundary = systemBoundary.Trim(),
+            AllocationMethod = allocationMethod.Trim(),
+            AllocationReason = allocationReason.Trim(),
+            Exclusions = exclusions?.Trim() ?? string.Empty,
+            Assumptions = assumptions?.Trim() ?? string.Empty,
+            EstimationReason = estimationReason?.Trim() ?? string.Empty,
             PcrVersionId = pcr.Id,
             PcrVersion = $"{pcr.RegistrationNumber}-v{pcr.VersionNumber}",
             WorkflowStatus = InventoryWorkflowStatus.Draft.ToString(),
@@ -207,6 +377,12 @@ public sealed class WorkspaceModel : PageModel
         DateOnly? validFrom,
         DateOnly? validTo,
         string sourceReference,
+        string standardCode,
+        string cccClassification,
+        string pcrApplicability,
+        string ruleRequirements,
+        string originalDocumentName,
+        string originalDocumentSha256,
         CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
@@ -218,6 +394,11 @@ public sealed class WorkspaceModel : PageModel
             || versionNumber < 1
             || string.IsNullOrWhiteSpace(title)
             || string.IsNullOrWhiteSpace(sourceReference)
+            || string.IsNullOrWhiteSpace(standardCode)
+            || string.IsNullOrWhiteSpace(cccClassification)
+            || string.IsNullOrWhiteSpace(pcrApplicability)
+            || string.IsNullOrWhiteSpace(ruleRequirements)
+            || originalDocumentSha256.Length != 64
             || validFrom > validTo)
         {
             ModelState.AddModelError("pcr", "PCR 登錄編號、正整數版本、名稱、來源與有效期間必須有效。");
@@ -237,11 +418,42 @@ public sealed class WorkspaceModel : PageModel
             ValidTo = validTo,
             PublicationStatus = PcrPublicationStatus.Draft.ToString(),
             SourceReference = sourceReference.Trim(),
+            StandardCode = standardCode.Trim(),
+            CccClassification = cccClassification.Trim(),
+            Applicability = pcrApplicability.Trim(),
+            RuleRequirements = ruleRequirements.Trim(),
+            OriginalDocumentName = originalDocumentName?.Trim() ?? string.Empty,
+            OriginalDocumentSha256 = originalDocumentSha256.Trim().ToLowerInvariant(),
+            ReviewStatus = PcrReviewStatus.Pending.ToString(),
             CreatedAt = DateTimeOffset.UtcNow
         });
         AddAudit("pcr.version.created", "PcrVersion", pcrVersionId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "PCR 草稿已建立；發布後才可建立新盤查。";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostReviewPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
+        {
+            return Forbid();
+        }
+        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(item => item.Id == pcrVersionId, cancellationToken);
+        if (pcr is null)
+        {
+            return NotFound();
+        }
+        if (pcr.PublicationStatus != PcrPublicationStatus.Draft.ToString())
+        {
+            return BadRequest();
+        }
+
+        pcr.ReviewStatus = PcrReviewStatus.Approved.ToString();
+        pcr.ReviewedAt = DateTimeOffset.UtcNow;
+        pcr.ReviewedBy = Guid.TryParse(_userManager.GetUserId(User), out var reviewerId) ? reviewerId : null;
+        AddAudit("pcr.version.reviewed", "PcrVersion", pcr.Id);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return RedirectToPage();
     }
 
@@ -262,7 +474,8 @@ public sealed class WorkspaceModel : PageModel
             return NotFound();
         }
 
-        if (!string.Equals(pcr.PublicationStatus, PcrPublicationStatus.Draft.ToString(), StringComparison.Ordinal))
+        if (!string.Equals(pcr.PublicationStatus, PcrPublicationStatus.Draft.ToString(), StringComparison.Ordinal)
+            || pcr.ReviewStatus != PcrReviewStatus.Approved.ToString())
         {
             ModelState.AddModelError("pcr", "只有草稿 PCR 版本可發布。");
             await LoadAsync(cancellationToken);
@@ -315,6 +528,9 @@ public sealed class WorkspaceModel : PageModel
         string denominatorUnitCode,
         string sourceDatasetVersion,
         string licenseCode,
+        string factorSourceName,
+        string datasetName,
+        string factorApplicability,
         CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
@@ -326,7 +542,10 @@ public sealed class WorkspaceModel : PageModel
         if (string.IsNullOrWhiteSpace(factorName)
             || factorValue is null or < 0m
             || string.IsNullOrWhiteSpace(sourceDatasetVersion)
-            || string.IsNullOrWhiteSpace(licenseCode))
+            || string.IsNullOrWhiteSpace(licenseCode)
+            || string.IsNullOrWhiteSpace(factorSourceName)
+            || string.IsNullOrWhiteSpace(datasetName)
+            || string.IsNullOrWhiteSpace(factorApplicability))
         {
             ModelState.AddModelError("factor", "係數名稱、非負數值、來源版本與授權識別皆為必填。");
             await LoadAsync(cancellationToken);
@@ -356,11 +575,39 @@ public sealed class WorkspaceModel : PageModel
             ValidTo = new DateOnly(2027, 12, 31),
             PublicationStatus = FactorPublicationStatus.Draft.ToString(),
             SourceDatasetVersion = sourceDatasetVersion.Trim(),
-            LicenseCode = licenseCode.Trim()
+            LicenseCode = licenseCode.Trim(),
+            SourceName = factorSourceName.Trim(),
+            DatasetName = datasetName.Trim(),
+            Applicability = factorApplicability.Trim(),
+            ReviewStatus = FactorReviewStatus.Pending.ToString()
         });
         AddAudit("factor.version.created", "EmissionFactorVersion", factorVersionId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "係數草稿已建立；發布後才可用於新計算。";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostReviewFactorAsync(Guid factorVersionId, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
+        {
+            return Forbid();
+        }
+        var factor = await _dbContext.EmissionFactorVersions.SingleOrDefaultAsync(item => item.Id == factorVersionId, cancellationToken);
+        if (factor is null)
+        {
+            return NotFound();
+        }
+        if (factor.PublicationStatus != FactorPublicationStatus.Draft.ToString())
+        {
+            return BadRequest();
+        }
+
+        factor.ReviewStatus = FactorReviewStatus.Approved.ToString();
+        factor.ReviewedAt = DateTimeOffset.UtcNow;
+        factor.ReviewedBy = Guid.TryParse(_userManager.GetUserId(User), out var reviewerId) ? reviewerId : null;
+        AddAudit("factor.version.reviewed", "EmissionFactorVersion", factor.Id);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return RedirectToPage();
     }
 
@@ -383,7 +630,8 @@ public sealed class WorkspaceModel : PageModel
             return NotFound();
         }
 
-        if (!string.Equals(factor.PublicationStatus, FactorPublicationStatus.Draft.ToString(), StringComparison.Ordinal))
+        if (!string.Equals(factor.PublicationStatus, FactorPublicationStatus.Draft.ToString(), StringComparison.Ordinal)
+            || factor.ReviewStatus != FactorReviewStatus.Approved.ToString())
         {
             ModelState.AddModelError("factor", "只有草稿係數版本可發布。");
             await LoadAsync(cancellationToken);
@@ -391,6 +639,7 @@ public sealed class WorkspaceModel : PageModel
         }
 
         factor.PublicationStatus = FactorPublicationStatus.Published.ToString();
+        factor.PublishedAt = DateTimeOffset.UtcNow;
         AddAudit("factor.version.published", "EmissionFactorVersion", factor.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "係數版本已發布。";
@@ -424,9 +673,67 @@ public sealed class WorkspaceModel : PageModel
         }
 
         factor.PublicationStatus = FactorPublicationStatus.Withdrawn.ToString();
+        factor.WithdrawnAt = DateTimeOffset.UtcNow;
         AddAudit("factor.version.withdrawn", "EmissionFactorVersion", factor.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "係數版本已撤回；歷史計算不受影響。";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostSupersedeFactorAsync(
+        Guid factorVersionId,
+        decimal? newFactorValue,
+        string newSourceDatasetVersion,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
+        {
+            return Forbid();
+        }
+        var current = await _dbContext.EmissionFactorVersions.SingleOrDefaultAsync(
+            item => item.Id == factorVersionId,
+            cancellationToken);
+        if (current is null)
+        {
+            return NotFound();
+        }
+        if (current.PublicationStatus != FactorPublicationStatus.Published.ToString()
+            || newFactorValue is null or < 0m
+            || string.IsNullOrWhiteSpace(newSourceDatasetVersion))
+        {
+            ModelState.AddModelError("factor", "僅可用有效數值與來源版本取代已發布係數。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var newVersionId = Guid.NewGuid();
+        current.PublicationStatus = FactorPublicationStatus.Withdrawn.ToString();
+        current.WithdrawnAt = DateTimeOffset.UtcNow;
+        _dbContext.EmissionFactorVersions.Add(new EmissionFactorVersionRecord
+        {
+            Id = newVersionId,
+            OrganizationId = current.OrganizationId,
+            FactorId = current.FactorId,
+            VersionNumber = current.VersionNumber + 1,
+            Name = current.Name,
+            Value = newFactorValue.Value,
+            NumeratorUnitCode = current.NumeratorUnitCode,
+            DenominatorUnitCode = current.DenominatorUnitCode,
+            Geography = current.Geography,
+            ValidFrom = current.ValidFrom,
+            ValidTo = current.ValidTo,
+            PublicationStatus = FactorPublicationStatus.Draft.ToString(),
+            SourceDatasetVersion = newSourceDatasetVersion.Trim(),
+            LicenseCode = current.LicenseCode,
+            SourceName = current.SourceName,
+            DatasetName = current.DatasetName,
+            Applicability = current.Applicability,
+            ReviewStatus = FactorReviewStatus.Pending.ToString(),
+            SupersedesVersionId = current.Id
+        });
+        AddAudit("factor.version.superseded", "EmissionFactorVersion", newVersionId);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        StatusMessage = "舊係數已撤回，取代版本草稿已建立；歷史計算未變更。";
         return RedirectToPage();
     }
 
@@ -477,7 +784,9 @@ public sealed class WorkspaceModel : PageModel
             factor.ValidTo,
             Enum.Parse<FactorPublicationStatus>(factor.PublicationStatus),
             factor.SourceDatasetVersion,
-            factor.LicenseCode);
+            factor.LicenseCode,
+            Enum.Parse<FactorReviewStatus>(factor.ReviewStatus),
+            factor.Applicability);
         if (!factorVersion.IsSelectableOn(project.PeriodEnd))
         {
             ModelState.AddModelError("activity", "係數版本未發布、已撤回或不在盤查期間有效範圍。");
@@ -506,7 +815,9 @@ public sealed class WorkspaceModel : PageModel
                     item.ScaleToCanonical,
                     item.OffsetToCanonical,
                     item.CanonicalCode,
-                    item.CatalogueVersion)));
+                    item.CatalogueVersion,
+                    item.AliasesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                    string.IsNullOrWhiteSpace(item.CompositeExpression) ? null : item.CompositeExpression)));
             var canonicalValue = catalogue.Convert(rawValue.Value, rawUnitCode, canonicalUnitCode);
             if (!string.Equals(canonicalUnitCode, factor.DenominatorUnitCode, StringComparison.OrdinalIgnoreCase))
             {
@@ -827,7 +1138,9 @@ public sealed class WorkspaceModel : PageModel
                             factor.ValidTo,
                             Enum.Parse<FactorPublicationStatus>(factor.PublicationStatus),
                             factor.SourceDatasetVersion,
-                            factor.LicenseCode),
+                            factor.LicenseCode,
+                            Enum.Parse<FactorReviewStatus>(factor.ReviewStatus),
+                            factor.Applicability),
                         activity.EvidenceSha256);
                 }).ToArray());
 
@@ -860,6 +1173,9 @@ public sealed class WorkspaceModel : PageModel
         }
 
         ProductVersions = await _dbContext.ProductVersions.AsNoTracking().OrderBy(item => item.NameZhTw).ToArrayAsync(cancellationToken);
+        Facilities = await _dbContext.Facilities.AsNoTracking().OrderBy(item => item.Code).ToArrayAsync(cancellationToken);
+        Memberships = await _dbContext.OrganizationMemberships.AsNoTracking().OrderBy(item => item.CreatedAt).ToArrayAsync(cancellationToken);
+        Invitations = await _dbContext.OrganizationInvitations.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         PcrVersions = await _dbContext.PcrVersions.AsNoTracking().OrderBy(item => item.RegistrationNumber).ThenByDescending(item => item.VersionNumber).ToArrayAsync(cancellationToken);
         InventoryProjects = await _dbContext.InventoryProjectVersions.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         Factors = await _dbContext.EmissionFactorVersions.AsNoTracking().OrderBy(item => item.Name).ToArrayAsync(cancellationToken);
@@ -929,7 +1245,8 @@ public sealed class WorkspaceModel : PageModel
         record.VersionNumber,
         record.ValidFrom,
         record.ValidTo,
-        Enum.Parse<PcrPublicationStatus>(record.PublicationStatus));
+        Enum.Parse<PcrPublicationStatus>(record.PublicationStatus),
+        Enum.Parse<PcrReviewStatus>(record.ReviewStatus));
 
     private void AddAudit(string action, string resourceType, Guid resourceId)
     {

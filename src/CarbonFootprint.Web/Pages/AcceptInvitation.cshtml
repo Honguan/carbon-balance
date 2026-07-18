@@ -1,0 +1,13 @@
+@page
+@model CarbonFootprint.Web.Pages.AcceptInvitationModel
+@{
+    ViewData["Title"] = "接受組織邀請";
+}
+
+<h1>接受組織邀請</h1>
+<p>請確認目前登入帳號的 Email 與受邀 Email 相同。</p>
+<div asp-validation-summary="All" class="text-danger" role="alert"></div>
+<form method="post">
+    <input type="hidden" asp-for="Token" />
+    <button class="btn btn-primary" type="submit">接受邀請</button>
+</form>

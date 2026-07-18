@@ -19,6 +19,8 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
 
     public DbSet<OrganizationRecord> Organizations => Set<OrganizationRecord>();
     public DbSet<OrganizationMembershipRecord> OrganizationMemberships => Set<OrganizationMembershipRecord>();
+    public DbSet<OrganizationInvitationRecord> OrganizationInvitations => Set<OrganizationInvitationRecord>();
+    public DbSet<FacilityRecord> Facilities => Set<FacilityRecord>();
     public DbSet<ProductRecord> Products => Set<ProductRecord>();
     public DbSet<ProductVersionRecord> ProductVersions => Set<ProductVersionRecord>();
     public DbSet<InventoryProjectVersionRecord> InventoryProjectVersions => Set<InventoryProjectVersionRecord>();
@@ -95,6 +97,27 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<OrganizationRecord>().WithMany().HasForeignKey(item => item.OrganizationId).OnDelete(DeleteBehavior.Restrict);
         });
+        builder.Entity<OrganizationInvitationRecord>(entity =>
+        {
+            entity.ToTable("organization_invitations");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Email).HasMaxLength(320);
+            entity.Property(item => item.Role).HasMaxLength(50);
+            entity.Property(item => item.TokenSha256).HasMaxLength(64);
+            entity.HasIndex(item => item.TokenSha256).IsUnique();
+            entity.HasIndex(item => new { item.OrganizationId, item.Email });
+            entity.HasOne<OrganizationRecord>().WithMany().HasForeignKey(item => item.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(item => item.InvitedBy).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<FacilityRecord>(entity =>
+        {
+            entity.ToTable("facilities");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Code).HasMaxLength(100);
+            entity.Property(item => item.Name).HasMaxLength(300);
+            entity.HasIndex(item => new { item.OrganizationId, item.Code }).IsUnique();
+            entity.HasOne<OrganizationRecord>().WithMany().HasForeignKey(item => item.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureProducts(ModelBuilder builder)
@@ -104,7 +127,9 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.ToTable("products");
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Name).HasMaxLength(300);
+            entity.Property(item => item.CategoryCode).HasMaxLength(100);
             entity.HasOne<OrganizationRecord>().WithMany().HasForeignKey(item => item.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<FacilityRecord>().WithMany().HasForeignKey(item => item.FacilityId).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<ProductVersionRecord>(entity =>
         {
@@ -123,6 +148,13 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.ToTable("inventory_project_versions");
             entity.HasKey(item => item.Id);
             entity.Property(item => item.FunctionalUnit).HasMaxLength(200);
+            entity.Property(item => item.DeclaredUnit).HasMaxLength(200);
+            entity.Property(item => item.SystemBoundary).HasMaxLength(1000);
+            entity.Property(item => item.AllocationMethod).HasMaxLength(200);
+            entity.Property(item => item.AllocationReason).HasMaxLength(2000);
+            entity.Property(item => item.Exclusions).HasMaxLength(4000);
+            entity.Property(item => item.Assumptions).HasMaxLength(4000);
+            entity.Property(item => item.EstimationReason).HasMaxLength(4000);
             entity.Property(item => item.PcrVersion).HasMaxLength(200);
             entity.Property(item => item.WorkflowStatus).HasMaxLength(50);
             entity.Property(item => item.ReviewComment).HasMaxLength(2000);
@@ -140,6 +172,13 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.Title).HasMaxLength(300);
             entity.Property(item => item.PublicationStatus).HasMaxLength(30);
             entity.Property(item => item.SourceReference).HasMaxLength(500);
+            entity.Property(item => item.StandardCode).HasMaxLength(100);
+            entity.Property(item => item.CccClassification).HasMaxLength(100);
+            entity.Property(item => item.Applicability).HasMaxLength(2000);
+            entity.Property(item => item.RuleRequirements).HasMaxLength(4000);
+            entity.Property(item => item.OriginalDocumentName).HasMaxLength(300);
+            entity.Property(item => item.OriginalDocumentSha256).HasMaxLength(64);
+            entity.Property(item => item.ReviewStatus).HasMaxLength(30);
             entity.HasIndex(item => new { item.OrganizationId, item.RegistrationNumber, item.VersionNumber }).IsUnique();
         });
         builder.Entity<ActivityDataRecord>(entity =>
@@ -178,12 +217,14 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.HasKey(item => item.Id);
             entity.Property(item => item.ScaleToCanonical).HasPrecision(30, 15);
             entity.Property(item => item.OffsetToCanonical).HasPrecision(30, 15);
+            entity.Property(item => item.AliasesCsv).HasMaxLength(500);
+            entity.Property(item => item.CompositeExpression).HasMaxLength(200);
             entity.HasIndex(item => new { item.Code, item.CatalogueVersion }).IsUnique();
             entity.HasData(
-                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000001"), Code = "kg", Symbol = "kg", Dimension = "mass", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v1" },
-                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000002"), Code = "g", Symbol = "g", Dimension = "mass", ScaleToCanonical = 0.001m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v1" },
-                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000003"), Code = "kWh", Symbol = "kWh", Dimension = "energy", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "kWh", CatalogueVersion = "units-p0-v1" },
-                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000004"), Code = "tonne-km", Symbol = "t·km", Dimension = "transport-work", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "tonne-km", CatalogueVersion = "units-p0-v1" });
+                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000001"), Code = "kg", Symbol = "kg", Dimension = "mass", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v1", AliasesCsv = "kilogram,kilograms" },
+                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000002"), Code = "g", Symbol = "g", Dimension = "mass", ScaleToCanonical = 0.001m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v1", AliasesCsv = "gram,grams" },
+                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000003"), Code = "kWh", Symbol = "kWh", Dimension = "energy", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "kWh", CatalogueVersion = "units-p0-v1", AliasesCsv = "kilowatt-hour" },
+                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000004"), Code = "tonne-km", Symbol = "t·km", Dimension = "transport-work", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "tonne-km", CatalogueVersion = "units-p0-v1", AliasesCsv = "t-km,tkm", CompositeExpression = "tonne*km" });
         });
         builder.Entity<EmissionFactorVersionRecord>(entity =>
         {
@@ -194,6 +235,10 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.NumeratorUnitCode).HasMaxLength(50);
             entity.Property(item => item.DenominatorUnitCode).HasMaxLength(50);
             entity.Property(item => item.PublicationStatus).HasMaxLength(30);
+            entity.Property(item => item.SourceName).HasMaxLength(300);
+            entity.Property(item => item.DatasetName).HasMaxLength(300);
+            entity.Property(item => item.Applicability).HasMaxLength(2000);
+            entity.Property(item => item.ReviewStatus).HasMaxLength(30);
             entity.HasIndex(item => new { item.FactorId, item.VersionNumber }).IsUnique();
             entity.HasOne<EmissionFactorVersionRecord>().WithMany().HasForeignKey(item => item.SupersedesVersionId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -287,6 +332,8 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
     {
         builder.Entity<OrganizationRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.Id == _organizationScope.OrganizationId);
         builder.Entity<OrganizationMembershipRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<OrganizationInvitationRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<FacilityRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<ProductRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<ProductVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<InventoryProjectVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);

@@ -34,5 +34,24 @@ public sealed class UnitCatalogueTests
 
         Assert.Contains("不可將 mass 換算為 energy", exception.Message, StringComparison.Ordinal);
     }
-}
 
+    [Fact]
+    public void Convert_AliasAndCompositeUnit_UsesVersionedDefinition()
+    {
+        var tonneKilometre = new UnitDefinition(
+            Guid.NewGuid(),
+            "tonne-km",
+            "transport-work",
+            1m,
+            0m,
+            "tonne-km",
+            "units-2",
+            ["t-km", "tkm"],
+            "tonne*km");
+        var catalogue = new UnitCatalogue("units-2", [tonneKilometre]);
+
+        Assert.Equal(12.5m, catalogue.Convert(12.5m, "tkm", "tonne-km"));
+        Assert.Equal("tonne*km", catalogue.Get("t-km").CompositeExpression);
+        Assert.Equal("units-2", catalogue.Version);
+    }
+}

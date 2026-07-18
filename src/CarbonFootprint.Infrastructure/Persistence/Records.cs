@@ -23,11 +23,36 @@ public sealed class OrganizationMembershipRecord : IOrganizationOwned
     public DateTimeOffset? RevokedAt { get; set; }
 }
 
+public sealed class OrganizationInvitationRecord : IOrganizationOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public required string Email { get; set; }
+    public required string Role { get; set; }
+    public required string TokenSha256 { get; set; }
+    public Guid InvitedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? AcceptedAt { get; set; }
+    public DateTimeOffset? RevokedAt { get; set; }
+}
+
+public sealed class FacilityRecord : IOrganizationOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public required string Code { get; set; }
+    public required string Name { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 public sealed class ProductRecord : IOrganizationOwned
 {
     public Guid Id { get; set; }
     public Guid OrganizationId { get; set; }
     public required string Name { get; set; }
+    public string CategoryCode { get; set; } = string.Empty;
+    public Guid? FacilityId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }
 
@@ -50,6 +75,13 @@ public sealed class InventoryProjectVersionRecord : IOrganizationOwned
     public DateOnly PeriodStart { get; set; }
     public DateOnly PeriodEnd { get; set; }
     public required string FunctionalUnit { get; set; }
+    public string DeclaredUnit { get; set; } = string.Empty;
+    public string SystemBoundary { get; set; } = string.Empty;
+    public string AllocationMethod { get; set; } = string.Empty;
+    public string AllocationReason { get; set; } = string.Empty;
+    public string Exclusions { get; set; } = string.Empty;
+    public string Assumptions { get; set; } = string.Empty;
+    public string EstimationReason { get; set; } = string.Empty;
     public Guid? PcrVersionId { get; set; }
     public required string PcrVersion { get; set; }
     public required string WorkflowStatus { get; set; }
@@ -71,6 +103,15 @@ public sealed class PcrVersionRecord : IOrganizationOwned
     public DateOnly? ValidTo { get; set; }
     public required string PublicationStatus { get; set; }
     public required string SourceReference { get; set; }
+    public string StandardCode { get; set; } = string.Empty;
+    public string CccClassification { get; set; } = string.Empty;
+    public string Applicability { get; set; } = string.Empty;
+    public string RuleRequirements { get; set; } = string.Empty;
+    public string OriginalDocumentName { get; set; } = string.Empty;
+    public string OriginalDocumentSha256 { get; set; } = string.Empty;
+    public string ReviewStatus { get; set; } = "Pending";
+    public Guid? ReviewedBy { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? PublishedAt { get; set; }
     public DateTimeOffset? WithdrawnAt { get; set; }
@@ -86,6 +127,8 @@ public sealed class UnitRecord
     public decimal OffsetToCanonical { get; set; }
     public required string CanonicalCode { get; set; }
     public required string CatalogueVersion { get; set; }
+    public string AliasesCsv { get; set; } = string.Empty;
+    public string CompositeExpression { get; set; } = string.Empty;
 }
 
 public sealed class EmissionFactorVersionRecord : IOrganizationOwned
@@ -104,6 +147,14 @@ public sealed class EmissionFactorVersionRecord : IOrganizationOwned
     public required string PublicationStatus { get; set; }
     public required string SourceDatasetVersion { get; set; }
     public required string LicenseCode { get; set; }
+    public string SourceName { get; set; } = string.Empty;
+    public string DatasetName { get; set; } = string.Empty;
+    public string Applicability { get; set; } = string.Empty;
+    public string ReviewStatus { get; set; } = "Pending";
+    public Guid? ReviewedBy { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
+    public DateTimeOffset? PublishedAt { get; set; }
+    public DateTimeOffset? WithdrawnAt { get; set; }
     public Guid? SupersedesVersionId { get; set; }
 }
 

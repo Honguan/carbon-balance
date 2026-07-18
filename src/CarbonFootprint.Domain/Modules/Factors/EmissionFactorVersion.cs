@@ -7,6 +7,13 @@ public enum FactorPublicationStatus
     Withdrawn
 }
 
+public enum FactorReviewStatus
+{
+    Pending,
+    Approved,
+    Rejected
+}
+
 public sealed record EmissionFactorVersion(
     Guid Id,
     Guid FactorId,
@@ -20,11 +27,14 @@ public sealed record EmissionFactorVersion(
     DateOnly? ValidTo,
     FactorPublicationStatus Status,
     string SourceDatasetVersion,
-    string LicenseCode)
+    string LicenseCode,
+    FactorReviewStatus ReviewStatus = FactorReviewStatus.Approved,
+    string Applicability = "global")
 {
     public bool IsSelectableOn(DateOnly date) =>
         Status == FactorPublicationStatus.Published
+        && ReviewStatus == FactorReviewStatus.Approved
+        && !string.IsNullOrWhiteSpace(Applicability)
         && (ValidFrom is null || ValidFrom <= date)
         && (ValidTo is null || ValidTo >= date);
 }
-

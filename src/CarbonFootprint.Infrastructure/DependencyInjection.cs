@@ -22,12 +22,14 @@ public static class DependencyInjection
         services.TryAddScoped<IOrganizationScope, UnscopedOrganizationScope>();
         services.AddScoped<ICalculationRunStore, CalculationRunStore>();
         services.AddScoped<OrganizationOnboardingService>();
+        services.AddScoped<OrganizationInvitationService>();
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.SectionName));
         services.Configure<MalwareScannerOptions>(configuration.GetSection(MalwareScannerOptions.SectionName));
         services.AddScoped<ClamAvMalwareScanner>();
         services.AddScoped<EvidenceStorageService>();
         services.Configure<MailOptions>(configuration.GetSection(MailOptions.SectionName));
-        services.AddScoped<IEmailSender<ApplicationUser>, SmtpEmailSender>();
+        services.AddScoped<SmtpEmailSender>();
+        services.AddScoped<IEmailSender<ApplicationUser>>(provider => provider.GetRequiredService<SmtpEmailSender>());
         services.AddDefaultIdentity<ApplicationUser>(options =>
             {
                 options.SignIn.RequireConfirmedAccount = true;

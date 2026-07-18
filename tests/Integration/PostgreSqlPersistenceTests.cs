@@ -1,5 +1,8 @@
 using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Infrastructure.LegacyImport;
+using CarbonFootprint.Infrastructure.Identity;
+using CarbonFootprint.Infrastructure.Organizations;
+using CarbonFootprint.Domain.Modules.Organizations;
 using Microsoft.EntityFrameworkCore;
 
 namespace CarbonFootprint.Integration.Tests;
@@ -148,18 +151,87 @@ public sealed class PostgreSqlPersistenceTests
         }
     }
 
+    [Fact]
+    public async Task OrganizationInvitation_RequiresMatchingEmail_AndCreatesScopedMembership()
+    {
+        var organizationId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var inviteeId = Guid.NewGuid();
+        var inviteeEmail = $"invitee-{inviteeId:N}@example.test";
+        await using (var context = CreateContext(organizationId))
+        {
+            context.Users.AddRange(
+                new ApplicationUser
+                {
+                    Id = ownerId,
+                    UserName = $"owner-{ownerId:N}@example.test",
+                    NormalizedUserName = $"OWNER-{ownerId:N}@EXAMPLE.TEST"
+                },
+                new ApplicationUser
+                {
+                    Id = inviteeId,
+                    UserName = inviteeEmail,
+                    NormalizedUserName = inviteeEmail.ToUpperInvariant(),
+                    Email = inviteeEmail,
+                    NormalizedEmail = inviteeEmail.ToUpperInvariant()
+                });
+            context.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationId,
+                Name = "Invitation integration organization",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = new OrganizationInvitationService(CreateOptions());
+        var token = await service.CreateAsync(
+            organizationId,
+            ownerId,
+            inviteeEmail,
+            OrganizationRole.Contributor,
+            CancellationToken.None);
+        var wrongUser = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "wrong@example.test",
+            NormalizedEmail = "WRONG@EXAMPLE.TEST"
+        };
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.AcceptAsync(wrongUser, token, CancellationToken.None));
+
+        var invitee = new ApplicationUser
+        {
+            Id = inviteeId,
+            Email = inviteeEmail,
+            NormalizedEmail = inviteeEmail.ToUpperInvariant()
+        };
+        Assert.Equal(organizationId, await service.AcceptAsync(invitee, token, CancellationToken.None));
+
+        await using var verification = CreateContext(organizationId);
+        var membership = await verification.OrganizationMemberships.SingleAsync(item => item.UserId == inviteeId);
+        Assert.Equal(OrganizationRole.Contributor.ToString(), membership.Role);
+        Assert.NotNull((await verification.OrganizationInvitations.SingleAsync()).AcceptedAt);
+        Assert.True(await verification.UserClaims.AnyAsync(item =>
+            item.UserId == inviteeId && item.ClaimType == "organization_id" && item.ClaimValue == organizationId.ToString()));
+    }
+
     private static CarbonFootprintDbContext CreateContext(Guid organizationId)
         => CreateContext(new TestOrganizationScope(organizationId));
 
     private static CarbonFootprintDbContext CreateContext(IOrganizationScope organizationScope)
     {
+        return new CarbonFootprintDbContext(CreateOptions(), organizationScope);
+    }
+
+    private static DbContextOptions<CarbonFootprintDbContext> CreateOptions()
+    {
         var connectionString = Environment.GetEnvironmentVariable("CARBON_TEST_DB_CONNECTION")
             ?? throw new InvalidOperationException("Integration test 需要 CARBON_TEST_DB_CONNECTION。");
-        var options = new DbContextOptionsBuilder<CarbonFootprintDbContext>()
+        return new DbContextOptionsBuilder<CarbonFootprintDbContext>()
             .UseNpgsql(connectionString)
             .UseSnakeCaseNamingConvention()
             .Options;
-        return new CarbonFootprintDbContext(options, organizationScope);
     }
 
     private sealed record TestOrganizationScope(Guid Value) : IOrganizationScope

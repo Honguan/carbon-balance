@@ -3,6 +3,7 @@ using System;
 using CarbonFootprint.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CarbonFootprint.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(CarbonFootprintDbContext))]
-    partial class CarbonFootprintDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260718095107_AddOrganizationInventoryFoundation")]
+    partial class AddOrganizationInventoryFoundation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -479,18 +482,6 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("Applicability")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
-                        .HasColumnName("applicability");
-
-                    b.Property<string>("DatasetName")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
-                        .HasColumnName("dataset_name");
-
                     b.Property<string>("DenominatorUnitCode")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -533,34 +524,10 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("publication_status");
 
-                    b.Property<DateTimeOffset?>("PublishedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("published_at");
-
-                    b.Property<string>("ReviewStatus")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("review_status");
-
-                    b.Property<DateTimeOffset?>("ReviewedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reviewed_at");
-
-                    b.Property<Guid?>("ReviewedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("reviewed_by");
-
                     b.Property<string>("SourceDatasetVersion")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("source_dataset_version");
-
-                    b.Property<string>("SourceName")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
-                        .HasColumnName("source_name");
 
                     b.Property<Guid?>("SupersedesVersionId")
                         .HasColumnType("uuid")
@@ -582,10 +549,6 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                     b.Property<int>("VersionNumber")
                         .HasColumnType("integer")
                         .HasColumnName("version_number");
-
-                    b.Property<DateTimeOffset?>("WithdrawnAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("withdrawn_at");
 
                     b.HasKey("Id")
                         .HasName("pk_emission_factor_versions");
@@ -1124,18 +1087,6 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("Applicability")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
-                        .HasColumnName("applicability");
-
-                    b.Property<string>("CccClassification")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("ccc_classification");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1143,18 +1094,6 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid")
                         .HasColumnName("organization_id");
-
-                    b.Property<string>("OriginalDocumentName")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
-                        .HasColumnName("original_document_name");
-
-                    b.Property<string>("OriginalDocumentSha256")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("original_document_sha256");
 
                     b.Property<string>("PublicationStatus")
                         .IsRequired()
@@ -1172,37 +1111,11 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("registration_number");
 
-                    b.Property<string>("ReviewStatus")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("review_status");
-
-                    b.Property<DateTimeOffset?>("ReviewedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reviewed_at");
-
-                    b.Property<Guid?>("ReviewedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("reviewed_by");
-
-                    b.Property<string>("RuleRequirements")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)")
-                        .HasColumnName("rule_requirements");
-
                     b.Property<string>("SourceReference")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("source_reference");
-
-                    b.Property<string>("StandardCode")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("standard_code");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -1325,12 +1238,6 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("AliasesCsv")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("aliases_csv");
-
                     b.Property<string>("CanonicalCode")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1345,12 +1252,6 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("code");
-
-                    b.Property<string>("CompositeExpression")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("composite_expression");
 
                     b.Property<string>("Dimension")
                         .IsRequired()
@@ -1385,11 +1286,9 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         new
                         {
                             Id = new Guid("71000000-0000-0000-0000-000000000001"),
-                            AliasesCsv = "kilogram,kilograms",
                             CanonicalCode = "kg",
                             CatalogueVersion = "units-p0-v1",
                             Code = "kg",
-                            CompositeExpression = "",
                             Dimension = "mass",
                             OffsetToCanonical = 0m,
                             ScaleToCanonical = 1m,
@@ -1398,11 +1297,9 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         new
                         {
                             Id = new Guid("71000000-0000-0000-0000-000000000002"),
-                            AliasesCsv = "gram,grams",
                             CanonicalCode = "kg",
                             CatalogueVersion = "units-p0-v1",
                             Code = "g",
-                            CompositeExpression = "",
                             Dimension = "mass",
                             OffsetToCanonical = 0m,
                             ScaleToCanonical = 0.001m,
@@ -1411,11 +1308,9 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         new
                         {
                             Id = new Guid("71000000-0000-0000-0000-000000000003"),
-                            AliasesCsv = "kilowatt-hour",
                             CanonicalCode = "kWh",
                             CatalogueVersion = "units-p0-v1",
                             Code = "kWh",
-                            CompositeExpression = "",
                             Dimension = "energy",
                             OffsetToCanonical = 0m,
                             ScaleToCanonical = 1m,
@@ -1424,11 +1319,9 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         new
                         {
                             Id = new Guid("71000000-0000-0000-0000-000000000004"),
-                            AliasesCsv = "t-km,tkm",
                             CanonicalCode = "tonne-km",
                             CatalogueVersion = "units-p0-v1",
                             Code = "tonne-km",
-                            CompositeExpression = "tonne*km",
                             Dimension = "transport-work",
                             OffsetToCanonical = 0m,
                             ScaleToCanonical = 1m,

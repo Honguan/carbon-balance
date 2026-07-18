@@ -23,6 +23,12 @@ public sealed class SmtpEmailSender : IEmailSender<ApplicationUser>
     public Task SendPasswordResetCodeAsync(ApplicationUser user, string email, string resetCode) =>
         SendAsync(email, "產品碳足跡系統密碼重設碼", $"密碼重設碼：<strong>{HtmlEncoder.Default.Encode(resetCode)}</strong>");
 
+    public Task SendOrganizationInvitationAsync(string email, string invitationLink) =>
+        SendAsync(
+            email,
+            "產品碳足跡系統組織邀請",
+            $"請在七日內使用受邀 Email 登入並接受邀請：<a href=\"{HtmlEncoder.Default.Encode(invitationLink)}\">接受邀請</a>");
+
     private async Task SendAsync(string recipient, string subject, string htmlBody)
     {
         using var message = new MailMessage

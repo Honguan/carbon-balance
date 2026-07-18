@@ -841,3 +841,331 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    ALTER TABLE app.products ADD category_code character varying(100) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    ALTER TABLE app.products ADD facility_id uuid;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    ALTER TABLE app.inventory_project_versions ADD allocation_method character varying(200) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    ALTER TABLE app.inventory_project_versions ADD allocation_reason character varying(2000) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    ALTER TABLE app.inventory_project_versions ADD assumptions character varying(4000) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    ALTER TABLE app.inventory_project_versions ADD declared_unit character varying(200) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    ALTER TABLE app.inventory_project_versions ADD estimation_reason character varying(4000) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    ALTER TABLE app.inventory_project_versions ADD exclusions character varying(4000) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    ALTER TABLE app.inventory_project_versions ADD system_boundary character varying(1000) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    CREATE TABLE app.facilities (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        code character varying(100) NOT NULL,
+        name character varying(300) NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        CONSTRAINT pk_facilities PRIMARY KEY (id),
+        CONSTRAINT fk_facilities_organizations_organization_id FOREIGN KEY (organization_id) REFERENCES app.organizations (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    CREATE TABLE app.organization_invitations (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        email character varying(320) NOT NULL,
+        role character varying(50) NOT NULL,
+        token_sha256 character varying(64) NOT NULL,
+        invited_by uuid NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        expires_at timestamp with time zone NOT NULL,
+        accepted_at timestamp with time zone,
+        revoked_at timestamp with time zone,
+        CONSTRAINT pk_organization_invitations PRIMARY KEY (id),
+        CONSTRAINT fk_organization_invitations_organizations_organization_id FOREIGN KEY (organization_id) REFERENCES app.organizations (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_organization_invitations_users_invited_by FOREIGN KEY (invited_by) REFERENCES identity.users (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    CREATE INDEX ix_products_facility_id ON app.products (facility_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    CREATE UNIQUE INDEX ix_facilities_organization_id_code ON app.facilities (organization_id, code);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    CREATE INDEX ix_organization_invitations_invited_by ON app.organization_invitations (invited_by);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    CREATE INDEX ix_organization_invitations_organization_id_email ON app.organization_invitations (organization_id, email);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    CREATE UNIQUE INDEX ix_organization_invitations_token_sha256 ON app.organization_invitations (token_sha256);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    ALTER TABLE app.products ADD CONSTRAINT fk_products_facilities_facility_id FOREIGN KEY (facility_id) REFERENCES app.facilities (id) ON DELETE RESTRICT;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095107_AddOrganizationInventoryFoundation') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260718095107_AddOrganizationInventoryFoundation', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
+
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.units ADD aliases_csv character varying(500) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.units ADD composite_expression character varying(200) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.pcr_versions ADD applicability character varying(2000) NOT NULL DEFAULT 'legacy-existing-version';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.pcr_versions ADD ccc_classification character varying(100) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.pcr_versions ADD original_document_name character varying(300) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.pcr_versions ADD original_document_sha256 character varying(64) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.pcr_versions ADD review_status character varying(30) NOT NULL DEFAULT 'Approved';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.pcr_versions ADD reviewed_at timestamp with time zone;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.pcr_versions ADD reviewed_by uuid;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.pcr_versions ADD rule_requirements character varying(4000) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.pcr_versions ADD standard_code character varying(100) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.emission_factor_versions ADD applicability character varying(2000) NOT NULL DEFAULT 'legacy-existing-version';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.emission_factor_versions ADD dataset_name character varying(300) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.emission_factor_versions ADD published_at timestamp with time zone;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.emission_factor_versions ADD review_status character varying(30) NOT NULL DEFAULT 'Approved';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.emission_factor_versions ADD reviewed_at timestamp with time zone;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.emission_factor_versions ADD reviewed_by uuid;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.emission_factor_versions ADD source_name character varying(300) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    ALTER TABLE app.emission_factor_versions ADD withdrawn_at timestamp with time zone;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    UPDATE app.units SET aliases_csv = 'kilogram,kilograms', composite_expression = ''
+    WHERE id = '71000000-0000-0000-0000-000000000001';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    UPDATE app.units SET aliases_csv = 'gram,grams', composite_expression = ''
+    WHERE id = '71000000-0000-0000-0000-000000000002';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    UPDATE app.units SET aliases_csv = 'kilowatt-hour', composite_expression = ''
+    WHERE id = '71000000-0000-0000-0000-000000000003';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    UPDATE app.units SET aliases_csv = 't-km,tkm', composite_expression = 'tonne*km'
+    WHERE id = '71000000-0000-0000-0000-000000000004';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718095913_AddGovernanceMetadata') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260718095913_AddGovernanceMetadata', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
+
