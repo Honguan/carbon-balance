@@ -1,0 +1,59 @@
+@page
+@model CarbonFootprint.Web.Pages.ArchiveReportModel
+@using CarbonFootprint.Domain.Modules.Inventories
+@{
+    ViewData["Title"] = "可歸檔產品碳足跡報告";
+}
+
+<h1>可歸檔產品碳足跡報告</h1>
+<p class="d-print-none"><button class="btn btn-primary" type="button" onclick="window.print()">列印／另存 PDF</button></p>
+<p><strong>免責聲明：</strong>本報告為盤查與內部審查輸出，不代表第三方查驗聲明或主管機關核定。</p>
+
+<dl class="row">
+    <dt class="col-sm-4">輸出時間／時區</dt><dd class="col-sm-8">@Model.GeneratedAt.ToString("O")／UTC</dd>
+    <dt class="col-sm-4">Application version</dt><dd class="col-sm-8">@Model.ApplicationVersion</dd>
+    <dt class="col-sm-4">Engine version</dt><dd class="col-sm-8">@Model.Run.EngineBuild</dd>
+    <dt class="col-sm-4">Dataset versions</dt><dd class="col-sm-8">@Model.DatasetVersions</dd>
+    <dt class="col-sm-4">Rule／Unit／GWP</dt><dd class="col-sm-8">@Model.Run.RuleSetVersion／@Model.Run.UnitCatalogueVersion／@Model.Run.GwpVersion</dd>
+    <dt class="col-sm-4">PCR version</dt><dd class="col-sm-8">@Model.Run.PcrVersion</dd>
+    <dt class="col-sm-4">盤查狀態</dt><dd class="col-sm-8">@Model.Project.WorkflowStatus</dd>
+    <dt class="col-sm-4">Run ID</dt><dd class="col-sm-8"><code>@Model.Run.Id</code></dd>
+    <dt class="col-sm-4">Input SHA-256</dt><dd class="col-sm-8"><code>@Model.Run.InputSha256</code></dd>
+    <dt class="col-sm-4">產品總量</dt><dd class="col-sm-8">@Model.Run.ProductTotal kgCO2e</dd>
+</dl>
+
+<h2>逐項追溯</h2>
+<div class="table-responsive">
+    <table class="table table-sm">
+        <thead>
+            <tr><th>階段</th><th>活動版本</th><th>公式</th><th>活動量</th><th>係數版本</th><th>分配</th><th>排放量</th><th>Evidence SHA-256</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var line in Model.Lines)
+            {
+                var evidenceHash = Model.EvidenceHashes.GetValueOrDefault(line.ActivityId, "未附證據");
+                <tr>
+                    <td>@((LifecycleStage)line.LifecycleStage)</td>
+                    <td><code>@line.ActivityId</code></td>
+                    <td>@line.FormulaId</td>
+                    <td>@line.CanonicalActivityValue @line.ActivityUnitCode</td>
+                    <td><code>@line.FactorVersionId</code>（@line.FactorValue @line.FactorUnit）</td>
+                    <td>@line.AllocationFactor</td>
+                    <td>@line.Emissions @line.EmissionsUnitCode</td>
+                    <td><code>@evidenceHash</code></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (Model.Warnings.Count > 0)
+{
+    <h2>警告、假設與排除</h2>
+    <ul>
+        @foreach (var warning in Model.Warnings)
+        {
+            <li><strong>@warning.Code</strong>：@warning.Message</li>
+        }
+    </ul>
+}

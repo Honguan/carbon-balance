@@ -18,14 +18,15 @@ public sealed class CalculationEngine
             .Select(activity => new CalculationLineItem(
                 activity.Id,
                 activity.Stage,
-                "activity-times-factor-v1",
+                "activity-times-factor-times-allocation-v1",
                 activity.CanonicalValue,
                 activity.CanonicalUnitCode,
                 activity.FactorVersion.Id,
                 activity.FactorVersion.Value,
                 $"{activity.FactorVersion.NumeratorUnitCode}/{activity.FactorVersion.DenominatorUnitCode}",
-                activity.CanonicalValue * activity.FactorVersion.Value,
-                activity.FactorVersion.NumeratorUnitCode))
+                activity.CanonicalValue * activity.FactorVersion.Value * activity.AllocationFactor,
+                activity.FactorVersion.NumeratorUnitCode,
+                activity.AllocationFactor))
             .ToArray();
 
         var summaries = Enum.GetValues<LifecycleStage>()
@@ -39,6 +40,17 @@ public sealed class CalculationEngine
             .Select(stage => new CalculationWarning(
                 "STAGE_NOT_APPLICABLE",
                 $"{stage.Stage} 不適用：{stage.Reason}"))
+            .Concat(snapshot.Activities
+                .Where(activity => activity.IsEstimated)
+                .Select(activity => new CalculationWarning(
+                    "ESTIMATED_ACTIVITY_DATA",
+                    $"{activity.Name} 使用估算資料：{activity.EstimationReason}")))
+            .Concat(string.IsNullOrWhiteSpace(snapshot.Exclusions)
+                ? []
+                : [new CalculationWarning("INVENTORY_EXCLUSIONS", snapshot.Exclusions)])
+            .Concat(string.IsNullOrWhiteSpace(snapshot.Assumptions)
+                ? []
+                : [new CalculationWarning("INVENTORY_ASSUMPTIONS", snapshot.Assumptions)])
             .ToArray();
 
         return new CalculationRun(
@@ -102,6 +114,26 @@ public sealed class CalculationEngine
                 throw new InvalidOperationException("P0 一般活動數據不得為負值；移除量需使用後續受控規則。");
             }
 
+            if (!ActivityKindRules.IsAllowed(activity.Stage, activity.Kind))
+            {
+                throw new InvalidOperationException($"活動類型 {activity.Kind} 不適用於 {activity.Stage} 階段。");
+            }
+
+            if (activity.AllocationFactor <= 0m || activity.AllocationFactor > 1m)
+            {
+                throw new InvalidOperationException("分配比例必須大於 0 且小於或等於 1。");
+            }
+
+            if (activity.IsEstimated && string.IsNullOrWhiteSpace(activity.EstimationReason))
+            {
+                throw new InvalidOperationException("估算活動數據必須提供估算或替代資料理由。");
+            }
+
+            if (string.IsNullOrWhiteSpace(activity.DataQuality))
+            {
+                throw new InvalidOperationException("活動數據必須標示資料品質。");
+            }
+
             if (activity.PeriodStart > activity.PeriodEnd
                 || activity.PeriodStart < snapshot.PeriodStart
                 || activity.PeriodEnd > snapshot.PeriodEnd)
@@ -124,4 +156,3 @@ public sealed class CalculationEngine
         }
     }
 }
-

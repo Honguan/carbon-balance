@@ -25,6 +25,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
     public DbSet<ProductVersionRecord> ProductVersions => Set<ProductVersionRecord>();
     public DbSet<InventoryProjectVersionRecord> InventoryProjectVersions => Set<InventoryProjectVersionRecord>();
     public DbSet<PcrVersionRecord> PcrVersions => Set<PcrVersionRecord>();
+    public DbSet<LifecycleStageDeclarationRecord> LifecycleStageDeclarations => Set<LifecycleStageDeclarationRecord>();
     public DbSet<UnitRecord> Units => Set<UnitRecord>();
     public DbSet<EmissionFactorVersionRecord> EmissionFactorVersions => Set<EmissionFactorVersionRecord>();
     public DbSet<ActivityDataRecord> ActivityData => Set<ActivityDataRecord>();
@@ -186,14 +187,27 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.ToTable("activity_data_versions");
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Name).HasMaxLength(300);
+            entity.Property(item => item.ActivityKind).HasMaxLength(100);
+            entity.Property(item => item.SupplierOrScenario).HasMaxLength(1000);
             entity.Property(item => item.RawValue).HasPrecision(30, 12);
             entity.Property(item => item.CanonicalValue).HasPrecision(30, 12);
             entity.Property(item => item.RawUnitCode).HasMaxLength(50);
             entity.Property(item => item.CanonicalUnitCode).HasMaxLength(50);
             entity.Property(item => item.ConversionRuleVersion).HasMaxLength(100);
             entity.Property(item => item.EvidenceSha256).HasMaxLength(64);
+            entity.Property(item => item.AllocationFactor).HasPrecision(18, 15);
+            entity.Property(item => item.EstimationReason).HasMaxLength(4000);
+            entity.Property(item => item.DataQuality).HasMaxLength(100);
             entity.HasOne<InventoryProjectVersionRecord>().WithMany().HasForeignKey(item => item.InventoryProjectVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<EmissionFactorVersionRecord>().WithMany().HasForeignKey(item => item.FactorVersionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<LifecycleStageDeclarationRecord>(entity =>
+        {
+            entity.ToTable("lifecycle_stage_declarations");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Reason).HasMaxLength(2000);
+            entity.HasIndex(item => new { item.InventoryProjectVersionId, item.LifecycleStage }).IsUnique();
+            entity.HasOne<InventoryProjectVersionRecord>().WithMany().HasForeignKey(item => item.InventoryProjectVersionId).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<EvidenceFileRecord>(entity =>
         {
@@ -263,6 +277,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.HasKey(item => item.Id);
             entity.Property(item => item.CanonicalActivityValue).HasPrecision(30, 12);
             entity.Property(item => item.FactorValue).HasPrecision(30, 15);
+            entity.Property(item => item.AllocationFactor).HasPrecision(18, 15);
             entity.Property(item => item.Emissions).HasPrecision(38, 15);
             entity.HasOne<CalculationRunRecord>().WithMany().HasForeignKey(item => item.CalculationRunId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -338,6 +353,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         builder.Entity<ProductVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<InventoryProjectVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<PcrVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<LifecycleStageDeclarationRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<EmissionFactorVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<ActivityDataRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<EvidenceFileRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);

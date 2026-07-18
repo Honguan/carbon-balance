@@ -63,7 +63,7 @@ public sealed class ReportsModel : PageModel
             .ThenBy(item => item.ActivityId)
             .ToArrayAsync(cancellationToken);
         var builder = new StringBuilder();
-        builder.AppendLine("run_id,input_sha256,workflow_status,pcr_version,functional_unit,stage,activity_id,formula_id,activity_value,activity_unit,factor_version_id,factor_value,factor_unit,emissions,emissions_unit");
+        builder.AppendLine("run_id,input_sha256,workflow_status,pcr_version,functional_unit,stage,activity_id,formula_id,activity_value,activity_unit,factor_version_id,factor_value,factor_unit,allocation_factor,emissions,emissions_unit");
         foreach (var line in lines)
         {
             builder.AppendLine(string.Join(",",
@@ -80,6 +80,7 @@ public sealed class ReportsModel : PageModel
                 Csv(line.FactorVersionId),
                 Csv(line.FactorValue),
                 Csv(line.FactorUnit),
+                Csv(line.AllocationFactor),
                 Csv(line.Emissions),
                 Csv(line.EmissionsUnitCode)));
         }

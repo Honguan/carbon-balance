@@ -44,6 +44,36 @@ public sealed class MinimalFiveStageGoldenCaseTests
         Assert.Equal(64, first.InputSha256.Length);
     }
 
+    [Fact]
+    public void Calculate_AllocationFactor_IsAppliedAndFrozenInManifest()
+    {
+        var baseline = CreateSnapshot();
+        var activities = baseline.Activities
+            .Select((activity, index) => index == 0 ? activity with { AllocationFactor = 0.5m } : activity)
+            .ToArray();
+        var allocated = baseline with { Activities = activities };
+        var engine = new CalculationEngine();
+
+        var run = engine.Calculate(Guid.NewGuid(), allocated, "engine-golden-1");
+
+        Assert.Equal(1m, run.LineItems[0].Emissions);
+        Assert.Equal(6m, run.ProductTotal);
+        Assert.Contains("\"allocationFactor\":0.5", run.CanonicalInputManifest, StringComparison.Ordinal);
+        Assert.NotEqual(engine.Calculate(Guid.NewGuid(), baseline, "engine-golden-1").InputSha256, run.InputSha256);
+    }
+
+    [Fact]
+    public void Calculate_ZeroAllocationFactor_IsRejected()
+    {
+        var baseline = CreateSnapshot();
+        var activities = baseline.Activities
+            .Select((activity, index) => index == 0 ? activity with { AllocationFactor = 0m } : activity)
+            .ToArray();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            new CalculationEngine().Calculate(Guid.NewGuid(), baseline with { Activities = activities }, "engine-golden-1"));
+    }
+
     private static InventoryProjectSnapshot CreateSnapshot()
     {
         var organizationId = Guid.Parse("10000000-0000-0000-0000-000000000001");
@@ -94,7 +124,16 @@ public sealed class MinimalFiveStageGoldenCaseTests
                 periodStart,
                 periodEnd,
                 factor,
-                null);
+                null,
+                stage switch
+                {
+                    LifecycleStage.RawMaterial => ActivityDataKind.Material,
+                    LifecycleStage.Manufacturing => ActivityDataKind.Energy,
+                    LifecycleStage.Distribution => ActivityDataKind.DistributionTransport,
+                    LifecycleStage.Use => ActivityDataKind.UseEnergy,
+                    LifecycleStage.EndOfLife => ActivityDataKind.EndOfLifeTreatment,
+                    _ => throw new ArgumentOutOfRangeException(nameof(stage))
+                });
         }
 
         var activities = new[]
@@ -123,4 +162,3 @@ public sealed class MinimalFiveStageGoldenCaseTests
             activities);
     }
 }
-

@@ -19,6 +19,13 @@ public static class CanonicalManifest
             writer.WriteString("periodStart", snapshot.PeriodStart.ToString("yyyy-MM-dd", null));
             writer.WriteString("periodEnd", snapshot.PeriodEnd.ToString("yyyy-MM-dd", null));
             writer.WriteString("functionalUnit", snapshot.FunctionalUnit);
+            writer.WriteString("declaredUnit", snapshot.DeclaredUnit);
+            writer.WriteString("systemBoundary", snapshot.SystemBoundary);
+            writer.WriteString("allocationMethod", snapshot.AllocationMethod);
+            writer.WriteString("allocationReason", snapshot.AllocationReason);
+            writer.WriteString("exclusions", snapshot.Exclusions);
+            writer.WriteString("assumptions", snapshot.Assumptions);
+            writer.WriteString("estimationReason", snapshot.EstimationReason);
             writer.WriteString("pcrVersion", snapshot.PcrVersion);
             writer.WriteString("ruleSetVersion", snapshot.RuleSetVersion);
             writer.WriteString("gwpVersion", snapshot.GwpVersion);
@@ -50,6 +57,8 @@ public static class CanonicalManifest
                 writer.WriteString("id", activity.Id);
                 writer.WriteString("stage", activity.Stage.ToString());
                 writer.WriteString("name", activity.Name);
+                writer.WriteString("kind", activity.Kind.ToString());
+                writer.WriteString("supplierOrScenario", activity.SupplierOrScenario);
                 writer.WriteNumber("rawValue", activity.RawValue);
                 writer.WriteString("rawUnitCode", activity.RawUnitCode);
                 writer.WriteNumber("canonicalValue", activity.CanonicalValue);
@@ -61,6 +70,10 @@ public static class CanonicalManifest
                 writer.WriteNumber("factorValue", activity.FactorVersion.Value);
                 writer.WriteString("factorNumeratorUnit", activity.FactorVersion.NumeratorUnitCode);
                 writer.WriteString("factorDenominatorUnit", activity.FactorVersion.DenominatorUnitCode);
+                writer.WriteNumber("allocationFactor", activity.AllocationFactor);
+                writer.WriteBoolean("isEstimated", activity.IsEstimated);
+                writer.WriteString("estimationReason", activity.EstimationReason);
+                writer.WriteString("dataQuality", activity.DataQuality);
                 if (activity.EvidenceSha256 is null)
                 {
                     writer.WriteNull("evidenceSha256");

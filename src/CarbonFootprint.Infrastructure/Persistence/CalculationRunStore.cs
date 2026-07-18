@@ -46,6 +46,7 @@ public sealed class CalculationRunStore : ICalculationRunStore
             FactorVersionId = line.FactorVersionId,
             FactorValue = line.FactorValue,
             FactorUnit = line.FactorUnit,
+            AllocationFactor = line.AllocationFactor,
             Emissions = line.Emissions,
             EmissionsUnitCode = line.EmissionsUnitCode
         }));

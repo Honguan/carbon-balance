@@ -229,6 +229,17 @@ else
                                 @inventory.FunctionalUnit／@inventory.PcrVersion／@workflowStatus
                                 @if (InventoryWorkflow.AllowsEditing(workflowStatus))
                                 {
+                                    @foreach (var declaration in Model.StageDeclarations.Where(item => item.InventoryProjectVersionId == inventory.Id))
+                                    {
+                                        <form class="mt-1 border rounded p-2" method="post" asp-page-handler="SetStageApplicability">
+                                            <input type="hidden" name="stageDeclarationId" value="@declaration.Id" />
+                                            <label class="form-check-label" for="stage-applicable-@declaration.Id">@((LifecycleStage)declaration.LifecycleStage) 適用</label>
+                                            <input class="form-check-input" id="stage-applicable-@declaration.Id" name="isApplicable" type="checkbox" value="true" checked="@declaration.IsApplicable" />
+                                            <label class="form-label" for="stage-reason-@declaration.Id">不適用原因</label>
+                                            <input class="form-control" id="stage-reason-@declaration.Id" name="reason" value="@declaration.Reason" maxlength="2000" />
+                                            <button class="btn btn-sm btn-outline-secondary mt-1" type="submit">更新階段</button>
+                                        </form>
+                                    }
                                     <form class="d-inline" method="post" asp-page-handler="SubmitInventory">
                                         <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
                                         <button class="btn btn-sm btn-warning" type="submit">送審</button>
@@ -336,8 +347,17 @@ else
                                 <option value="@stage">@stage</option>
                             }
                         </select>
+                        <label class="form-label mt-2" for="activityKind">活動類型</label>
+                        <select class="form-select" id="activityKind" name="activityKind">
+                            @foreach (var kind in Enum.GetValues<ActivityDataKind>())
+                            {
+                                <option value="@kind">@kind</option>
+                            }
+                        </select>
                         <label class="form-label mt-2" for="activityName">活動名稱</label>
                         <input class="form-control" id="activityName" name="activityName" required />
+                        <label class="form-label mt-2" for="supplierOrScenario">供應商／運輸／處理／使用情境</label>
+                        <input class="form-control" id="supplierOrScenario" name="supplierOrScenario" maxlength="1000" />
                         <label class="form-label mt-2" for="rawValue">原始活動量</label>
                         <input class="form-control" type="number" step="any" min="0" id="rawValue" name="rawValue" required />
                         <label class="form-label mt-2" for="rawUnitCode">原始單位</label>
@@ -361,6 +381,20 @@ else
                                 <option value="@factor.Id">@factor.Name / @factor.DenominatorUnitCode</option>
                             }
                         </select>
+                        <label class="form-label mt-2" for="allocationFactor">分配比例（0～1）</label>
+                        <input class="form-control" id="allocationFactor" name="allocationFactor" type="number" min="0.000000000000001" max="1" step="any" value="1" required />
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" id="isEstimated" name="isEstimated" type="checkbox" value="true" />
+                            <label class="form-check-label" for="isEstimated">估算或替代資料</label>
+                        </div>
+                        <label class="form-label mt-2" for="activityEstimationReason">估算／替代資料理由</label>
+                        <textarea class="form-control" id="activityEstimationReason" name="activityEstimationReason" maxlength="4000"></textarea>
+                        <label class="form-label mt-2" for="dataQuality">資料品質</label>
+                        <select class="form-select" id="dataQuality" name="dataQuality" required>
+                            <option value="primary">一級數據</option>
+                            <option value="secondary-reviewed">經審查二級數據</option>
+                            <option value="estimated">估算數據</option>
+                        </select>
                         <button class="btn btn-primary mt-3" type="submit">保存活動數據</button>
                     </form>
                     <ul class="mt-3">
@@ -368,7 +402,7 @@ else
                         {
                             var evidence = Model.EvidenceFiles.SingleOrDefault(item => item.ActivityDataId == activity.Id);
                             <li class="mb-3">
-                                @activity.Name（@((LifecycleStage)activity.LifecycleStage)，@activity.CanonicalValue @activity.CanonicalUnitCode）
+                                @activity.Name（@activity.ActivityKind，@((LifecycleStage)activity.LifecycleStage)，@activity.CanonicalValue @activity.CanonicalUnitCode，分配 @activity.AllocationFactor）
                                 @if (evidence is null)
                                 {
                                     <form method="post" enctype="multipart/form-data" asp-page-handler="UploadEvidence">

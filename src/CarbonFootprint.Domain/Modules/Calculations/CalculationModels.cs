@@ -12,7 +12,8 @@ public sealed record CalculationLineItem(
     decimal FactorValue,
     string FactorUnit,
     decimal Emissions,
-    string EmissionsUnitCode);
+    string EmissionsUnitCode,
+    decimal AllocationFactor = 1m);
 
 public sealed record CalculationStageSummary(LifecycleStage Stage, decimal Emissions);
 
@@ -83,4 +84,3 @@ public sealed class CalculationRun
 
     public decimal ProductTotal { get; }
 }
-

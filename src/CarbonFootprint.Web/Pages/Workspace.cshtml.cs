@@ -68,6 +68,8 @@ public sealed class WorkspaceModel : PageModel
 
     public IReadOnlyList<InventoryProjectVersionRecord> InventoryProjects { get; private set; } = [];
 
+    public IReadOnlyList<LifecycleStageDeclarationRecord> StageDeclarations { get; private set; } = [];
+
     public IReadOnlyList<EmissionFactorVersionRecord> Factors { get; private set; } = [];
 
     public IReadOnlyList<PcrVersionRecord> PcrVersions { get; private set; } = [];
@@ -364,9 +366,65 @@ public sealed class WorkspaceModel : PageModel
             WorkflowStatus = InventoryWorkflowStatus.Draft.ToString(),
             CreatedAt = DateTimeOffset.UtcNow
         });
+        _dbContext.LifecycleStageDeclarations.AddRange(Enum.GetValues<LifecycleStage>().Select(stage =>
+            new LifecycleStageDeclarationRecord
+            {
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationId,
+                InventoryProjectVersionId = projectId,
+                LifecycleStage = (int)stage,
+                IsApplicable = true,
+                Reason = string.Empty
+            }));
         AddAudit("inventory.version.created", "InventoryProjectVersion", projectId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "盤查專案第 1 版已建立。";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostSetStageApplicabilityAsync(
+        Guid stageDeclarationId,
+        bool isApplicable,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
+        {
+            return Forbid();
+        }
+        var declaration = await _dbContext.LifecycleStageDeclarations.SingleOrDefaultAsync(
+            item => item.Id == stageDeclarationId,
+            cancellationToken);
+        if (declaration is null)
+        {
+            return NotFound();
+        }
+        var project = await _dbContext.InventoryProjectVersions.SingleAsync(
+            item => item.Id == declaration.InventoryProjectVersionId,
+            cancellationToken);
+        if (!InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus)))
+        {
+            return BadRequest();
+        }
+        if (!isApplicable && string.IsNullOrWhiteSpace(reason))
+        {
+            ModelState.AddModelError("stage", "不適用階段必須填寫原因。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+        if (!isApplicable && await _dbContext.ActivityData.AnyAsync(
+                item => item.InventoryProjectVersionId == project.Id && item.LifecycleStage == declaration.LifecycleStage,
+                cancellationToken))
+        {
+            ModelState.AddModelError("stage", "已有活動數據的階段不可標記為不適用。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        declaration.IsApplicable = isApplicable;
+        declaration.Reason = isApplicable ? string.Empty : reason.Trim();
+        AddAudit("inventory.stage.applicability.changed", "LifecycleStageDeclaration", declaration.Id);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return RedirectToPage();
     }
 
@@ -740,11 +798,17 @@ public sealed class WorkspaceModel : PageModel
     public async Task<IActionResult> OnPostAddActivityAsync(
         Guid inventoryProjectVersionId,
         LifecycleStage lifecycleStage,
+        ActivityDataKind activityKind,
         string activityName,
+        string supplierOrScenario,
         decimal? rawValue,
         string rawUnitCode,
         string canonicalUnitCode,
         Guid factorVersionId,
+        decimal? allocationFactor,
+        bool isEstimated,
+        string activityEstimationReason,
+        string dataQuality,
         CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
@@ -767,6 +831,16 @@ public sealed class WorkspaceModel : PageModel
         if (!InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus)))
         {
             ModelState.AddModelError("activity", "盤查已送審或核准，不可再新增活動資料。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var stageDeclaration = await _dbContext.LifecycleStageDeclarations.SingleOrDefaultAsync(
+            item => item.InventoryProjectVersionId == project.Id && item.LifecycleStage == (int)lifecycleStage,
+            cancellationToken);
+        if (stageDeclaration is null || !stageDeclaration.IsApplicable)
+        {
+            ModelState.AddModelError("activity", "不適用階段不可新增活動數據。");
             await LoadAsync(cancellationToken);
             return Page();
         }
@@ -794,7 +868,12 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
-        if (rawValue is null or < 0m || string.IsNullOrWhiteSpace(activityName))
+        if (rawValue is null or < 0m
+            || string.IsNullOrWhiteSpace(activityName)
+            || !ActivityKindRules.IsAllowed(lifecycleStage, activityKind)
+            || allocationFactor is null or <= 0m or > 1m
+            || string.IsNullOrWhiteSpace(dataQuality)
+            || (isEstimated && string.IsNullOrWhiteSpace(activityEstimationReason)))
         {
             ModelState.AddModelError("activity", "活動名稱與非負活動量為必填。");
             await LoadAsync(cancellationToken);
@@ -832,6 +911,8 @@ public sealed class WorkspaceModel : PageModel
                 InventoryProjectVersionId = project.Id,
                 LifecycleStage = (int)lifecycleStage,
                 Name = activityName.Trim(),
+                ActivityKind = activityKind.ToString(),
+                SupplierOrScenario = supplierOrScenario?.Trim() ?? string.Empty,
                 RawValue = rawValue.Value,
                 RawUnitCode = rawUnitCode,
                 CanonicalValue = canonicalValue,
@@ -840,6 +921,10 @@ public sealed class WorkspaceModel : PageModel
                 PeriodStart = project.PeriodStart,
                 PeriodEnd = project.PeriodEnd,
                 FactorVersionId = factor.Id,
+                AllocationFactor = allocationFactor.Value,
+                IsEstimated = isEstimated,
+                EstimationReason = activityEstimationReason?.Trim() ?? string.Empty,
+                DataQuality = dataQuality.Trim(),
                 EvidenceSha256 = null
             });
             AddAudit("activity.version.created", "ActivityDataVersion", activityId);
@@ -1089,6 +1174,10 @@ public sealed class WorkspaceModel : PageModel
             .OrderBy(item => item.LifecycleStage)
             .ThenBy(item => item.Id)
             .ToArrayAsync(cancellationToken);
+        var stageDeclarations = await _dbContext.LifecycleStageDeclarations
+            .Where(item => item.InventoryProjectVersionId == project.Id)
+            .OrderBy(item => item.LifecycleStage)
+            .ToArrayAsync(cancellationToken);
         var factorIds = activities.Select(item => item.FactorVersionId).Distinct().ToArray();
         var factorRecords = await _dbContext.EmissionFactorVersions
             .Where(item => factorIds.Contains(item.Id))
@@ -1107,9 +1196,10 @@ public sealed class WorkspaceModel : PageModel
                 "rules-p0-v1",
                 "gwp-fixture-p0-v1",
                 "units-p0-v1",
-                Enum.GetValues<LifecycleStage>()
-                    .Select(stage => new StageDeclaration(stage, true, null))
-                    .ToArray(),
+                stageDeclarations.Select(item => new StageDeclaration(
+                    (LifecycleStage)item.LifecycleStage,
+                    item.IsApplicable,
+                    string.IsNullOrWhiteSpace(item.Reason) ? null : item.Reason)).ToArray(),
                 activities.Select(activity =>
                 {
                     var factor = factorRecords[activity.FactorVersionId];
@@ -1141,8 +1231,21 @@ public sealed class WorkspaceModel : PageModel
                             factor.LicenseCode,
                             Enum.Parse<FactorReviewStatus>(factor.ReviewStatus),
                             factor.Applicability),
-                        activity.EvidenceSha256);
-                }).ToArray());
+                        activity.EvidenceSha256,
+                        Enum.Parse<ActivityDataKind>(activity.ActivityKind),
+                        string.IsNullOrWhiteSpace(activity.SupplierOrScenario) ? null : activity.SupplierOrScenario,
+                        activity.AllocationFactor,
+                        activity.IsEstimated,
+                        string.IsNullOrWhiteSpace(activity.EstimationReason) ? null : activity.EstimationReason,
+                        activity.DataQuality);
+                }).ToArray(),
+                project.DeclaredUnit,
+                project.SystemBoundary,
+                project.AllocationMethod,
+                project.AllocationReason,
+                project.Exclusions,
+                project.Assumptions,
+                project.EstimationReason);
 
             var engineBuild = typeof(WorkspaceModel).Assembly.GetName().Version?.ToString() ?? "dev";
             var supersedesRunId = await _dbContext.CalculationRuns
@@ -1178,6 +1281,7 @@ public sealed class WorkspaceModel : PageModel
         Invitations = await _dbContext.OrganizationInvitations.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         PcrVersions = await _dbContext.PcrVersions.AsNoTracking().OrderBy(item => item.RegistrationNumber).ThenByDescending(item => item.VersionNumber).ToArrayAsync(cancellationToken);
         InventoryProjects = await _dbContext.InventoryProjectVersions.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
+        StageDeclarations = await _dbContext.LifecycleStageDeclarations.AsNoTracking().OrderBy(item => item.LifecycleStage).ToArrayAsync(cancellationToken);
         Factors = await _dbContext.EmissionFactorVersions.AsNoTracking().OrderBy(item => item.Name).ToArrayAsync(cancellationToken);
         Activities = await _dbContext.ActivityData.AsNoTracking().OrderBy(item => item.LifecycleStage).ThenBy(item => item.Name).ToArrayAsync(cancellationToken);
         EvidenceFiles = await _dbContext.EvidenceFiles.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);

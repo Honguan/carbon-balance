@@ -117,6 +117,16 @@ public sealed class PcrVersionRecord : IOrganizationOwned
     public DateTimeOffset? WithdrawnAt { get; set; }
 }
 
+public sealed class LifecycleStageDeclarationRecord : IOrganizationOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid InventoryProjectVersionId { get; set; }
+    public int LifecycleStage { get; set; }
+    public bool IsApplicable { get; set; }
+    public string Reason { get; set; } = string.Empty;
+}
+
 public sealed class UnitRecord
 {
     public Guid Id { get; set; }
@@ -165,6 +175,8 @@ public sealed class ActivityDataRecord : IOrganizationOwned
     public Guid InventoryProjectVersionId { get; set; }
     public int LifecycleStage { get; set; }
     public required string Name { get; set; }
+    public required string ActivityKind { get; set; }
+    public string SupplierOrScenario { get; set; } = string.Empty;
     public decimal RawValue { get; set; }
     public required string RawUnitCode { get; set; }
     public decimal CanonicalValue { get; set; }
@@ -173,6 +185,10 @@ public sealed class ActivityDataRecord : IOrganizationOwned
     public DateOnly PeriodStart { get; set; }
     public DateOnly PeriodEnd { get; set; }
     public Guid FactorVersionId { get; set; }
+    public decimal AllocationFactor { get; set; }
+    public bool IsEstimated { get; set; }
+    public string EstimationReason { get; set; } = string.Empty;
+    public string DataQuality { get; set; } = string.Empty;
     public string? EvidenceSha256 { get; set; }
 }
 
@@ -220,6 +236,7 @@ public sealed class CalculationLineRecord : IOrganizationOwned
     public Guid FactorVersionId { get; set; }
     public decimal FactorValue { get; set; }
     public required string FactorUnit { get; set; }
+    public decimal AllocationFactor { get; set; }
     public decimal Emissions { get; set; }
     public required string EmissionsUnitCode { get; set; }
 }

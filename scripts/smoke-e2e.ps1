@@ -240,7 +240,7 @@ Post-Workspace 'CreateInventory' @{
     pcrVersionId = $pcrVersionId
 } | Out-Null
 $workspace = (Invoke-WebRequest -UseBasicParsing -WebSession $session "$BaseUrl/Workspace").Content
-$inventoryId = Get-OptionValue $workspace ([regex]::Escape('1 product'))
+$inventoryId = Get-OptionValue $workspace ([regex]::Escape('1 product /'))
 
 $factorInputs = @(
     @{ Name = "$namePrefix Raw factor"; Value = '2'; Unit = 'kg' },
@@ -273,21 +273,27 @@ foreach ($factorId in @($rawFactorId, $energyFactorId, $transportFactorId, $wast
 }
 
 $activities = @(
-    @{ Stage = 'RawMaterial'; Name = 'Raw material'; Raw = '1000'; RawUnit = 'g'; CanonicalUnit = 'kg'; Factor = $rawFactorId },
-    @{ Stage = 'Manufacturing'; Name = 'Manufacturing electricity'; Raw = '3'; RawUnit = 'kWh'; CanonicalUnit = 'kWh'; Factor = $energyFactorId },
-    @{ Stage = 'Distribution'; Name = 'Distribution'; Raw = '10'; RawUnit = 'tonne-km'; CanonicalUnit = 'tonne-km'; Factor = $transportFactorId },
-    @{ Stage = 'Use'; Name = 'Use electricity'; Raw = '4'; RawUnit = 'kWh'; CanonicalUnit = 'kWh'; Factor = $energyFactorId },
-    @{ Stage = 'EndOfLife'; Name = 'End of life'; Raw = '2'; RawUnit = 'kg'; CanonicalUnit = 'kg'; Factor = $wasteFactorId }
+    @{ Stage = 'RawMaterial'; Kind = 'Material'; Name = 'Raw material'; Raw = '1000'; RawUnit = 'g'; CanonicalUnit = 'kg'; Factor = $rawFactorId },
+    @{ Stage = 'Manufacturing'; Kind = 'Energy'; Name = 'Manufacturing electricity'; Raw = '3'; RawUnit = 'kWh'; CanonicalUnit = 'kWh'; Factor = $energyFactorId },
+    @{ Stage = 'Distribution'; Kind = 'DistributionTransport'; Name = 'Distribution'; Raw = '10'; RawUnit = 'tonne-km'; CanonicalUnit = 'tonne-km'; Factor = $transportFactorId },
+    @{ Stage = 'Use'; Kind = 'UseEnergy'; Name = 'Use electricity'; Raw = '4'; RawUnit = 'kWh'; CanonicalUnit = 'kWh'; Factor = $energyFactorId },
+    @{ Stage = 'EndOfLife'; Kind = 'EndOfLifeTreatment'; Name = 'End of life'; Raw = '2'; RawUnit = 'kg'; CanonicalUnit = 'kg'; Factor = $wasteFactorId }
 )
 foreach ($activity in $activities) {
     Post-Workspace 'AddActivity' @{
         inventoryProjectVersionId = $inventoryId
         lifecycleStage = $activity.Stage
+        activityKind = $activity.Kind
         activityName = $activity.Name
+        supplierOrScenario = 'P0 controlled scenario'
         rawValue = $activity.Raw
         rawUnitCode = $activity.RawUnit
         canonicalUnitCode = $activity.CanonicalUnit
         factorVersionId = $activity.Factor
+        allocationFactor = '1'
+        isEstimated = 'false'
+        activityEstimationReason = ''
+        dataQuality = 'primary'
     } | Out-Null
 }
 
@@ -324,8 +330,12 @@ if ($reviewResult.Content -notmatch 'Approved') {
 
 $reports = (Invoke-WebRequest -UseBasicParsing -WebSession $session "$BaseUrl/Reports").Content
 $runId = Get-HiddenValue $reports 'runId'
+$archiveReport = Invoke-WebRequest -UseBasicParsing -WebSession $session "$BaseUrl/ArchiveReport?runId=$runId"
+if ($archiveReport.Content -notmatch '7(?:\.0+)? kgCO2e' -or $archiveReport.Content -notmatch 'Input SHA-256' -or $archiveReport.Content -notmatch 'Application version') {
+    throw 'Archivable HTML report is incomplete or inconsistent.'
+}
 $inventoryCsv = Post-Report 'InventoryCsv' $runId
-if ($inventoryCsv.Content -notmatch 'input_sha256' -or $inventoryCsv.Content -notmatch 'activity-times-factor-v1') {
+if ($inventoryCsv.Content -notmatch 'allocation_factor' -or $inventoryCsv.Content -notmatch 'activity-times-factor-times-allocation-v1') {
     throw 'Inventory CSV export is incomplete.'
 }
 

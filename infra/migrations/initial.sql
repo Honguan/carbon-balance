@@ -1169,3 +1169,106 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718100827_AddLifecycleActivityGovernance') THEN
+    ALTER TABLE app.calculation_line_items ADD allocation_factor numeric(18,15) NOT NULL DEFAULT 1.0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718100827_AddLifecycleActivityGovernance') THEN
+    ALTER TABLE app.activity_data_versions ADD activity_kind character varying(100) NOT NULL DEFAULT 'Material';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718100827_AddLifecycleActivityGovernance') THEN
+    ALTER TABLE app.activity_data_versions ADD allocation_factor numeric(18,15) NOT NULL DEFAULT 1.0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718100827_AddLifecycleActivityGovernance') THEN
+    ALTER TABLE app.activity_data_versions ADD data_quality character varying(100) NOT NULL DEFAULT 'legacy-existing';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718100827_AddLifecycleActivityGovernance') THEN
+    ALTER TABLE app.activity_data_versions ADD estimation_reason character varying(4000) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718100827_AddLifecycleActivityGovernance') THEN
+    ALTER TABLE app.activity_data_versions ADD is_estimated boolean NOT NULL DEFAULT FALSE;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718100827_AddLifecycleActivityGovernance') THEN
+    ALTER TABLE app.activity_data_versions ADD supplier_or_scenario character varying(1000) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718100827_AddLifecycleActivityGovernance') THEN
+    CREATE TABLE app.lifecycle_stage_declarations (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        inventory_project_version_id uuid NOT NULL,
+        lifecycle_stage integer NOT NULL,
+        is_applicable boolean NOT NULL,
+        reason character varying(2000) NOT NULL,
+        CONSTRAINT pk_lifecycle_stage_declarations PRIMARY KEY (id),
+        CONSTRAINT fk_lifecycle_stage_declarations_inventory_project_versions_inv FOREIGN KEY (inventory_project_version_id) REFERENCES app.inventory_project_versions (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718100827_AddLifecycleActivityGovernance') THEN
+    CREATE UNIQUE INDEX ix_lifecycle_stage_declarations_inventory_project_version_id_l ON app.lifecycle_stage_declarations (inventory_project_version_id, lifecycle_stage);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718100827_AddLifecycleActivityGovernance') THEN
+    UPDATE app.activity_data_versions
+    SET activity_kind = CASE lifecycle_stage
+        WHEN 1 THEN 'Material'
+        WHEN 2 THEN 'Energy'
+        WHEN 3 THEN 'DistributionTransport'
+        WHEN 4 THEN 'UseEnergy'
+        WHEN 5 THEN 'EndOfLifeTreatment'
+        END;
+
+    INSERT INTO app.lifecycle_stage_declarations
+        (id, organization_id, inventory_project_version_id, lifecycle_stage, is_applicable, reason)
+    SELECT gen_random_uuid(), inventory.organization_id, inventory.id, stage.value, TRUE, ''
+    FROM app.inventory_project_versions AS inventory
+    CROSS JOIN generate_series(1, 5) AS stage(value);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718100827_AddLifecycleActivityGovernance') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260718100827_AddLifecycleActivityGovernance', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
+

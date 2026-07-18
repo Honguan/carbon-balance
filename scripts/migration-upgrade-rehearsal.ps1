@@ -1,6 +1,6 @@
 param(
     [string]$TargetDatabase = "carbon_footprint_restore_upgrade",
-    [string]$PreviousMigration = "20260718095107_AddOrganizationInventoryFoundation",
+    [string]$PreviousMigration = "20260718095913_AddGovernanceMetadata",
     [string]$Container = "carbon-footprint-postgres-1",
     [string]$DatabaseUser = "carbon_app",
     [string]$DatabasePassword = "change-this-local-password"

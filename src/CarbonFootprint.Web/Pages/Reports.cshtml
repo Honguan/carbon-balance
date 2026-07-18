@@ -39,6 +39,7 @@ else
                                 <input type="hidden" name="runId" value="@run.Id" />
                                 <button class="btn btn-sm btn-outline-secondary" type="submit">Canonical manifest</button>
                             </form>
+                            <a class="btn btn-sm btn-outline-dark" asp-page="/ArchiveReport" asp-route-runId="@run.Id">可歸檔 HTML</a>
                         </td>
                     </tr>
                 }
