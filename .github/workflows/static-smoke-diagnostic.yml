@@ -1,6 +1,7 @@
 name: Static smoke diagnostic
 
 on:
+  pull_request:
   push:
     branches:
       - agent/auth-flow-functional-e2e
