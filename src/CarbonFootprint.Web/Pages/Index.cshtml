@@ -1,16 +1,169 @@
-﻿@page
+@page
 @model IndexModel
 @{
-    ViewData["Title"] = "首頁";
+    ViewData["Title"] = "碳排總覽";
 }
 
-<div class="py-5">
-    <h1 class="display-5">可重現的產品碳足跡盤查</h1>
-    <p class="lead">保存活動數據、單位換算、係數版本、輸入快照與逐項計算結果，讓每次 calculation run 都可追溯。</p>
-    <p>
-        <a class="btn btn-primary" asp-page="/Workspace">進入盤查工作區</a>
-    </p>
-    <div class="alert alert-warning mt-4" role="note">
-        系統協助盤查、計算與查驗準備；不會自行宣稱結果已通過 ISO 認證、第三方查驗或取得碳標籤。
+<section class="carbon-hero">
+    <div class="carbon-hero__content">
+        <span class="eyebrow">PRODUCT CARBON FOOTPRINT</span>
+        <h1>把產品碳排放<br />變成可管理的數據</h1>
+        <p class="carbon-hero__lead">
+            整合原物料、製造、運輸、使用與廢棄回收階段，保留活動數據、排放係數版本與每次計算結果。
+        </p>
+        <div class="hero-actions">
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <a class="btn-carbon" asp-page="/Workspace">
+                    進入盤查工作區 <span aria-hidden="true">→</span>
+                </a>
+                <a class="btn-carbon-secondary" asp-page="/Reports">查看計算與稽核匯出</a>
+            }
+            else
+            {
+                <a class="btn-carbon" asp-area="Identity" asp-page="/Account/Login">
+                    登入開始盤查 <span aria-hidden="true">→</span>
+                </a>
+                <a class="btn-carbon-secondary" href="#lifecycle">了解盤查流程</a>
+            }
+        </div>
+        <div class="hero-trust">
+            <span><b>5</b> 個生命週期階段</span>
+            <span><b>CO₂e</b> 統一計算單位</span>
+            <span><b>100%</b> 保留計算軌跡</span>
+        </div>
     </div>
-</div>
+
+    <div class="carbon-hero__visual" aria-label="產品碳足跡生命週期示意">
+        <div class="emission-card">
+            <div class="emission-card__header">
+                <div>
+                    <small>產品生命週期</small>
+                    <strong>碳排結構</strong>
+                </div>
+                <span class="co2-badge">CO₂e</span>
+            </div>
+            <div class="emission-ring" aria-hidden="true">
+                <div class="emission-ring__center">
+                    <svg viewBox="0 0 48 48">
+                        <path d="M39 7C24 8 13 14 10 25c-2 8 3 14 10 15 11 2 18-7 19-33ZM13 36c7-8 14-14 23-21" />
+                    </svg>
+                    <span>盤查</span>
+                </div>
+            </div>
+            <div class="emission-legend">
+                <span><i class="legend-material"></i>原物料</span>
+                <span><i class="legend-manufacture"></i>製造</span>
+                <span><i class="legend-transport"></i>運輸</span>
+                <span><i class="legend-use"></i>使用</span>
+                <span><i class="legend-recycle"></i>回收</span>
+            </div>
+        </div>
+        <span class="floating-leaf floating-leaf--one" aria-hidden="true"></span>
+        <span class="floating-leaf floating-leaf--two" aria-hidden="true"></span>
+        <span class="floating-co2" aria-hidden="true">CO₂</span>
+    </div>
+</section>
+
+<section class="section-block" id="lifecycle">
+    <div class="section-heading">
+        <div>
+            <span class="eyebrow">LIFE CYCLE</span>
+            <h2>依產品生命週期完成盤查</h2>
+        </div>
+        <p>每個階段只呈現碳足跡計算所需資料，避免混入與盤查無關的操作。</p>
+    </div>
+
+    <div class="lifecycle-grid">
+        <article class="lifecycle-card">
+            <span class="lifecycle-card__number">01</span>
+            <div class="lifecycle-icon lifecycle-icon--material" aria-hidden="true">
+                <svg viewBox="0 0 48 48"><path d="M24 42V19M24 27C14 27 8 20 8 10c10 0 16 7 16 17ZM24 33c10 0 16-6 16-16-10 0-16 6-16 16Z" /></svg>
+            </div>
+            <h3>原物料</h3>
+            <p>記錄材料用量、來源、宣告單位與排放係數。</p>
+        </article>
+        <article class="lifecycle-card">
+            <span class="lifecycle-card__number">02</span>
+            <div class="lifecycle-icon lifecycle-icon--manufacture" aria-hidden="true">
+                <svg viewBox="0 0 48 48"><path d="M7 40V21l11 6V17l11 6V9h12v31H7ZM33 14h4M33 20h4" /></svg>
+            </div>
+            <h3>製造</h3>
+            <p>彙整能源、製程投入與生產設備造成的排放。</p>
+        </article>
+        <article class="lifecycle-card">
+            <span class="lifecycle-card__number">03</span>
+            <div class="lifecycle-icon lifecycle-icon--transport" aria-hidden="true">
+                <svg viewBox="0 0 48 48"><path d="M5 13h24v23H5zM29 22h8l6 7v7H29zM12 40a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM36 40a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" /></svg>
+            </div>
+            <h3>運輸</h3>
+            <p>依運具、距離、重量與裝載條件計算運輸排放。</p>
+        </article>
+        <article class="lifecycle-card">
+            <span class="lifecycle-card__number">04</span>
+            <div class="lifecycle-icon lifecycle-icon--use" aria-hidden="true">
+                <svg viewBox="0 0 48 48"><path d="M19 7h10v9l5 5a12 12 0 1 1-20 0l5-5V7ZM16 28h16" /></svg>
+            </div>
+            <h3>使用</h3>
+            <p>建立產品使用期間的能源、耗材與維護情境。</p>
+        </article>
+        <article class="lifecycle-card">
+            <span class="lifecycle-card__number">05</span>
+            <div class="lifecycle-icon lifecycle-icon--recycle" aria-hidden="true">
+                <svg viewBox="0 0 48 48"><path d="m20 8 5-5 5 5M25 4v12M39 29l7 2-2 7M44 32l-10-6M10 35l-2 7-7-2M8 40l10-6M14 18a13 13 0 0 1 22 1M36 30a13 13 0 0 1-21 8M12 31a13 13 0 0 1 1-10" /></svg>
+            </div>
+            <h3>廢棄與回收</h3>
+            <p>盤點處理方式、回收比例與最終處置排放。</p>
+        </article>
+    </div>
+</section>
+
+<section class="section-block feature-section" id="features">
+    <div class="section-heading section-heading--light">
+        <div>
+            <span class="eyebrow eyebrow-light">TRACEABLE CALCULATION</span>
+            <h2>從輸入到結果都可追溯</h2>
+        </div>
+        <p>系統聚焦產品碳足跡盤查、計算與稽核準備，不放置無關的會員或社群功能。</p>
+    </div>
+
+    <div class="feature-grid">
+        <article class="feature-card">
+            <span class="feature-card__icon" aria-hidden="true">
+                <svg viewBox="0 0 48 48"><path d="M8 8h32v32H8zM15 17h18M15 24h18M15 31h11" /></svg>
+            </span>
+            <h3>活動數據集中管理</h3>
+            <p>數量、單位、資料來源與盤查期間維持一致格式。</p>
+        </article>
+        <article class="feature-card">
+            <span class="feature-card__icon" aria-hidden="true">
+                <svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="16" /><path d="M24 13v11l8 5" /></svg>
+            </span>
+            <h3>係數版本與快照</h3>
+            <p>保存計算當下使用的排放係數與輸入資料，避免結果無法重現。</p>
+        </article>
+        <article class="feature-card">
+            <span class="feature-card__icon" aria-hidden="true">
+                <svg viewBox="0 0 48 48"><path d="M9 39V20h8v19M20 39V10h8v29M31 39V16h8v23M6 39h36" /></svg>
+            </span>
+            <h3>碳排熱點與報表</h3>
+            <p>依生命週期與排放項目查看結果，支援後續減碳決策與稽核匯出。</p>
+        </article>
+    </div>
+</section>
+
+<section class="carbon-callout">
+    <div>
+        <span class="eyebrow">READY TO INVENTORY</span>
+        <h2>開始建立可重現的產品碳足跡</h2>
+        <p>所有計算結果均保留輸入與係數依據，讓內部管理與查驗準備更清楚。</p>
+    </div>
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <a class="btn-carbon" asp-page="/Workspace">開始盤查 <span aria-hidden="true">→</span></a>
+    }
+    else
+    {
+        <a class="btn-carbon" asp-area="Identity" asp-page="/Account/Login">登入系統 <span aria-hidden="true">→</span></a>
+    }
+</section>

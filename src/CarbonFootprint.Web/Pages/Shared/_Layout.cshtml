@@ -1,51 +1,103 @@
-﻿<!DOCTYPE html>
+@{
+    var bodyClass = ViewData["BodyClass"]?.ToString() ?? string.Empty;
+    var isAuthPage = bodyClass == "auth-page";
+}
+<!DOCTYPE html>
 <html lang="zh-Hant-TW">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - 產品碳足跡系統</title>
+    <meta name="theme-color" content="#0f6b4f" />
+    <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
+    <title>@ViewData["Title"] - 碳衡產品碳足跡系統</title>
     <script type="importmap"></script>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/CarbonFootprint.Web.styles.css" asp-append-version="true" />
 </head>
-<body>
-    <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
-            <div class="container">
-                <a class="navbar-brand" asp-area="" asp-page="/Index">產品碳足跡系統</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
-                        aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
-                    <ul class="navbar-nav flex-grow-1">
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-page="/Index">首頁</a>
-                        </li>
+<body class="@bodyClass">
+    <a class="skip-link" href="#main-content">跳至主要內容</a>
+
+    @if (!isAuthPage)
+    {
+        <header class="site-header">
+            <div class="carbon-strip" aria-hidden="true"></div>
+            <nav class="navbar navbar-expand-lg" aria-label="主要導覽">
+                <div class="container site-nav">
+                    <a class="site-brand" asp-area="" asp-page="/Index" aria-label="碳衡產品碳足跡系統首頁">
+                        <span class="brand-mark" aria-hidden="true">
+                            <svg viewBox="0 0 48 48">
+                                <path d="M39 7C24 8 13 14 10 25c-2 8 3 14 10 15 11 2 18-7 19-33ZM13 36c7-8 14-14 23-21" />
+                            </svg>
+                        </span>
+                        <span class="site-brand__text">
+                            <strong>碳衡</strong>
+                            <small>Carbon Balance</small>
+                        </span>
+                    </a>
+
+                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-navigation"
+                            aria-controls="main-navigation" aria-expanded="false" aria-label="展開導覽">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+
+                    <div class="collapse navbar-collapse" id="main-navigation">
+                        <ul class="navbar-nav site-links">
                             <li class="nav-item">
-                                <a class="nav-link text-dark" asp-area="" asp-page="/Workspace">盤查工作區</a>
+                                <a class="nav-link" asp-area="" asp-page="/Index">碳排總覽</a>
                             </li>
-                            <li class="nav-item">
-                                <a class="nav-link text-dark" asp-area="" asp-page="/Reports">稽核匯出</a>
-                            </li>
-                    </ul>
-                    <partial name="_LoginPartial" />
+                            @if (User.Identity?.IsAuthenticated == true)
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-area="" asp-page="/Workspace">盤查工作區</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-area="" asp-page="/Reports">計算與稽核匯出</a>
+                                </li>
+                            }
+                            else
+                            {
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-area="" asp-page="/Index" asp-fragment="lifecycle">生命週期</a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-area="" asp-page="/Index" asp-fragment="features">盤查功能</a>
+                                </li>
+                            }
+                        </ul>
+                        <div class="ms-lg-auto">
+                            <partial name="_LoginPartial" />
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </nav>
-    </header>
-    <div class="container">
-        <main role="main" class="pb-3">
+            </nav>
+        </header>
+    }
+
+    @if (isAuthPage)
+    {
+        <main id="main-content" class="auth-main" role="main">
             @RenderBody()
         </main>
-    </div>
+    }
+    else
+    {
+        <main id="main-content" class="site-main" role="main">
+            <div class="container">
+                @RenderBody()
+            </div>
+        </main>
 
-    <footer class="border-top footer text-muted">
-        <div class="container">
-            &copy; 2026 產品碳足跡系統 — 計算結果不等同查驗或主管機關核定。
-        </div>
-    </footer>
+        <footer class="site-footer">
+            <div class="container site-footer__content">
+                <div>
+                    <strong>碳衡產品碳足跡系統</strong>
+                    <span>從活動數據到 CO₂e 結果，保留完整盤查軌跡。</span>
+                </div>
+                <p>計算結果為盤查與管理用途，不代表第三方查驗或主管機關核定。</p>
+            </div>
+        </footer>
+    }
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>

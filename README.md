@@ -1,13 +1,46 @@
-# 產品碳足跡盤查與計算系統
+# 碳衡｜產品碳足跡盤查與計算系統
 
-本系統提供產品碳足跡盤查、排放係數與 PCR 版本管理、五階段生命週期資料、證據附件、碳排計算、審核及報表匯出功能。
+碳衡（Carbon Balance）是一套聚焦產品碳足跡的盤查、計算與稽核準備系統。系統依產品生命週期管理原物料、製造、運輸、使用及廢棄回收資料，保存活動數據、排放係數版本、計算輸入快照與逐項 CO₂e 結果。
 
-目前為 **P0 Release Candidate**：Phase 0～8 的工程實作與自動驗證已完成，適合在個人電腦或封閉測試環境進行試用與人工 UAT。
+目前為 **P0 Release Candidate**，適合在個人電腦或封閉測試環境進行試用與人工 UAT。
 
 > [!WARNING]
-> 目前的 Docker Compose 使用 Development 環境、Mailpit 測試信箱與本機 HTTP，尚未配置正式網域、TLS、正式 SMTP、外部物件儲存、集中式 Secrets 或監控告警。**請勿直接暴露到公開網路或作為正式生產環境。**
+> Docker Compose 使用本機 HTTP、Development 環境與測試服務，尚未配置正式網域、TLS、集中式 Secrets、備份、監控告警及正式物件儲存。請勿直接暴露到公開網路。
 >
-> 本 repository 可公開讀取，但目前未提供 `LICENSE`。在授權方式確定前，僅供專案評估與測試；不代表授予散布、再授權或商業使用權利。
+> 本 repository 目前未提供 `LICENSE`。在授權方式確定前，僅供專案評估與測試。
+
+## 系統重點
+
+- 五階段產品生命週期盤查
+- 活動數據、單位與資料來源管理
+- 排放係數與 PCR 版本追溯
+- 計算輸入快照與不可變更的 Calculation Run
+- 碳排熱點、審核與報表匯出
+- 證據附件、MinIO 儲存與 ClamAV 掃描
+- 簡化角色登入，不使用公開會員網站流程
+- 碳足跡、CO₂e、葉片、製程、運輸及回收視覺風格
+
+## 登入與角色設計
+
+登入只用於辨識使用者及套用角色權限，不要求額外認證流程：
+
+- 不需要 Email 確認
+- 不需要 MFA 或復原碼
+- 不提供外部社群登入
+- 不提供公開忘記密碼與重設密碼流程
+- 密碼至少 6 個字元
+- 不強制大小寫、數字或特殊符號
+
+系統固定角色：
+
+| 角色代碼 | 顯示名稱 | 建議用途 |
+|---|---|---|
+| `Administrator` | 系統管理者 | 系統設定、角色與完整資料管理 |
+| `Manager` | 盤查主管 | 審核盤查內容與查看完整結果 |
+| `Editor` | 盤查編輯者 | 建立及修改碳足跡盤查資料 |
+| `Viewer` | 檢視者 | 唯讀查看盤查與計算結果 |
+
+首次安裝只允許建立一個初始管理者。建立完成後，公開註冊頁會自動關閉。
 
 ## 一般使用者快速部署
 
@@ -16,11 +49,11 @@
 只需要以下工具，不必另外安裝 .NET 或 PostgreSQL：
 
 - Windows 10／11、macOS 或 Linux
-- Docker Desktop，或 Docker Engine 加上 Docker Compose
-- 建議至少 4 GB 可用記憶體；ClamAV 首次啟動會需要較多時間與記憶體
+- Docker Desktop，或 Docker Engine 加 Docker Compose
+- 建議至少 4 GB 可用記憶體
 - 約 5 GB 以上可用磁碟空間
 
-確認 Docker 已啟動且可正常使用：
+確認 Docker 已啟動：
 
 ```bash
 docker --version
@@ -29,24 +62,16 @@ docker compose version
 
 ### 1. 取得專案
 
-使用 Git：
-
 ```bash
 git clone https://github.com/Honguan/carbon-balance.git
 cd carbon-balance
 ```
 
-不熟悉 Git 的使用者也可以在 GitHub 頁面選擇 **Code → Download ZIP**，解壓縮後在終端機進入該資料夾。
+也可以在 GitHub 選擇 **Code → Download ZIP**，解壓縮後進入專案資料夾。
 
-### 2. 一鍵建立密碼並啟動
+### 2. 自動建立服務密碼並啟動
 
-首次執行時，設定腳本會：
-
-1. 自動產生兩組不同的 48 字元本機密碼。
-2. 建立不會提交到 Git 的 `.env`。
-3. 在終端機顯示 PostgreSQL 與 MinIO 的帳號、密碼及 `.env` 位置。
-4. 驗證 Docker Compose 設定。
-5. 建置映像、執行資料庫 migration 並啟動全部服務。
+設定腳本會建立 `.env`，自動產生不同的 PostgreSQL 與 MinIO 密碼，驗證 Compose 後啟動全部服務。
 
 Windows PowerShell：
 
@@ -62,13 +87,11 @@ bash scripts/setup-local.sh
 ```
 
 > [!IMPORTANT]
-> 密碼只會在第一次建立 `.env` 時顯示。之後腳本會沿用原本的 `.env`，不會自動覆寫密碼。請勿把 `.env` 上傳到 GitHub、貼到聊天或傳給其他人。
+> 密碼只會在第一次建立 `.env` 時顯示。之後腳本會沿用原本設定，不會自動覆寫。請勿上傳或公開 `.env`。
 
-### 手動設定密碼
+### 手動設定服務密碼
 
-不想使用自動產生的密碼時，可使用隱藏輸入模式。
-
-Windows PowerShell：
+Windows：
 
 ```powershell
 .\scripts\setup-local.ps1 -Manual
@@ -80,36 +103,27 @@ macOS／Linux：
 bash scripts/setup-local.sh --manual
 ```
 
-手動密碼規則：
+服務密碼規則：
 
 - 16～128 字元
-- PostgreSQL 與 MinIO 必須使用不同密碼
-- 為避免 `.env` 與連線字串解析問題，只使用英文字母、數字、句點、底線或連字號
+- PostgreSQL 與 MinIO 必須不同
+- 使用英文字母、數字、句點、底線或連字號
 
-也可以自行建立設定檔：
-
-Windows PowerShell：
+也可以自行建立 `.env`：
 
 ```powershell
 Copy-Item .env.example .env
 notepad .env
 ```
 
-macOS／Linux：
-
-```bash
-cp .env.example .env
-nano .env
-```
-
-至少填入：
+至少設定：
 
 ```dotenv
 POSTGRES_PASSWORD=你的資料庫密碼
 MINIO_ROOT_PASSWORD=另一組物件儲存密碼
 ```
 
-填寫完成後啟動：
+再啟動：
 
 ```bash
 docker compose config --quiet
@@ -117,71 +131,67 @@ docker compose up -d --build
 docker compose ps -a
 ```
 
-Docker Compose 不再提供公開的固定預設密碼；沒有設定兩組密碼時會直接停止，避免意外建立使用已知密碼的服務。
+## 第一次啟動
 
-### 只建立設定、不啟動服務
+Compose 會依序：
 
-Windows PowerShell：
+1. 啟動 PostgreSQL、MinIO、Mailpit 與 ClamAV。
+2. 建置 Web 映像。
+3. 執行 Entity Framework Core migration。
+4. 建立 `Administrator`、`Manager`、`Editor`、`Viewer` 角色。
+5. 等待相依服務健康後啟動 Web。
 
-```powershell
-.\scripts\setup-local.ps1 -NoStart
-```
-
-macOS／Linux：
-
-```bash
-bash scripts/setup-local.sh --no-start
-```
-
-### 第一次啟動會執行的工作
-
-1. 下載並啟動 PostgreSQL、MinIO、Mailpit 與 ClamAV。
-2. 建置 Web 應用程式映像。
-3. 等待 PostgreSQL 健康後自動執行資料庫 migration。
-4. 等待 MinIO、ClamAV 與 Mailpit 可用後啟動 Web。
-
-ClamAV 第一次初始化可能較慢。可重複執行以下指令，直到 `web` 顯示為 `healthy`：
+ClamAV 第一次初始化可能較慢。重複執行：
 
 ```bash
 docker compose ps -a
 ```
 
-`migrate` 顯示 `Exited (0)` 代表資料庫 migration 已成功完成，屬於正常狀態。
+正常狀態包括：
 
-若啟動失敗，查看記錄：
-
-```bash
-docker compose logs migrate --tail=200
-docker compose logs web --tail=200
-docker compose logs postgres --tail=200
+```text
+migrate    Exited (0)
+postgres   Up (healthy)
+minio      Up (healthy)
+clamav     Up (healthy)
+web        Up (healthy)
 ```
+
+`migrate` 是一次性容器，`Exited (0)` 代表成功，不需要手動啟動。
 
 ## 開啟系統
 
 | 服務 | 網址 | 用途 |
 |---|---|---|
-| 碳足跡系統 | http://127.0.0.1:8088 | 主要操作介面 |
-| Mailpit | http://127.0.0.1:8025 | 查看註冊確認信與測試郵件 |
+| 碳衡系統 | http://127.0.0.1:8088 | 主要盤查與計算介面 |
+| Mailpit | http://127.0.0.1:8025 | 查看邀請及其他測試郵件 |
 | MinIO Console | http://127.0.0.1:9001 | 查看證據附件物件儲存 |
-| Liveness | http://127.0.0.1:8088/health/live | 確認 Web 程序存活 |
-| Readiness | http://127.0.0.1:8088/health/ready | 確認 Web 與資料庫可用 |
+| Liveness | http://127.0.0.1:8088/health/live | Web 程序存活狀態 |
+| Readiness | http://127.0.0.1:8088/health/ready | Web 與資料庫可用狀態 |
 
-MinIO Console 的帳號與密碼分別為 `.env` 中的 `MINIO_ROOT_USER` 與 `MINIO_ROOT_PASSWORD`。
+MinIO 帳號與密碼位於 `.env`：
+
+```dotenv
+MINIO_ROOT_USER=carbon_minio
+MINIO_ROOT_PASSWORD=...
+```
 
 ## 第一次使用
 
-1. 開啟 `http://127.0.0.1:8088`，選擇註冊帳號。
-2. 完成註冊後，開啟 `http://127.0.0.1:8025`。
-3. 在 Mailpit 找到系統寄出的確認信，點擊信中的確認連結。
-4. 回到系統登入。
-5. 在帳號管理頁啟用驗證器 MFA；發布係數、PCR 與其他敏感操作會要求 MFA。
-6. 依序建立組織、廠場、產品、盤查版本，再輸入各生命週期階段資料。
+1. 開啟 `http://127.0.0.1:8088`。
+2. 選擇「登入系統」。
+3. 選擇「首次使用？建立初始管理者」。
+4. 輸入顯示名稱、Email 及至少 6 個字元的密碼。
+5. 系統會直接建立 `Administrator` 角色並登入，不需要收取確認信。
+6. 建立組織、廠場、產品與盤查版本。
+7. 輸入生命週期資料並執行計算。
 
-建議的基本操作順序：
+初始管理者建立後，再次開啟註冊網址會回到登入頁，無法公開建立第二個帳號。
+
+建議操作順序：
 
 ```text
-建立帳號並確認 Email
-→ 啟用 MFA
+建立初始管理者
 → 建立組織與成員角色
 → 建立廠場與產品
 → 建立或匯入 PCR、單位與排放係數
@@ -192,29 +202,33 @@ MinIO Console 的帳號與密碼分別為 `.env` 中的 `MINIO_ROOT_USER` 與 `M
 → 送審、核准並匯出報表
 ```
 
-測試環境中的 PCR 與排放係數不代表主管機關、查驗機構或資料權利人的正式認可資料。正式盤查前仍須由領域人員確認資料來源、版本、有效期間與授權。
+測試環境中的 PCR 與排放係數不代表主管機關、查驗機構或資料權利人的正式認可資料。正式盤查前仍須由領域人員確認資料來源、版本、有效期間及授權。
 
-## 常用管理指令
+## 更新專案
 
-查看服務狀態：
+```bash
+git pull
+docker compose up -d --build --force-recreate web
+```
+
+若本次更新包含 migration，Compose 會自動執行 `migrate`。
+
+## 常用指令
+
+查看全部服務：
 
 ```bash
 docker compose ps -a
 ```
 
-持續查看 Web 記錄：
+查看 Web 與 migration 日誌：
 
 ```bash
-docker compose logs -f web
+docker compose logs web --tail=200
+docker compose logs migrate --tail=200
 ```
 
-查看 migration 記錄：
-
-```bash
-docker compose logs migrate
-```
-
-停止服務但保留資料：
+停止但保留資料：
 
 ```bash
 docker compose down
@@ -226,19 +240,12 @@ docker compose down
 docker compose up -d
 ```
 
-重新建置並套用新版程式：
-
-```bash
-git pull
-docker compose up -d --build
-```
-
-### 清除全部本機資料並重建
+### 清除全部測試資料
 
 > [!CAUTION]
-> 以下操作會刪除 PostgreSQL 資料、MinIO 附件、Mailpit 郵件、ClamAV 資料與 Data Protection Keys，無法復原。
+> 以下操作會刪除 PostgreSQL、MinIO、Mailpit、ClamAV 及 Data Protection Keys 資料，無法復原。
 
-Windows PowerShell：
+Windows：
 
 ```powershell
 .\scripts\setup-local.ps1 -ResetData
@@ -250,42 +257,28 @@ macOS／Linux：
 bash scripts/setup-local.sh --reset-data
 ```
 
-也可以手動執行：
+## 密碼與資料 Volume
 
-```bash
-docker compose down -v --remove-orphans
-docker compose up -d --build
-```
-
-## 密碼與資料 Volume 注意事項
-
-PostgreSQL 密碼只會在資料 Volume 第一次初始化時套用。資料庫建立後，單純修改 `.env` 的 `POSTGRES_PASSWORD` 不會同步修改資料庫內的帳號密碼。
-
-因此：
+PostgreSQL 官方映像只會在第一次建立資料目錄時套用 `POSTGRES_PASSWORD`。因此：
 
 - 不要刪除仍在使用中的 `.env`。
-- 不要在已有資料的情況下任意修改 `POSTGRES_PASSWORD`。
-- 若 `.env` 遺失但 PostgreSQL Volume 還存在，設定腳本會停止，不會產生一組無法登入舊資料的新密碼。
-- 需要保留資料時，請找回原本 `.env`，或由資料庫管理員修改 PostgreSQL 帳號密碼。
-- 純測試資料可刪除時，使用 `-ResetData` 或 `--reset-data` 重建。
-
-## 常見問題
+- 不要在已有資料時任意修改 `POSTGRES_PASSWORD`。
+- `.env` 遺失但 PostgreSQL Volume 仍存在時，設定腳本會停止。
+- 測試資料可以刪除時，使用 `-ResetData` 或 `--reset-data` 重建。
 
 ### `password authentication failed for user "carbon_app"`
 
-代表 PostgreSQL Volume 內的密碼和目前 `.env` 不一致。
-
-若資料不需要保留：
+代表 PostgreSQL Volume 與目前 `.env` 的密碼不同。資料不需要保留時：
 
 ```powershell
 .\scripts\setup-local.ps1 -ResetData
 ```
 
-需要保留資料時，不要刪除 Volume，請恢復原本 `.env` 或修改資料庫帳號密碼。
+需要保留資料時，請恢復原本 `.env` 或由資料庫管理員修改帳號密碼。
 
-### 網頁無法開啟或顯示 `ERR_EMPTY_RESPONSE`
+### 網頁顯示 `ERR_EMPTY_RESPONSE`
 
-先使用完整 HTTP 網址：
+使用完整 HTTP 網址：
 
 ```text
 http://127.0.0.1:8088
@@ -299,58 +292,38 @@ docker compose logs web --tail=200
 docker compose logs migrate --tail=200
 ```
 
-確認 `migrate` 為 `Exited (0)`，且 `web` 已進入 `healthy`。
-
-Windows 可用以下方式測試：
+Windows 可測試：
 
 ```powershell
 curl.exe -i http://127.0.0.1:8088/health/live
 curl.exe -i http://127.0.0.1:8088/health/ready
 ```
 
-### ClamAV 長時間無法健康
-
-- 確認 Docker 至少有約 4 GB 可用記憶體。
-- 查看 `docker compose logs clamav --tail=200`。
-- 首次啟動需要建立或更新病毒碼資料，通常會比後續啟動慢。
-
-### 收不到註冊確認信
-
-本機環境不會寄到真實信箱。請開啟：
-
-```text
-http://127.0.0.1:8025
-```
-
-確認信會直接出現在 Mailpit 收件匣。
-
 ### 連接埠被占用
 
-預設會使用：
+預設連接埠：
 
 - `8088`：Web
 - `5432`：PostgreSQL
 - `9000`、`9001`：MinIO
 - `1025`、`8025`：Mailpit
 
-可以先停止占用連接埠的程式，或修改 `docker-compose.yml` 左側的主機連接埠。例如：
+可以修改 `docker-compose.yml` 左側的主機連接埠，例如：
 
 ```yaml
 ports:
   - "8090:8080"
 ```
 
-修改後 Web 網址會變成 `http://127.0.0.1:8090`。
+Web 網址會改為 `http://127.0.0.1:8090`。
 
 ## 開發者環境
 
-需要直接建置、測試或修改程式碼時，另外安裝：
+另外安裝：
 
-- .NET SDK 10.0.302，或相容的 10.0.3xx patch
+- .NET SDK 10.0.302 或相容的 10.0.3xx patch
 - Git
 - Docker Desktop／Docker Compose
-
-Windows PowerShell：
 
 ```powershell
 .\scripts\setup-local.ps1 -NoStart
@@ -362,7 +335,7 @@ docker compose config --quiet
 docker compose up -d --build
 ```
 
-本機 integration test 必須明確提供測試資料庫連線字串，且不得指向正式資料庫：
+Integration test 必須使用非正式環境資料庫：
 
 ```powershell
 $env:CARBON_TEST_DB_CONNECTION='Host=127.0.0.1;Port=5432;Database=carbon_footprint;Username=carbon_app;Password=你的本機資料庫密碼;SSL Mode=Disable;GSS Encryption Mode=Disable'
@@ -372,22 +345,24 @@ dotnet test tests/Integration --configuration Release --no-build
 完整本機 Golden E2E：
 
 ```powershell
-$smokePassword = Read-Host '輸入符合 Identity 規則的一次性 E2E 密碼'
+$smokePassword = Read-Host '輸入至少 6 個字元的一次性 E2E 密碼'
 .\scripts\smoke-e2e.ps1 -Password $smokePassword
 ```
 
 ## 技術架構
 
 - .NET 10／ASP.NET Core Razor Pages
+- ASP.NET Core Identity 角色授權
 - PostgreSQL 18／Entity Framework Core migrations
 - MinIO 證據附件儲存
 - ClamAV 上傳檔案掃描
 - Mailpit 本機郵件測試
-- OpenTelemetry tracing 與 metrics 基礎
+- OpenTelemetry tracing 與 metrics
 - Docker Compose 本機整合環境
 
 ## 專案原則
 
+- 系統畫面只呈現與產品碳足跡盤查、計算、審核及匯出有關的功能。
 - 舊 PHP 專案只作歷史需求、資料映射、UI 與測試案例來源。
 - 係數、PCR、單位、公式與 GWP 規則必須版本化。
 - `CalculationRun` 建立後不可修改；修正輸入會建立新的 run。

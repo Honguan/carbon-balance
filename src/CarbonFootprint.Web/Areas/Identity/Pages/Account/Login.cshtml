@@ -1,0 +1,104 @@
+@page
+@model CarbonFootprint.Web.Areas.Identity.Pages.Account.LoginModel
+@{
+    ViewData["Title"] = "登入";
+    ViewData["BodyClass"] = "auth-page";
+}
+
+<section class="auth-shell" aria-labelledby="login-title">
+    <div class="auth-visual">
+        <div class="auth-visual__content">
+            <span class="eyebrow eyebrow-light">PRODUCT CARBON FOOTPRINT</span>
+            <h1>讓每一筆碳排<br />都有來源、有依據</h1>
+            <p>集中管理原物料、製造、運輸、使用與廢棄階段資料，快速完成產品碳足跡盤查。</p>
+
+            <div class="carbon-orbit" aria-hidden="true">
+                <div class="carbon-orbit__earth">
+                    <svg viewBox="0 0 120 120" role="img">
+                        <circle cx="60" cy="60" r="46" fill="currentColor" opacity=".16" />
+                        <path d="M42 28c10 2 17 9 18 17-7 5-16 5-23 1-3-7-1-13 5-18Zm35 12c10 0 17 5 20 13-4 8-11 12-21 11-5-8-5-16 1-24ZM36 64c10-4 20-1 27 7 0 11-5 20-15 26-10-4-16-12-17-23 0-4 2-7 5-10Zm43 13c8-3 15-1 21 5-2 9-8 15-17 18-7-5-10-12-9-20l5-3Z" fill="currentColor" />
+                    </svg>
+                    <span>CO₂e</span>
+                </div>
+                <span class="carbon-orbit__leaf leaf-one"></span>
+                <span class="carbon-orbit__leaf leaf-two"></span>
+                <span class="carbon-orbit__dot dot-one"></span>
+                <span class="carbon-orbit__dot dot-two"></span>
+            </div>
+
+            <div class="auth-points">
+                <span>生命週期盤查</span>
+                <span>排放係數追溯</span>
+                <span>計算結果匯出</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="auth-panel">
+        <div class="auth-card">
+            <div class="auth-brand auth-brand--mobile">
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 48 48"><path d="M39 7C24 8 13 14 10 25c-2 8 3 14 10 15 11 2 18-7 19-33ZM13 36c7-8 14-14 23-21" /></svg>
+                </span>
+                <span>碳衡 Carbon Balance</span>
+            </div>
+
+            <span class="eyebrow">角色登入</span>
+            <h2 id="login-title">歡迎回來</h2>
+            <p class="auth-card__intro">輸入帳號與密碼，系統會依你的角色顯示可使用的碳足跡功能。</p>
+
+            @if (TempData["AccountMessage"] is string accountMessage)
+            {
+                <div class="status-message" role="status">@accountMessage</div>
+            }
+
+            <form method="post" class="auth-form">
+                <input type="hidden" asp-for="ReturnUrl" />
+                <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+
+                <div class="field-group">
+                    <label asp-for="Input.Identifier"></label>
+                    <div class="field-control">
+                        <span class="field-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 7l8 6 8-6" /></svg>
+                        </span>
+                        <input asp-for="Input.Identifier" autocomplete="username" autofocus placeholder="帳號或 Email" />
+                    </div>
+                    <span asp-validation-for="Input.Identifier" class="field-error"></span>
+                </div>
+
+                <div class="field-group">
+                    <label asp-for="Input.Password"></label>
+                    <div class="field-control">
+                        <span class="field-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
+                        </span>
+                        <input asp-for="Input.Password" autocomplete="current-password" placeholder="至少 6 個字元" />
+                    </div>
+                    <span asp-validation-for="Input.Password" class="field-error"></span>
+                </div>
+
+                <label class="remember-check">
+                    <input asp-for="Input.RememberMe" />
+                    <span>在這台裝置保持登入</span>
+                </label>
+
+                <button type="submit" class="btn-carbon btn-carbon--wide">
+                    登入碳足跡系統
+                    <span aria-hidden="true">→</span>
+                </button>
+            </form>
+
+            <div class="auth-note">
+                <span class="auth-note__icon" aria-hidden="true">i</span>
+                <p>此系統不要求 Email 認證或多因素驗證。帳號角色由系統管理者設定。</p>
+            </div>
+
+            <a class="initial-account-link" asp-page="./Register">首次使用？建立初始管理者</a>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

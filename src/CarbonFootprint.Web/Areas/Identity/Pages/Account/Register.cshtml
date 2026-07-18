@@ -1,0 +1,81 @@
+@page
+@model CarbonFootprint.Web.Areas.Identity.Pages.Account.RegisterModel
+@{
+    ViewData["Title"] = "建立初始管理者";
+    ViewData["BodyClass"] = "auth-page";
+}
+
+<section class="auth-shell auth-shell--setup" aria-labelledby="setup-title">
+    <div class="auth-visual">
+        <div class="auth-visual__content">
+            <span class="eyebrow eyebrow-light">FIRST-TIME SETUP</span>
+            <h1>建立第一個<br />碳管理角色</h1>
+            <p>初始帳號會取得系統管理者角色，用於建立組織、設定盤查權限與管理後續使用者。</p>
+            <div class="setup-cycle" aria-hidden="true">
+                <span>原料</span><span>製造</span><span>運輸</span><span>使用</span><span>回收</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="auth-panel">
+        <div class="auth-card">
+            <span class="eyebrow">系統初始化</span>
+            <h2 id="setup-title">建立初始管理者</h2>
+            <p class="auth-card__intro">此頁只會在系統尚無帳號時開放。密碼至少 6 個字元，不強制特殊符號。</p>
+
+            <form method="post" class="auth-form">
+                <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+
+                <div class="field-group">
+                    <label asp-for="Input.DisplayName"></label>
+                    <div class="field-control">
+                        <span class="field-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 21c1-5 4-7 8-7s7 2 8 7" /></svg>
+                        </span>
+                        <input asp-for="Input.DisplayName" autocomplete="name" placeholder="例如：碳盤查管理員" />
+                    </div>
+                    <span asp-validation-for="Input.DisplayName" class="field-error"></span>
+                </div>
+
+                <div class="field-group">
+                    <label asp-for="Input.Email"></label>
+                    <div class="field-control">
+                        <span class="field-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 7l8 6 8-6" /></svg>
+                        </span>
+                        <input asp-for="Input.Email" autocomplete="email" placeholder="admin@example.com" />
+                    </div>
+                    <span asp-validation-for="Input.Email" class="field-error"></span>
+                </div>
+
+                <div class="field-row">
+                    <div class="field-group">
+                        <label asp-for="Input.Password"></label>
+                        <div class="field-control">
+                            <input asp-for="Input.Password" autocomplete="new-password" placeholder="至少 6 個字元" />
+                        </div>
+                        <span asp-validation-for="Input.Password" class="field-error"></span>
+                    </div>
+                    <div class="field-group">
+                        <label asp-for="Input.ConfirmPassword"></label>
+                        <div class="field-control">
+                            <input asp-for="Input.ConfirmPassword" autocomplete="new-password" placeholder="再次輸入密碼" />
+                        </div>
+                        <span asp-validation-for="Input.ConfirmPassword" class="field-error"></span>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-carbon btn-carbon--wide">
+                    建立並進入系統
+                    <span aria-hidden="true">→</span>
+                </button>
+            </form>
+
+            <a class="auth-back" asp-page="./Login">← 返回登入</a>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
