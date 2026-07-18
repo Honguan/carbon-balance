@@ -10,11 +10,13 @@
         : User.IsInRole(SystemRoles.Editor) ? "盤查編輯者"
         : User.IsInRole(SystemRoles.Viewer) ? "檢視者"
         : "一般使用者";
+    var accountName = string.IsNullOrWhiteSpace(User.Identity?.Name) ? "使用者" : User.Identity.Name;
+    var accountInitial = accountName![0].ToString().ToUpperInvariant();
 
     <div class="account-chip" title="目前登入角色">
-        <span class="account-chip__avatar" aria-hidden="true">@((User.Identity?.Name ?? "U")[0].ToString().ToUpperInvariant())</span>
+        <span class="account-chip__avatar" aria-hidden="true">@accountInitial</span>
         <span class="account-chip__text">
-            <strong>@User.Identity?.Name</strong>
+            <strong>@accountName</strong>
             <small>@roleLabel</small>
         </span>
     </div>
