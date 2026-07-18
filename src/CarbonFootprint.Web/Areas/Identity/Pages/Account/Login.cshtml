@@ -80,7 +80,7 @@
 
                 <label class="remember-check">
                     <input asp-for="Input.RememberMe" />
-                    <span>在這台裝置保持登入</span>
+                    <span>在這台裝置保持登入 30 天</span>
                 </label>
 
                 <button type="submit" class="btn-carbon btn-carbon--wide">
@@ -91,10 +91,13 @@
 
             <div class="auth-note">
                 <span class="auth-note__icon" aria-hidden="true">i</span>
-                <p>此系統不要求 Email 認證或多因素驗證。帳號角色由系統管理者設定。</p>
+                <p>新帳號需先完成 Email 確認；密碼只需至少 6 個字元。</p>
             </div>
 
-            <a class="initial-account-link" asp-page="./Register">首次使用？建立初始管理者</a>
+            <div class="auth-account-links">
+                <a class="initial-account-link" asp-page="./Register">建立帳號</a>
+                <a class="initial-account-link" asp-page="./ResendEmailConfirmation">重寄確認信</a>
+            </div>
         </div>
     </div>
 </section>
