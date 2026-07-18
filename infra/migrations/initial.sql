@@ -692,3 +692,49 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718091534_AddInventoryReview') THEN
+    ALTER TABLE app.inventory_project_versions ADD review_comment character varying(2000);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718091534_AddInventoryReview') THEN
+    ALTER TABLE app.inventory_project_versions ADD reviewed_at timestamp with time zone;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718091534_AddInventoryReview') THEN
+    ALTER TABLE app.inventory_project_versions ADD reviewed_by uuid;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718091534_AddInventoryReview') THEN
+    ALTER TABLE app.inventory_project_versions ADD submitted_at timestamp with time zone;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718091534_AddInventoryReview') THEN
+    CREATE INDEX ix_inventory_project_versions_organization_id_workflow_status ON app.inventory_project_versions (organization_id, workflow_status);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718091534_AddInventoryReview') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260718091534_AddInventoryReview', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
+

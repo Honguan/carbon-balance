@@ -121,7 +121,9 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.FunctionalUnit).HasMaxLength(200);
             entity.Property(item => item.PcrVersion).HasMaxLength(200);
             entity.Property(item => item.WorkflowStatus).HasMaxLength(50);
+            entity.Property(item => item.ReviewComment).HasMaxLength(2000);
             entity.HasIndex(item => new { item.ProductVersionId, item.VersionNumber }).IsUnique();
+            entity.HasIndex(item => new { item.OrganizationId, item.WorkflowStatus });
             entity.HasIndex(item => item.PcrVersionId);
             entity.HasOne<ProductVersionRecord>().WithMany().HasForeignKey(item => item.ProductVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<PcrVersionRecord>().WithMany().HasForeignKey(item => item.PcrVersionId).OnDelete(DeleteBehavior.Restrict);

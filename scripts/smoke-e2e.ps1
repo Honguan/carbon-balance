@@ -78,6 +78,16 @@ function Post-Evidence([string]$ActivityDataId) {
         -Body $body.ToArray()
 }
 
+function Post-Report([string]$Handler, [string]$RunId) {
+    $page = Get-PageToken "$BaseUrl/Reports"
+    return Invoke-WebRequest -UseBasicParsing -WebSession $session -Method Post `
+        -Uri "$BaseUrl/Reports?handler=$Handler" `
+        -Body @{
+            runId = $RunId
+            __RequestVerificationToken = $page.Token
+        }
+}
+
 $register = Get-PageToken "$BaseUrl/Identity/Account/Register"
 Invoke-WebRequest -UseBasicParsing -WebSession $session -Method Post -Uri "$BaseUrl/Identity/Account/Register" -Body @{
     'Input.Email' = $email
@@ -208,6 +218,33 @@ if ($result.Content -notmatch '[0-9a-f]{64}') {
 $repeatResult = Post-Workspace 'Calculate' @{ inventoryProjectVersionId = $inventoryId }
 if ($repeatResult.Content -notmatch '<p>[^<]+0(?:\.0+)? kgCO2e</p>') {
     throw 'Golden E2E repeat run did not produce a zero product delta.'
+}
+
+Post-Workspace 'SubmitInventory' @{ inventoryProjectVersionId = $inventoryId } | Out-Null
+$reviewResult = Post-Workspace 'ReviewInventory' @{
+    inventoryProjectVersionId = $inventoryId
+    decision = 'Approved'
+    reviewComment = 'P0 smoke approval'
+}
+if ($reviewResult.Content -notmatch 'Approved') {
+    throw 'Golden E2E inventory was not approved.'
+}
+
+$reports = (Invoke-WebRequest -UseBasicParsing -WebSession $session "$BaseUrl/Reports").Content
+$runId = Get-HiddenValue $reports 'runId'
+$inventoryCsv = Post-Report 'InventoryCsv' $runId
+if ($inventoryCsv.Content -notmatch 'input_sha256' -or $inventoryCsv.Content -notmatch 'activity-times-factor-v1') {
+    throw 'Inventory CSV export is incomplete.'
+}
+
+$evidenceCsv = Post-Report 'EvidenceIndexCsv' $runId
+if ($evidenceCsv.Content -notmatch 'scan_status' -or $evidenceCsv.Content -notmatch 'Clean') {
+    throw 'Evidence index CSV export is incomplete.'
+}
+
+$manifest = Post-Report 'Manifest' $runId
+if ($manifest.Content -notmatch 'projectVersionId' -or $manifest.Content -notmatch 'evidenceSha256') {
+    throw 'Canonical manifest export is incomplete.'
 }
 
 Write-Output "E2E_SMOKE=PASS"

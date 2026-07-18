@@ -24,12 +24,15 @@ public sealed class WebSecurityTests : IClassFixture<WebSecurityTests.Factory>
         var health = await _client.GetAsync("/health/live");
         var manage = await _client.GetAsync("/Identity/Account/Manage");
         var workspace = await _client.GetAsync("/Workspace");
+        var reports = await _client.GetAsync("/Reports");
 
         Assert.Equal(HttpStatusCode.OK, health.StatusCode);
         Assert.Equal(HttpStatusCode.Redirect, manage.StatusCode);
         Assert.Equal("/Identity/Account/Login", manage.Headers.Location?.AbsolutePath);
         Assert.Equal(HttpStatusCode.Redirect, workspace.StatusCode);
         Assert.Equal("/Identity/Account/Login", workspace.Headers.Location?.AbsolutePath);
+        Assert.Equal(HttpStatusCode.Redirect, reports.StatusCode);
+        Assert.Equal("/Identity/Account/Login", reports.Headers.Location?.AbsolutePath);
     }
 
     [Fact]

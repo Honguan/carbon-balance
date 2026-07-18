@@ -124,6 +124,32 @@ else
                         </select>
                         <button class="btn btn-primary mt-3" type="submit">建立盤查第 1 版</button>
                     </form>
+                    <ul class="mt-3">
+                        @foreach (var inventory in Model.InventoryProjects)
+                        {
+                            var workflowStatus = Enum.Parse<InventoryWorkflowStatus>(inventory.WorkflowStatus);
+                            <li class="mb-3">
+                                @inventory.FunctionalUnit／@inventory.PcrVersion／@workflowStatus
+                                @if (InventoryWorkflow.AllowsEditing(workflowStatus))
+                                {
+                                    <form class="d-inline" method="post" asp-page-handler="SubmitInventory">
+                                        <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
+                                        <button class="btn btn-sm btn-warning" type="submit">送審</button>
+                                    </form>
+                                }
+                                else if (workflowStatus == InventoryWorkflowStatus.Submitted)
+                                {
+                                    <form class="mt-1" method="post" asp-page-handler="ReviewInventory">
+                                        <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
+                                        <label class="form-label" for="review-comment-@inventory.Id">審查意見</label>
+                                        <input class="form-control" id="review-comment-@inventory.Id" name="reviewComment" maxlength="2000" />
+                                        <button class="btn btn-sm btn-success mt-1" name="decision" value="Approved" type="submit">核准</button>
+                                        <button class="btn btn-sm btn-outline-warning mt-1" name="decision" value="ChangesRequested" type="submit">要求補正</button>
+                                    </form>
+                                }
+                            </li>
+                        }
+                    </ul>
                 </div>
             </section>
         </div>

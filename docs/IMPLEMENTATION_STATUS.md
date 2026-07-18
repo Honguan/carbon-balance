@@ -17,16 +17,16 @@
 | 3 | Units／Factors／PCR 治理 | in-progress | 單位種子；係數與 PCR 草稿、發布、撤回、有效期防護；盤查綁定 PCR 主鍵 | 匯入 staging、差異與 supersede 待完成 |
 | 4 | 五階段生命週期資料與 Evidence | in-progress | 五階段資料已可輸入；Evidence 經 ClamAV Clean 後寫入 MinIO，保存 SHA-256 並綁定活動 | 分配、排除與情境專用欄位待完成 |
 | 5 | 完整不可變計算引擎 | in-progress | decimal 五階段 line／summary／total、canonical manifest、hash、warning、supersede lineage、run diff | 分配公式與排除／假設摘要待完成 |
-| 6 | 審核、報告、匯出與查驗準備 | pending | — | — |
+| 6 | 審核、報告、匯出與查驗準備 | in-progress | Draft／Submitted／ChangesRequested／Approved 狀態機；清冊、Evidence 索引與 manifest 匯出均留 audit | 完整報告版型、查驗聲明與核定 metadata 待完成 |
 | 7 | Legacy staging 與遷移工具 | pending | — | — |
 | 8 | 安全、營運、CI 與 P0 RC | pending | — | — |
 
 ## 最近驗證
 
 - `dotnet build --configuration Release --no-restore`：成功，0 warning／0 error。
-- `dotnet test --configuration Release --no-build`：27 項通過（Unit 17、Golden 2、Architecture 2、Contract 1、Integration 3、Security 2）。
+- `dotnet test --configuration Release --no-restore`：37 項通過（Unit 27、Golden 2、Architecture 2、Contract 1、Integration 3、Security 2）。
 - `docker compose config --quiet`：成功。
 - `docker compose up -d --build`：PostgreSQL 18.4、MinIO、Mailpit、Web healthy。
-- migration：五版 migration 可由空庫順序套用；既有資料庫升級成功，共 22 張 app／identity 表。
+- migration：六版 migration 可由空庫順序套用；既有資料庫升級成功，共 22 張 app／identity 表。
 - Smoke：`/`、`/health/live`、`/health/ready` 均為 HTTP 200。
-- E2E Smoke：註冊信、確認、登入、建檔、PCR／係數發布、ClamAV／MinIO Evidence、連續兩次五階段計算通過；總量 7 kgCO2e、hash 相同、supersede lineage 正確且 diff 為 0。
+- E2E Smoke：完整建檔、Evidence、重算、送審、核准與三種 audit export 通過；總量 7 kgCO2e、hash 相同、supersede lineage 正確且 diff 為 0。

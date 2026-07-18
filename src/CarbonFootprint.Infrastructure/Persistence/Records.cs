@@ -54,6 +54,10 @@ public sealed class InventoryProjectVersionRecord : IOrganizationOwned
     public required string PcrVersion { get; set; }
     public required string WorkflowStatus { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? SubmittedAt { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
+    public Guid? ReviewedBy { get; set; }
+    public string? ReviewComment { get; set; }
 }
 
 public sealed class PcrVersionRecord : IOrganizationOwned

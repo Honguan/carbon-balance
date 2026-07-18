@@ -1,0 +1,48 @@
+@page
+@model CarbonFootprint.Web.Pages.ReportsModel
+@{
+    ViewData["Title"] = "稽核匯出";
+}
+
+<h1>稽核匯出</h1>
+<p>所有匯出都以不可變 CalculationRun 為基準，並寫入 audit event。</p>
+
+@if (Model.Runs.Count == 0)
+{
+    <p>目前沒有可匯出的 CalculationRun。</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr><th>Run</th><th>建立時間</th><th>總量</th><th>Input SHA-256</th><th>匯出</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var run in Model.Runs)
+                {
+                    <tr>
+                        <td><code>@run.Id</code></td>
+                        <td>@run.CreatedAt</td>
+                        <td>@run.ProductTotal kgCO2e</td>
+                        <td><code>@run.InputSha256</code></td>
+                        <td>
+                            <form class="d-inline" method="post" asp-page-handler="InventoryCsv">
+                                <input type="hidden" name="runId" value="@run.Id" />
+                                <button class="btn btn-sm btn-primary" type="submit">盤查清冊 CSV</button>
+                            </form>
+                            <form class="d-inline" method="post" asp-page-handler="EvidenceIndexCsv">
+                                <input type="hidden" name="runId" value="@run.Id" />
+                                <button class="btn btn-sm btn-outline-primary" type="submit">Evidence 索引 CSV</button>
+                            </form>
+                            <form class="d-inline" method="post" asp-page-handler="Manifest">
+                                <input type="hidden" name="runId" value="@run.Id" />
+                                <button class="btn btn-sm btn-outline-secondary" type="submit">Canonical manifest</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

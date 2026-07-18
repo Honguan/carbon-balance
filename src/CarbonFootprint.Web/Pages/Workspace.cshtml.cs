@@ -191,7 +191,7 @@ public sealed class WorkspaceModel : PageModel
             FunctionalUnit = functionalUnit.Trim(),
             PcrVersionId = pcr.Id,
             PcrVersion = $"{pcr.RegistrationNumber}-v{pcr.VersionNumber}",
-            WorkflowStatus = "Draft",
+            WorkflowStatus = InventoryWorkflowStatus.Draft.ToString(),
             CreatedAt = DateTimeOffset.UtcNow
         });
         AddAudit("inventory.version.created", "InventoryProjectVersion", projectId);
@@ -441,6 +441,13 @@ public sealed class WorkspaceModel : PageModel
             return NotFound();
         }
 
+        if (!InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus)))
+        {
+            ModelState.AddModelError("activity", "盤查已送審或核准，不可再新增活動資料。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
         var factorVersion = new EmissionFactorVersion(
             factor.Id,
             factor.FactorId,
@@ -539,6 +546,16 @@ public sealed class WorkspaceModel : PageModel
             return NotFound();
         }
 
+        var evidenceProject = await _dbContext.InventoryProjectVersions.SingleAsync(
+            item => item.Id == activity.InventoryProjectVersionId,
+            cancellationToken);
+        if (!InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(evidenceProject.WorkflowStatus)))
+        {
+            ModelState.AddModelError("evidence", "盤查已送審或核准，不可再變更 Evidence。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
         if (evidenceFile is null || evidenceFile.Length <= 0)
         {
             ModelState.AddModelError("evidence", "請選擇非空白 Evidence 檔案。");
@@ -589,6 +606,109 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
+    public async Task<IActionResult> OnPostSubmitInventoryAsync(Guid inventoryProjectVersionId, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
+        {
+            return Forbid();
+        }
+
+        var project = await _dbContext.InventoryProjectVersions.SingleOrDefaultAsync(
+            item => item.Id == inventoryProjectVersionId,
+            cancellationToken);
+        if (project is null)
+        {
+            return NotFound();
+        }
+
+        if (!await _dbContext.CalculationRuns.AnyAsync(item => item.ProjectVersionId == project.Id, cancellationToken))
+        {
+            ModelState.AddModelError("review", "盤查至少需要一個不可變計算 Run 才能送審。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var current = Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus);
+        try
+        {
+            InventoryWorkflow.EnsureTransition(current, InventoryWorkflowStatus.Submitted);
+        }
+        catch (InvalidOperationException exception)
+        {
+            ModelState.AddModelError("review", exception.Message);
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        project.WorkflowStatus = InventoryWorkflowStatus.Submitted.ToString();
+        project.SubmittedAt = DateTimeOffset.UtcNow;
+        AddAudit("inventory.submitted", "InventoryProjectVersion", project.Id);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        StatusMessage = "盤查版本已送審。";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostReviewInventoryAsync(
+        Guid inventoryProjectVersionId,
+        InventoryWorkflowStatus decision,
+        string? reviewComment,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ReviewInventory))
+        {
+            return Forbid();
+        }
+
+        if (!Guid.TryParse(_userManager.GetUserId(User), out var reviewerId))
+        {
+            return Forbid();
+        }
+
+        if (decision is not InventoryWorkflowStatus.Approved and not InventoryWorkflowStatus.ChangesRequested)
+        {
+            return BadRequest();
+        }
+
+        if (decision == InventoryWorkflowStatus.ChangesRequested && string.IsNullOrWhiteSpace(reviewComment))
+        {
+            ModelState.AddModelError("review", "要求補正時必須提供審查意見。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var project = await _dbContext.InventoryProjectVersions.SingleOrDefaultAsync(
+            item => item.Id == inventoryProjectVersionId,
+            cancellationToken);
+        if (project is null)
+        {
+            return NotFound();
+        }
+
+        var current = Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus);
+        try
+        {
+            InventoryWorkflow.EnsureTransition(current, decision);
+        }
+        catch (InvalidOperationException exception)
+        {
+            ModelState.AddModelError("review", exception.Message);
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        project.WorkflowStatus = decision.ToString();
+        project.ReviewedAt = DateTimeOffset.UtcNow;
+        project.ReviewedBy = reviewerId;
+        project.ReviewComment = reviewComment?.Trim();
+        AddAudit(
+            decision == InventoryWorkflowStatus.Approved ? "inventory.approved" : "inventory.changes-requested",
+            "InventoryProjectVersion",
+            project.Id);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        StatusMessage = decision == InventoryWorkflowStatus.Approved ? "盤查版本已核准。" : "盤查版本已退回補正。";
+        return RedirectToPage();
+    }
+
     public async Task<IActionResult> OnPostCalculateAsync(Guid inventoryProjectVersionId, CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.CreateCalculationRun))
@@ -603,6 +723,13 @@ public sealed class WorkspaceModel : PageModel
         if (project is null)
         {
             return NotFound();
+        }
+
+        if (!InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus)))
+        {
+            ModelState.AddModelError("calculation", "盤查已送審或核准，不可建立新計算 Run。");
+            await LoadAsync(cancellationToken);
+            return Page();
         }
 
         if (!project.PcrVersionId.HasValue)
