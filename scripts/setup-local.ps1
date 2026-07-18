@@ -24,17 +24,17 @@ function ConvertTo-PlainText([Security.SecureString]$SecureString) {
 
 function Assert-LocalPassword([string]$Password, [string]$Name) {
     if ($Password -notmatch '^[A-Za-z0-9._-]{16,128}$') {
-        throw "$Name 必須為 16～128 字元，且只能包含英文字母、數字、句點、底線或連字號。"
+        throw "$Name must be 16-128 characters and contain only letters, numbers, dots, underscores, or hyphens."
     }
 }
 
 function Read-LocalPassword([string]$Label) {
     while ($true) {
-        $first = ConvertTo-PlainText (Read-Host "$Label（輸入時不會顯示）" -AsSecureString)
-        $second = ConvertTo-PlainText (Read-Host "再次輸入 $Label" -AsSecureString)
+        $first = ConvertTo-PlainText (Read-Host "$Label (input is hidden)" -AsSecureString)
+        $second = ConvertTo-PlainText (Read-Host "Enter $Label again" -AsSecureString)
 
         if ($first -ne $second) {
-            Write-Warning '兩次輸入不一致，請重新輸入。'
+            Write-Warning 'The two values do not match. Try again.'
             continue
         }
 
@@ -54,7 +54,7 @@ function New-LocalPassword {
 }
 
 function Get-EnvValue([string]$Name) {
-    if (-not (Test-Path $envPath)) {
+    if (-not (Test-Path -LiteralPath $envPath)) {
         return $null
     }
 
@@ -73,43 +73,43 @@ function Get-EnvValue([string]$Name) {
 function Invoke-Compose([string[]]$Arguments) {
     & docker compose @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "docker compose $($Arguments -join ' ') 執行失敗，結束碼：$LASTEXITCODE"
+        throw "docker compose $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
     }
 }
 
 if ($NoStart -and $ResetData) {
-    throw '-NoStart 與 -ResetData 不可同時使用。'
+    throw '-NoStart and -ResetData cannot be used together.'
 }
 
 Push-Location $repositoryRoot
 try {
     & docker info *> $null
     if ($LASTEXITCODE -ne 0) {
-        throw 'Docker 尚未啟動，請先開啟 Docker Desktop 或 Docker Engine。'
+        throw 'Docker is not running. Start Docker Desktop or Docker Engine first.'
     }
 
     & docker compose version *> $null
     if ($LASTEXITCODE -ne 0) {
-        throw '找不到 Docker Compose，請確認 docker compose 可正常執行。'
+        throw 'Docker Compose was not found. Confirm that docker compose works.'
     }
 
     & docker volume inspect $postgresVolumeName *> $null
     $hasExistingPostgresVolume = $LASTEXITCODE -eq 0
 
     $createdEnv = $false
-    if (-not (Test-Path $envPath)) {
+    if (-not (Test-Path -LiteralPath $envPath)) {
         if ($hasExistingPostgresVolume -and -not $ResetData) {
             throw @"
-偵測到既有 PostgreSQL 資料 Volume，但找不到 .env。
-自動產生新密碼將無法登入舊資料庫。
-請還原原本的 .env；若舊資料可刪除，請改執行：
+An existing PostgreSQL data volume was found, but .env is missing.
+Generating a new password would not unlock the existing database.
+Restore the original .env, or delete disposable local data with:
   .\scripts\setup-local.ps1 -ResetData
 "@
         }
 
         if ($Manual) {
-            $postgresPassword = Read-LocalPassword 'PostgreSQL 密碼'
-            $minioPassword = Read-LocalPassword 'MinIO 密碼'
+            $postgresPassword = Read-LocalPassword 'PostgreSQL password'
+            $minioPassword = Read-LocalPassword 'MinIO password'
         }
         else {
             $postgresPassword = New-LocalPassword
@@ -117,7 +117,7 @@ try {
         }
 
         if ($postgresPassword -eq $minioPassword) {
-            throw 'PostgreSQL 與 MinIO 必須使用不同密碼。'
+            throw 'PostgreSQL and MinIO must use different passwords.'
         }
 
         $content = @"
@@ -140,42 +140,45 @@ MAIL__PORT=1025
         $createdEnv = $true
 
         Write-Host ''
-        Write-Host '已建立 .env，本機密碼如下：' -ForegroundColor Green
-        Write-Host '  PostgreSQL 帳號：carbon_app'
-        Write-Host "  PostgreSQL 密碼：$postgresPassword"
-        Write-Host '  MinIO 帳號：carbon_minio'
-        Write-Host "  MinIO 密碼：$minioPassword"
-        Write-Host "  設定檔位置：$envPath"
-        Write-Warning '請妥善保存 .env，不要上傳 GitHub、貼到聊天或傳給其他人。'
+        Write-Host 'Created .env with these local credentials:' -ForegroundColor Green
+        Write-Host '  PostgreSQL user: carbon_app'
+        Write-Host "  PostgreSQL password: $postgresPassword"
+        Write-Host '  MinIO user: carbon_minio'
+        Write-Host "  MinIO password: $minioPassword"
+        Write-Host "  Settings file: $envPath"
+        Write-Warning 'Keep .env private. Do not commit it, paste it into chat, or share it.'
     }
     else {
-        Write-Host "已找到既有 .env，將沿用原本設定，不會覆寫密碼：$envPath" -ForegroundColor Cyan
+        Write-Host "Found existing .env. Existing passwords will be preserved: $envPath" -ForegroundColor Cyan
     }
 
     $postgresPassword = Get-EnvValue 'POSTGRES_PASSWORD'
     $minioPassword = Get-EnvValue 'MINIO_ROOT_PASSWORD'
 
     if ([string]::IsNullOrWhiteSpace($postgresPassword) -or
-        $postgresPassword -match 'change-this|replace-with|請替換') {
-        throw 'POSTGRES_PASSWORD 尚未設定。請編輯 .env，或刪除未使用的 .env 後重新執行本腳本。'
+        $postgresPassword -match 'change-this|replace-with') {
+        throw 'POSTGRES_PASSWORD is not configured. Edit .env, or remove an unused .env and rerun this script.'
     }
 
     if ([string]::IsNullOrWhiteSpace($minioPassword) -or
-        $minioPassword -match 'change-this|replace-with|請替換') {
-        throw 'MINIO_ROOT_PASSWORD 尚未設定。請編輯 .env，或刪除未使用的 .env 後重新執行本腳本。'
+        $minioPassword -match 'change-this|replace-with') {
+        throw 'MINIO_ROOT_PASSWORD is not configured. Edit .env, or remove an unused .env and rerun this script.'
     }
 
+    Assert-LocalPassword -Password $postgresPassword -Name 'POSTGRES_PASSWORD'
+    Assert-LocalPassword -Password $minioPassword -Name 'MINIO_ROOT_PASSWORD'
+
     if ($postgresPassword -eq $minioPassword) {
-        throw 'POSTGRES_PASSWORD 與 MINIO_ROOT_PASSWORD 不可相同。'
+        throw 'POSTGRES_PASSWORD and MINIO_ROOT_PASSWORD must be different.'
     }
 
     if ($NoStart) {
-        Write-Host '設定完成；因指定 -NoStart，尚未啟動 Docker 服務。' -ForegroundColor Yellow
+        Write-Host 'Configuration is ready. Docker services were not started because -NoStart was specified.' -ForegroundColor Yellow
         return
     }
 
     if ($ResetData) {
-        Write-Warning '即將刪除本專案所有 Docker 容器與 Volume 資料。'
+        Write-Warning 'Deleting this project Docker containers and volume data.'
         Invoke-Compose -Arguments @('down', '-v', '--remove-orphans')
     }
 
@@ -184,16 +187,16 @@ MAIL__PORT=1025
     Invoke-Compose -Arguments @('ps', '-a')
 
     Write-Host ''
-    Write-Host '啟動指令已完成。ClamAV 第一次初始化可能需要較長時間。' -ForegroundColor Green
-    Write-Host '  系統：http://127.0.0.1:8088'
-    Write-Host '  Mailpit：http://127.0.0.1:8025'
-    Write-Host '  MinIO：http://127.0.0.1:9001'
-    Write-Host '  狀態：docker compose ps -a'
-    Write-Host '  記錄：docker compose logs --tail=200'
-    Write-Host 'migrate 顯示 Exited (0) 代表資料庫更新成功，屬於正常狀態。'
+    Write-Host 'Startup command completed. ClamAV can take longer on the first run.' -ForegroundColor Green
+    Write-Host '  Application: http://127.0.0.1:8088'
+    Write-Host '  Mailpit:     http://127.0.0.1:8025'
+    Write-Host '  MinIO:       http://127.0.0.1:9001'
+    Write-Host '  Status:      docker compose ps -a'
+    Write-Host '  Logs:        docker compose logs --tail=200'
+    Write-Host 'migrate showing Exited (0) means the database migration completed successfully.'
 
     if (-not $createdEnv) {
-        Write-Host '既有密碼可在本機 .env 中查看。'
+        Write-Host 'Existing passwords remain available in the local .env file.'
     }
 }
 finally {
