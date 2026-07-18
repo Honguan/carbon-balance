@@ -93,8 +93,11 @@ try {
         throw 'Docker Compose was not found. Confirm that docker compose works.'
     }
 
-    & docker volume inspect $postgresVolumeName *> $null
-    $hasExistingPostgresVolume = $LASTEXITCODE -eq 0
+    $dockerVolumes = @(& docker volume ls --quiet)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Unable to list Docker volumes.'
+    }
+    $hasExistingPostgresVolume = $dockerVolumes -contains $postgresVolumeName
 
     $createdEnv = $false
     if (-not (Test-Path -LiteralPath $envPath)) {
