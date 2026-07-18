@@ -1,10 +1,12 @@
 using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Domain.Modules.Factors;
 using CarbonFootprint.Domain.Modules.Inventories;
+using CarbonFootprint.Domain.Modules.Organizations;
 using CarbonFootprint.Domain.Modules.Units;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Organizations;
 using CarbonFootprint.Infrastructure.Persistence;
+using CarbonFootprint.Web.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -22,6 +24,7 @@ public sealed class WorkspaceModel : PageModel
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly CalculateInventoryHandler _calculateHandler;
+    private readonly IAuthorizationService _authorizationService;
 
     public WorkspaceModel(
         CarbonFootprintDbContext dbContext,
@@ -29,7 +32,8 @@ public sealed class WorkspaceModel : PageModel
         OrganizationOnboardingService onboardingService,
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        CalculateInventoryHandler calculateHandler)
+        CalculateInventoryHandler calculateHandler,
+        IAuthorizationService authorizationService)
     {
         _dbContext = dbContext;
         _organizationScope = organizationScope;
@@ -37,6 +41,7 @@ public sealed class WorkspaceModel : PageModel
         _userManager = userManager;
         _signInManager = signInManager;
         _calculateHandler = calculateHandler;
+        _authorizationService = authorizationService;
     }
 
     public Guid? OrganizationId => _organizationScope.OrganizationId;
@@ -81,6 +86,11 @@ public sealed class WorkspaceModel : PageModel
 
     public async Task<IActionResult> OnPostCreateProductAsync(string productName, CancellationToken cancellationToken)
     {
+        if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
+        {
+            return Forbid();
+        }
+
         var organizationId = RequireOrganization();
         if (string.IsNullOrWhiteSpace(productName))
         {
@@ -121,6 +131,11 @@ public sealed class WorkspaceModel : PageModel
         string pcrVersion,
         CancellationToken cancellationToken)
     {
+        if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
+        {
+            return Forbid();
+        }
+
         var organizationId = RequireOrganization();
         if (periodStart > periodEnd || string.IsNullOrWhiteSpace(functionalUnit) || string.IsNullOrWhiteSpace(pcrVersion))
         {
@@ -162,6 +177,11 @@ public sealed class WorkspaceModel : PageModel
         string licenseCode,
         CancellationToken cancellationToken)
     {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
+        {
+            return Forbid();
+        }
+
         var organizationId = RequireOrganization();
         if (string.IsNullOrWhiteSpace(factorName)
             || factorValue is null or < 0m
@@ -214,6 +234,11 @@ public sealed class WorkspaceModel : PageModel
         Guid factorVersionId,
         CancellationToken cancellationToken)
     {
+        if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
+        {
+            return Forbid();
+        }
+
         var organizationId = RequireOrganization();
         var project = await _dbContext.InventoryProjectVersions.SingleOrDefaultAsync(
             item => item.Id == inventoryProjectVersionId,
@@ -287,6 +312,11 @@ public sealed class WorkspaceModel : PageModel
 
     public async Task<IActionResult> OnPostCalculateAsync(Guid inventoryProjectVersionId, CancellationToken cancellationToken)
     {
+        if (!await IsAllowedAsync(OrganizationPermission.CreateCalculationRun))
+        {
+            return Forbid();
+        }
+
         var organizationId = RequireOrganization();
         var project = await _dbContext.InventoryProjectVersions.SingleOrDefaultAsync(
             item => item.Id == inventoryProjectVersionId,
@@ -394,6 +424,15 @@ public sealed class WorkspaceModel : PageModel
 
     private Guid RequireOrganization() => OrganizationId
         ?? throw new InvalidOperationException("請先建立組織。");
+
+    private async Task<bool> IsAllowedAsync(OrganizationPermission permission)
+    {
+        var result = await _authorizationService.AuthorizeAsync(
+            User,
+            resource: null,
+            new OrganizationPermissionRequirement(permission));
+        return result.Succeeded;
+    }
 
     private void AddAudit(string action, string resourceType, Guid resourceId)
     {

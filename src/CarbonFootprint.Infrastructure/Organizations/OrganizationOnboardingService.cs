@@ -1,5 +1,6 @@
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Persistence;
+using CarbonFootprint.Domain.Modules.Organizations;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,7 +42,7 @@ public sealed class OrganizationOnboardingService
                 Id = Guid.NewGuid(),
                 OrganizationId = organizationId,
                 UserId = user.Id,
-                Role = "Owner",
+                Role = OrganizationRole.Owner.ToString(),
                 CreatedAt = DateTimeOffset.UtcNow
             });
             dbContext.AuditEvents.Add(new AuditEventRecord
