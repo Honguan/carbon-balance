@@ -64,6 +64,21 @@ jobs:
         run: dotnet restore --locked-mode -p:NuGetAudit=true -p:NuGetAuditMode=all -p:TreatWarningsAsErrors=true
       - name: Validate Bash setup script
         run: bash -n scripts/setup-local.sh
+      - name: Validate Windows PowerShell 5.1 encoding safety
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/setup-local.ps1')
+          data = path.read_bytes()
+          non_ascii = [(index + 1, value) for index, value in enumerate(data) if value > 0x7F]
+          if non_ascii:
+              first_offset, first_value = non_ascii[0]
+              raise SystemExit(
+                  f'{path} must remain ASCII-only for Windows PowerShell 5.1; '
+                  f'first non-ASCII byte is 0x{first_value:02X} at offset {first_offset}.'
+              )
+          PY
       - name: Validate PowerShell setup script
         shell: pwsh
         run: |
