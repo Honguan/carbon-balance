@@ -25,8 +25,7 @@
                 <div class="status-message" role="status">@Model.StatusMessage</div>
             }
 
-            <form method="post" class="auth-form" novalidate>
-                @Html.AntiForgeryToken()
+            <form method="post" asp-antiforgery="true" class="auth-form" novalidate>
                 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
                 <div class="field-group">
                     <label asp-for="Input.Email"></label>
