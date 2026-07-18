@@ -147,6 +147,89 @@ jobs:
           }
           Remove-Item -LiteralPath '.env' -Force
 
+  auth-browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_DB: carbon_auth_e2e
+          POSTGRES_USER: carbon_e2e
+          POSTGRES_PASSWORD: auth-e2e-postgres-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U carbon_e2e -d carbon_auth_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mailpit:
+        image: axllent/mailpit:v1.30
+        ports:
+          - 1025:1025
+          - 8025:8025
+    env:
+      E2E_DATABASE: Host=127.0.0.1;Port=5432;Database=carbon_auth_e2e;Username=carbon_e2e;Password=auth-e2e-postgres-password;SSL Mode=Disable;GSS Encryption Mode=Disable
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build browser-test image
+        run: docker build --tag carbon-footprint-auth-e2e:${{ github.sha }} --file src/CarbonFootprint.Web/Dockerfile .
+      - name: Apply migrations
+        run: |
+          docker run --rm --network host \
+            --env ASPNETCORE_ENVIRONMENT=Development \
+            --env "ConnectionStrings__Database=${E2E_DATABASE}" \
+            carbon-footprint-auth-e2e:${{ github.sha }} --migrate
+      - name: Start web application
+        run: |
+          docker run --detach \
+            --name carbon-auth-e2e \
+            --network host \
+            --env ASPNETCORE_ENVIRONMENT=Development \
+            --env ASPNETCORE_URLS=http://0.0.0.0:18088 \
+            --env "ConnectionStrings__Database=${E2E_DATABASE}" \
+            --env MAIL__HOST=127.0.0.1 \
+            --env MAIL__PORT=1025 \
+            --env DataProtection__KeyPath=/tmp/data-protection-keys \
+            carbon-footprint-auth-e2e:${{ github.sha }}
+
+          for attempt in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:18088/health/ready >/dev/null; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 40 ]; then
+              docker logs carbon-auth-e2e
+              exit 1
+            fi
+            sleep 2
+          done
+      - name: Run Chromium authentication flow
+        run: |
+          mkdir -p tests/E2E/artifacts
+          docker run --rm \
+            --network host \
+            --volume "$PWD/tests/E2E:/work" \
+            --workdir /work \
+            --env CARBON_E2E_BASE_URL=http://127.0.0.1:18088 \
+            --env CARBON_E2E_MAILPIT_URL=http://127.0.0.1:8025 \
+            --env CARBON_E2E_ARTIFACTS=/work/artifacts \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-save --no-package-lock playwright@1.55.0 >/tmp/playwright-npm.log && node auth-flow.mjs'
+      - name: Show application logs
+        if: always()
+        run: docker logs carbon-auth-e2e || true
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: auth-browser-e2e
+          path: tests/E2E/artifacts
+          if-no-files-found: warn
+      - name: Stop browser-test application
+        if: always()
+        run: docker rm --force carbon-auth-e2e >/dev/null 2>&1 || true
+
   secret-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -199,6 +282,9 @@ jobs:
             --output /tmp/resend.html \
             http://127.0.0.1:18088/Identity/Account/ResendEmailConfirmation
           curl --fail --silent --show-error \
+            --output /tmp/confirm.html \
+            http://127.0.0.1:18088/Identity/Account/ConfirmEmail
+          curl --fail --silent --show-error \
             --output /tmp/home.html \
             http://127.0.0.1:18088/
 
@@ -209,6 +295,9 @@ jobs:
           grep --quiet '建立帳號' /tmp/login.html
           grep --quiet '重寄確認信' /tmp/login.html
           grep --quiet '重寄確認信' /tmp/resend.html
+          grep --quiet '返回上一頁' /tmp/resend.html
+          grep --quiet '無法確認 Email' /tmp/confirm.html
+          grep --quiet '確認連結不完整' /tmp/confirm.html
           grep --quiet '把產品碳排放' /tmp/home.html
           grep --quiet '廢棄與回收' /tmp/home.html
 
@@ -221,13 +310,15 @@ jobs:
           confirm_status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18088/Identity/Account/ConfirmEmail)"
           test "$forgot_status" = '302'
           test "$mfa_status" = '302'
-          test "$confirm_status" = '400'
+          test "$confirm_status" = '200'
 
           bootstrap_href="$(grep -oE 'href="/lib/bootstrap/dist/css/bootstrap\.min(\.[A-Za-z0-9]+)?\.css"' /tmp/login.html | head -n 1 | cut -d '"' -f 2)"
           site_href="$(grep -oE 'href="/css/site(\.[A-Za-z0-9]+)?\.css"' /tmp/login.html | head -n 1 | cut -d '"' -f 2)"
+          auth_fixes_href="$(grep -oE 'href="/css/auth-fixes(\.[A-Za-z0-9]+)?\.css"' /tmp/login.html | head -n 1 | cut -d '"' -f 2)"
 
           test -n "$bootstrap_href"
           test -n "$site_href"
+          test -n "$auth_fixes_href"
 
           curl --fail --silent --show-error \
             --output /tmp/bootstrap.css \
@@ -235,11 +326,16 @@ jobs:
           curl --fail --silent --show-error \
             --output /tmp/site.css \
             "http://127.0.0.1:18088${site_href}"
+          curl --fail --silent --show-error \
+            --output /tmp/auth-fixes.css \
+            "http://127.0.0.1:18088${auth_fixes_href}"
 
           test -s /tmp/bootstrap.css
           test -s /tmp/site.css
+          test -s /tmp/auth-fixes.css
           grep --quiet -- '--carbon-950' /tmp/site.css
           grep --quiet '.auth-shell' /tmp/site.css
+          grep --quiet 'pointer-events: auto' /tmp/auth-fixes.css
       - name: Scan filesystem for Critical and High vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
