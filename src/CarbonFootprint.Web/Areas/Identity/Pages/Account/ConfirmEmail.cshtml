@@ -20,16 +20,18 @@
             {
                 <span class="eyebrow">確認完成</span>
                 <h2 id="confirm-title">Email 已確認</h2>
-                <p class="auth-card__intro">帳號已啟用，現在可以登入碳足跡系統。</p>
-                <a class="btn-carbon btn-carbon--wide" asp-page="./Login">前往登入 <span aria-hidden="true">→</span></a>
+                <p class="auth-card__intro">@Model.Message</p>
+                <a class="btn-carbon btn-carbon--wide" href="/Identity/Account/Login">前往登入 <span aria-hidden="true">→</span></a>
             }
             else
             {
                 <span class="eyebrow">確認失敗</span>
-                <h2 id="confirm-title">確認連結無效</h2>
-                <p class="auth-card__intro">連結可能已使用、過期或不完整，請重新寄送確認信。</p>
-                <a class="btn-carbon btn-carbon--wide" asp-page="./ResendEmailConfirmation">重新寄送確認信 <span aria-hidden="true">→</span></a>
+                <h2 id="confirm-title">無法確認 Email</h2>
+                <p class="auth-card__intro">@Model.Message</p>
+                <a class="btn-carbon btn-carbon--wide" href="/Identity/Account/ResendEmailConfirmation">重新寄送確認信 <span aria-hidden="true">→</span></a>
             }
+
+            <a class="auth-back" href="/Identity/Account/Login" data-history-back>← 返回上一頁</a>
         </div>
     </div>
 </section>
