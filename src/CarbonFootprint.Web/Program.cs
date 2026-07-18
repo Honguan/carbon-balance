@@ -128,8 +128,6 @@ var disabledIdentityPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase
     "/Identity/Account/ForgotPasswordConfirmation",
     "/Identity/Account/ResetPassword",
     "/Identity/Account/ResetPasswordConfirmation",
-    "/Identity/Account/ResendEmailConfirmation",
-    "/Identity/Account/ConfirmEmail",
     "/Identity/Account/ConfirmEmailChange",
     "/Identity/Account/ExternalLogin",
     "/Identity/Account/LoginWith2fa",

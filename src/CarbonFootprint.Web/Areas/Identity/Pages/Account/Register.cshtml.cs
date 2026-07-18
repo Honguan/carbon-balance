@@ -1,49 +1,44 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text;
 using CarbonFootprint.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace CarbonFootprint.Web.Areas.Identity.Pages.Account;
 
 public sealed class RegisterModel : PageModel
 {
-    private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole<Guid>> _roleManager;
+    private readonly IEmailSender<ApplicationUser> _emailSender;
 
     public RegisterModel(
-        SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole<Guid>> roleManager)
+        RoleManager<IdentityRole<Guid>> roleManager,
+        IEmailSender<ApplicationUser> emailSender)
     {
-        _signInManager = signInManager;
         _userManager = userManager;
         _roleManager = roleManager;
+        _emailSender = emailSender;
     }
 
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
-    public async Task<IActionResult> OnGetAsync()
-    {
-        if (await _userManager.Users.AnyAsync())
-        {
-            TempData["AccountMessage"] = "系統已完成初始化，請使用既有帳號登入。";
-            return RedirectToPage("./Login");
-        }
+    public bool CreatesAdministrator { get; private set; }
 
-        return Page();
+    public async Task OnGetAsync()
+    {
+        await EnsureRolesAsync();
+        CreatesAdministrator = !await HasAdministratorAsync();
     }
 
     public async Task<IActionResult> OnPostAsync()
     {
-        if (await _userManager.Users.AnyAsync())
-        {
-            TempData["AccountMessage"] = "系統已完成初始化，無法公開建立帳號。";
-            return RedirectToPage("./Login");
-        }
+        await EnsureRolesAsync();
+        CreatesAdministrator = !await HasAdministratorAsync();
 
         if (!ModelState.IsValid)
         {
@@ -55,7 +50,7 @@ public sealed class RegisterModel : PageModel
         {
             UserName = email,
             Email = email,
-            EmailConfirmed = true,
+            EmailConfirmed = false,
             DisplayName = Input.DisplayName.Trim()
         };
 
@@ -66,21 +61,8 @@ public sealed class RegisterModel : PageModel
             return Page();
         }
 
-        foreach (var roleName in SystemRoles.All)
-        {
-            if (!await _roleManager.RoleExistsAsync(roleName))
-            {
-                var roleResult = await _roleManager.CreateAsync(new IdentityRole<Guid>(roleName));
-                if (!roleResult.Succeeded)
-                {
-                    AddIdentityErrors(roleResult);
-                    await _userManager.DeleteAsync(user);
-                    return Page();
-                }
-            }
-        }
-
-        var roleAssignment = await _userManager.AddToRoleAsync(user, SystemRoles.Administrator);
+        var assignedRole = CreatesAdministrator ? SystemRoles.Administrator : SystemRoles.Viewer;
+        var roleAssignment = await _userManager.AddToRoleAsync(user, assignedRole);
         if (!roleAssignment.Succeeded)
         {
             AddIdentityErrors(roleAssignment);
@@ -88,8 +70,56 @@ public sealed class RegisterModel : PageModel
             return Page();
         }
 
-        await _signInManager.SignInAsync(user, isPersistent: false);
-        return RedirectToPage("/Workspace", new { area = string.Empty });
+        var confirmationCode = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+        confirmationCode = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(confirmationCode));
+        var confirmationLink = Url.Page(
+            "/Account/ConfirmEmail",
+            pageHandler: null,
+            values: new { area = "Identity", userId = user.Id, code = confirmationCode },
+            protocol: Request.Scheme);
+
+        if (string.IsNullOrWhiteSpace(confirmationLink))
+        {
+            TempData["AccountMessage"] = "帳號已建立，但無法產生確認連結。請使用重寄確認信功能。";
+            return RedirectToPage("./Login");
+        }
+
+        try
+        {
+            await _emailSender.SendConfirmationLinkAsync(user, email, confirmationLink);
+            TempData["AccountMessage"] = CreatesAdministrator
+                ? "初始管理者已建立。請先至信箱完成 Email 確認，再登入系統。"
+                : "帳號已建立。請先至信箱完成 Email 確認，再登入系統。";
+        }
+        catch
+        {
+            TempData["AccountMessage"] = "帳號已建立，但確認信寄送失敗。請使用重寄確認信功能。";
+        }
+
+        return RedirectToPage("./Login");
+    }
+
+    private async Task EnsureRolesAsync()
+    {
+        foreach (var roleName in SystemRoles.All)
+        {
+            if (await _roleManager.RoleExistsAsync(roleName))
+            {
+                continue;
+            }
+
+            var roleResult = await _roleManager.CreateAsync(new IdentityRole<Guid>(roleName));
+            if (!roleResult.Succeeded)
+            {
+                throw new InvalidOperationException(string.Join(", ", roleResult.Errors.Select(error => error.Description)));
+            }
+        }
+    }
+
+    private async Task<bool> HasAdministratorAsync()
+    {
+        var administrators = await _userManager.GetUsersInRoleAsync(SystemRoles.Administrator);
+        return administrators.Count > 0;
     }
 
     private void AddIdentityErrors(IdentityResult result)
