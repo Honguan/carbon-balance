@@ -2,7 +2,7 @@
 
 本專案是以 .NET 10、ASP.NET Core 與 PostgreSQL 18 建立的模組化單體，目標是提供可維護、可稽核、可重現的產品碳足跡盤查、計算與查驗準備流程。
 
-目前狀態：Phase 0、Phase 1 Golden Vertical Slice 已完成，Phase 2 建置中。實際完成範圍、驗證證據與阻塞項目請見 [實作狀態](docs/IMPLEMENTATION_STATUS.md)。
+目前狀態：Phase 0～8 的 P0 工程實作與自動驗證已完成，現為可供人工 UAT 的 Release Candidate。剩餘發布閘門、驗證證據與外部決策請見 [實作狀態](docs/IMPLEMENTATION_STATUS.md)、[P0 RC 檢核表](docs/release/P0_RC_CHECKLIST.md) 與 [待決事項](docs/DECISIONS_NEEDED.md)。
 
 ## 開發前置需求
 
@@ -56,9 +56,11 @@ dotnet test --configuration Release --no-build
 
 - [規劃基線](docs/planning-baseline/README.md)
 - [實作狀態](docs/IMPLEMENTATION_STATUS.md)
+- [P0 RC 檢核表](docs/release/P0_RC_CHECKLIST.md)
+- [P0 UAT 計畫](docs/release/P0_UAT_PLAN.md)
 - [待決事項](docs/DECISIONS_NEEDED.md)
 - [Legacy staging 匯入](docs/migration/README.md)
 - [安全政策](SECURITY.md)
 - [貢獻指南](CONTRIBUTING.md)
 
-本 repository 尚未取得開源授權，視為 private/unlicensed；請勿自行散布或再授權。
+本 repository 目前可公開讀取，但尚未取得開源授權且未提供 `LICENSE`；除法律允許的範圍外，不授予使用、修改、散布或再授權權利。

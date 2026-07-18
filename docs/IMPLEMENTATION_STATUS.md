@@ -14,4 +14,13 @@
 | 7 | complete | Legacy raw/staging/validate/conflict、checksum、防重、CLI、映射與差異分類；未發現四類完整舊試算表 |
 | 8 | complete | threat model、CI 安全閘門、SBOM、環境範例、runbooks、空庫/升級/備份還原、效能與 WCAG 基礎稽核 |
 
-目前為可供人工 UAT 的 P0 Release Candidate。正式發布與第三方/主管機關狀態不由系統自動宣稱；產品負責人及領域審查者仍須依 release checklist 完成人工簽核。
+## 剩餘發布閘門
+
+工程實作與自動驗證目前沒有列入中的未完成 Phase。唯一尚未完成的 RC 閘門是由產品負責人與碳足跡領域審查者執行人工 UAT 並簽核：
+
+- 執行方式：[`docs/release/P0_UAT_PLAN.md`](release/P0_UAT_PLAN.md)
+- 簽核紀錄：[`docs/release/P0_UAT_SIGNOFF.md`](release/P0_UAT_SIGNOFF.md)
+- 發布檢核：[`docs/release/P0_RC_CHECKLIST.md`](release/P0_RC_CHECKLIST.md)
+- 外部決策：[`docs/DECISIONS_NEEDED.md`](DECISIONS_NEEDED.md)
+
+人工 UAT 未完成前，狀態只能是「可供 UAT 的 P0 Release Candidate」，不得標記為正式發布、第三方查驗通過、主管機關核定或可使用碳足跡標籤。
