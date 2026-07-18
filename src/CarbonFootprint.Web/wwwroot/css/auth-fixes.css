@@ -1,0 +1,59 @@
+.auth-panel,
+.auth-card,
+.auth-account-links,
+.auth-account-links a,
+.auth-back {
+  position: relative;
+  z-index: 5;
+}
+
+.auth-panel,
+.auth-card,
+.auth-account-links,
+.auth-account-links a,
+.auth-back {
+  pointer-events: auto;
+}
+
+.auth-account-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.auth-account-links--single {
+  grid-template-columns: 1fr;
+}
+
+.auth-account-links .initial-account-link {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0;
+  padding: 0.65rem 0.85rem;
+  background: #eef8f3;
+  border: 1px solid #ccebdd;
+  border-radius: 12px;
+  text-decoration: none;
+}
+
+.auth-account-links .initial-account-link:hover,
+.auth-account-links .initial-account-link:focus-visible {
+  background: #dff3e9;
+  border-color: #7fc9a7;
+  outline: 3px solid rgba(37, 168, 118, 0.15);
+  text-decoration: none;
+}
+
+.auth-back {
+  min-height: 44px;
+  padding: 0.7rem;
+}
+
+@media (max-width: 575.98px) {
+  .auth-account-links {
+    grid-template-columns: 1fr;
+  }
+}
