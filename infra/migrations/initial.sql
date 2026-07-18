@@ -659,3 +659,36 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718091011_AddCalculationWarnings') THEN
+    CREATE TABLE app.calculation_warnings (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        calculation_run_id uuid NOT NULL,
+        code character varying(100) NOT NULL,
+        message character varying(1000) NOT NULL,
+        CONSTRAINT pk_calculation_warnings PRIMARY KEY (id),
+        CONSTRAINT fk_calculation_warnings_calculation_runs_calculation_run_id FOREIGN KEY (calculation_run_id) REFERENCES app.calculation_runs (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718091011_AddCalculationWarnings') THEN
+    CREATE INDEX ix_calculation_warnings_calculation_run_id ON app.calculation_warnings (calculation_run_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718091011_AddCalculationWarnings') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260718091011_AddCalculationWarnings', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
+

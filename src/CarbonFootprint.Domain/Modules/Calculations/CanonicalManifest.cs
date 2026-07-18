@@ -80,5 +80,10 @@ public static class CanonicalManifest
         var bytes = stream.ToArray();
         return (Encoding.UTF8.GetString(bytes), Convert.ToHexStringLower(SHA256.HashData(bytes)));
     }
-}
 
+    public static string ComputeSha256(string canonicalManifest) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalManifest)));
+
+    public static bool HasValidSha256(string canonicalManifest, string expectedSha256) =>
+        string.Equals(ComputeSha256(canonicalManifest), expectedSha256, StringComparison.Ordinal);
+}

@@ -178,6 +178,15 @@ public sealed class CalculationStageSummaryRecord : IOrganizationOwned
     public decimal Emissions { get; set; }
 }
 
+public sealed class CalculationWarningRecord : IOrganizationOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid CalculationRunId { get; set; }
+    public required string Code { get; set; }
+    public required string Message { get; set; }
+}
+
 public sealed class AuditEventRecord : IOrganizationOwned
 {
     public Guid Id { get; set; }

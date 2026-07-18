@@ -277,7 +277,30 @@ else
                     <dt class="col-sm-3">Input SHA-256</dt><dd class="col-sm-9"><code>@run.InputSha256</code></dd>
                     <dt class="col-sm-3">產品總量</dt><dd class="col-sm-9">@run.ProductTotal kgCO2e</dd>
                     <dt class="col-sm-3">Engine／Rules／Units</dt><dd class="col-sm-9">@run.EngineBuild / @run.RuleSetVersion / @run.UnitCatalogueVersion</dd>
+                    <dt class="col-sm-3">快照完整性</dt>
+                    <dd class="col-sm-9">@(Model.LatestManifestHashValid == true ? "SHA-256 驗證通過" : "SHA-256 驗證失敗")</dd>
                 </dl>
+                @if (Model.LatestWarnings.Count > 0)
+                {
+                    <h3 class="h5">警告與假設</h3>
+                    <ul>
+                        @foreach (var warning in Model.LatestWarnings)
+                        {
+                            <li><code>@warning.Code</code>：@warning.Message</li>
+                        }
+                    </ul>
+                }
+                @if (Model.LatestDifference is { } difference)
+                {
+                    <h3 class="h5">與前次 Run 比較</h3>
+                    <p>產品總量差異：@difference.ProductDelta kgCO2e</p>
+                    <ul>
+                        @foreach (var stage in difference.Stages)
+                        {
+                            <li>@stage.Stage：@stage.Baseline → @stage.Candidate（差異 @stage.Delta）</li>
+                        }
+                    </ul>
+                }
                 <div class="table-responsive">
                     <table class="table">
                         <thead><tr><th>階段</th><th>活動量</th><th>係數</th><th>排放量</th></tr></thead>

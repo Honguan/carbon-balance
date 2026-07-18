@@ -1,4 +1,5 @@
 using CarbonFootprint.Application.Calculations;
+using CarbonFootprint.Domain.Modules.Calculations;
 using CarbonFootprint.Domain.Modules.Factors;
 using CarbonFootprint.Domain.Modules.Inventories;
 using CarbonFootprint.Domain.Modules.Organizations;
@@ -68,6 +69,12 @@ public sealed class WorkspaceModel : PageModel
     public IReadOnlyList<CalculationRunRecord> Runs { get; private set; } = [];
 
     public IReadOnlyList<CalculationLineRecord> LatestLines { get; private set; } = [];
+
+    public IReadOnlyList<CalculationWarningRecord> LatestWarnings { get; private set; } = [];
+
+    public CalculationRunDifference? LatestDifference { get; private set; }
+
+    public bool? LatestManifestHashValid { get; private set; }
 
     [TempData]
     public string? StatusMessage { get; set; }
@@ -674,8 +681,13 @@ public sealed class WorkspaceModel : PageModel
                 }).ToArray());
 
             var engineBuild = typeof(WorkspaceModel).Assembly.GetName().Version?.ToString() ?? "dev";
+            var supersedesRunId = await _dbContext.CalculationRuns
+                .Where(item => item.ProjectVersionId == project.Id)
+                .OrderByDescending(item => item.CreatedAt)
+                .Select(item => (Guid?)item.Id)
+                .FirstOrDefaultAsync(cancellationToken);
             await _calculateHandler.HandleAsync(
-                new CalculateInventoryCommand(Guid.NewGuid(), snapshot, engineBuild, null),
+                new CalculateInventoryCommand(Guid.NewGuid(), snapshot, engineBuild, supersedesRunId),
                 cancellationToken);
             StatusMessage = "不可變 CalculationRun 已建立。";
             return RedirectToPage();
@@ -705,11 +717,37 @@ public sealed class WorkspaceModel : PageModel
         Runs = await _dbContext.CalculationRuns.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         if (Runs.Count > 0)
         {
+            LatestManifestHashValid = CanonicalManifest.HasValidSha256(
+                Runs[0].CanonicalInputManifest,
+                Runs[0].InputSha256);
             LatestLines = await _dbContext.CalculationLineItems.AsNoTracking()
                 .Where(item => item.CalculationRunId == Runs[0].Id)
                 .OrderBy(item => item.LifecycleStage)
                 .ThenBy(item => item.ActivityId)
                 .ToArrayAsync(cancellationToken);
+            LatestWarnings = await _dbContext.CalculationWarnings.AsNoTracking()
+                .Where(item => item.CalculationRunId == Runs[0].Id)
+                .OrderBy(item => item.Code)
+                .ToArrayAsync(cancellationToken);
+        }
+
+        if (Runs.Count > 1)
+        {
+            var comparedRunIds = new[] { Runs[0].Id, Runs[1].Id };
+            var summaries = await _dbContext.CalculationStageSummaries.AsNoTracking()
+                .Where(item => comparedRunIds.Contains(item.CalculationRunId))
+                .ToArrayAsync(cancellationToken);
+            var baseline = new CalculationRunTotals(
+                Runs[1].Id,
+                Runs[1].ProductTotal,
+                summaries.Where(item => item.CalculationRunId == Runs[1].Id)
+                    .ToDictionary(item => (LifecycleStage)item.LifecycleStage, item => item.Emissions));
+            var candidate = new CalculationRunTotals(
+                Runs[0].Id,
+                Runs[0].ProductTotal,
+                summaries.Where(item => item.CalculationRunId == Runs[0].Id)
+                    .ToDictionary(item => (LifecycleStage)item.LifecycleStage, item => item.Emissions));
+            LatestDifference = CalculationRunDiff.Compare(baseline, candidate);
         }
     }
 

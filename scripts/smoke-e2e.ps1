@@ -205,6 +205,11 @@ if ($result.Content -notmatch '[0-9a-f]{64}') {
     throw 'Golden E2E input SHA-256 is missing.'
 }
 
+$repeatResult = Post-Workspace 'Calculate' @{ inventoryProjectVersionId = $inventoryId }
+if ($repeatResult.Content -notmatch '<p>[^<]+0(?:\.0+)? kgCO2e</p>') {
+    throw 'Golden E2E repeat run did not produce a zero product delta.'
+}
+
 Write-Output "E2E_SMOKE=PASS"
 Write-Output "EMAIL=$email"
 Write-Output "INVENTORY_VERSION_ID=$inventoryId"

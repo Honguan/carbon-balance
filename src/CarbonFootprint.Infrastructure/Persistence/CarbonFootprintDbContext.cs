@@ -30,6 +30,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
     public DbSet<CalculationRunRecord> CalculationRuns => Set<CalculationRunRecord>();
     public DbSet<CalculationLineRecord> CalculationLineItems => Set<CalculationLineRecord>();
     public DbSet<CalculationStageSummaryRecord> CalculationStageSummaries => Set<CalculationStageSummaryRecord>();
+    public DbSet<CalculationWarningRecord> CalculationWarnings => Set<CalculationWarningRecord>();
     public DbSet<AuditEventRecord> AuditEvents => Set<AuditEventRecord>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -222,6 +223,14 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.HasIndex(item => new { item.CalculationRunId, item.LifecycleStage }).IsUnique();
             entity.HasOne<CalculationRunRecord>().WithMany().HasForeignKey(item => item.CalculationRunId).OnDelete(DeleteBehavior.Restrict);
         });
+        builder.Entity<CalculationWarningRecord>(entity =>
+        {
+            entity.ToTable("calculation_warnings");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Code).HasMaxLength(100);
+            entity.Property(item => item.Message).HasMaxLength(1000);
+            entity.HasOne<CalculationRunRecord>().WithMany().HasForeignKey(item => item.CalculationRunId).OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureAudit(ModelBuilder builder)
@@ -250,6 +259,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         builder.Entity<CalculationRunRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<CalculationLineRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<CalculationStageSummaryRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<CalculationWarningRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<AuditEventRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
     }
 
@@ -258,7 +268,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         var immutableTypes = new[]
         {
             typeof(CalculationRunRecord), typeof(CalculationLineRecord),
-            typeof(CalculationStageSummaryRecord), typeof(AuditEventRecord)
+            typeof(CalculationStageSummaryRecord), typeof(CalculationWarningRecord), typeof(AuditEventRecord)
         };
         var immutableChange = ChangeTracker.Entries().FirstOrDefault(entry =>
             immutableTypes.Contains(entry.Metadata.ClrType)

@@ -57,6 +57,14 @@ public sealed class CalculationRunStore : ICalculationRunStore
             LifecycleStage = (int)summary.Stage,
             Emissions = summary.Emissions
         }));
+        _dbContext.CalculationWarnings.AddRange(run.Warnings.Select(warning => new CalculationWarningRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = run.OrganizationId,
+            CalculationRunId = run.Id,
+            Code = warning.Code,
+            Message = warning.Message
+        }));
         _dbContext.AuditEvents.Add(new AuditEventRecord
         {
             Id = Guid.NewGuid(),
@@ -74,4 +82,3 @@ public sealed class CalculationRunStore : ICalculationRunStore
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }
-
