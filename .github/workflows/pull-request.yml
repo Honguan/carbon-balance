@@ -125,7 +125,6 @@ jobs:
 
           $env:PATH = "$mockDirectory;$env:PATH"
           Remove-Item -LiteralPath '.env' -Force -ErrorAction SilentlyContinue
-
           .\scripts\setup-local.ps1 -NoStart
 
           if (-not (Test-Path -LiteralPath '.env')) {
@@ -143,11 +142,9 @@ jobs:
               [string]::IsNullOrWhiteSpace($minioPassword)) {
             throw 'The setup script did not generate both required passwords.'
           }
-
           if ($postgresPassword -eq $minioPassword) {
             throw 'The generated PostgreSQL and MinIO passwords must be different.'
           }
-
           Remove-Item -LiteralPath '.env' -Force
 
   secret-scan:
@@ -171,7 +168,54 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Build release image
-        run: docker build --tag carbon-footprint:${{ github.sha }} --file src/CarbonFootprint.Web/Dockerfile .
+        run: docker build --quiet --tag carbon-footprint:${{ github.sha }} --file src/CarbonFootprint.Web/Dockerfile .
+      - name: Verify Identity layout and rendered static assets
+        run: |
+          set -euo pipefail
+          trap 'docker rm --force carbon-static-smoke >/dev/null 2>&1 || true' EXIT
+
+          docker run --detach \
+            --name carbon-static-smoke \
+            --publish 18088:8080 \
+            --env ASPNETCORE_ENVIRONMENT=Development \
+            --env 'ConnectionStrings__Database=Host=127.0.0.1;Port=5432;Database=carbon_smoke;Username=smoke;Password=smoke-password-123;SSL Mode=Disable;GSS Encryption Mode=Disable' \
+            carbon-footprint:${{ github.sha }}
+
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18088/health/live >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs carbon-static-smoke
+              exit 1
+            fi
+            sleep 2
+          done
+
+          curl --fail --silent --show-error \
+            --output /tmp/login.html \
+            http://127.0.0.1:18088/Identity/Account/Login
+
+          grep --quiet '<html lang="zh-Hant-TW">' /tmp/login.html
+          grep --quiet '產品碳足跡系統' /tmp/login.html
+
+          bootstrap_href="$(grep -oE 'href="/lib/bootstrap/dist/css/bootstrap\.min(\.[A-Za-z0-9]+)?\.css"' /tmp/login.html | head -n 1 | cut -d '"' -f 2)"
+          site_href="$(grep -oE 'href="/css/site(\.[A-Za-z0-9]+)?\.css"' /tmp/login.html | head -n 1 | cut -d '"' -f 2)"
+
+          test -n "$bootstrap_href"
+          test -n "$site_href"
+          echo "Rendered Bootstrap asset: $bootstrap_href"
+          echo "Rendered site asset: $site_href"
+
+          curl --fail --silent --show-error \
+            --output /tmp/bootstrap.css \
+            "http://127.0.0.1:18088${bootstrap_href}"
+          curl --fail --silent --show-error \
+            --output /tmp/site.css \
+            "http://127.0.0.1:18088${site_href}"
+
+          test -s /tmp/bootstrap.css
+          test -s /tmp/site.css
       - name: Scan filesystem for Critical and High vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
