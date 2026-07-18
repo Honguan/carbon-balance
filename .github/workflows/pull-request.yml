@@ -105,6 +105,51 @@ jobs:
           path: TestResults
           if-no-files-found: warn
 
+  windows-powershell-setup:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Exercise clean setup with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $mockDirectory = Join-Path $env:RUNNER_TEMP 'carbon-docker-mock'
+          New-Item -ItemType Directory -Path $mockDirectory -Force | Out-Null
+          @'
+          @echo off
+          if "%1"=="info" exit /b 0
+          if "%1"=="compose" exit /b 0
+          if "%1"=="volume" if "%2"=="ls" exit /b 0
+          exit /b 1
+          '@ | Set-Content -LiteralPath (Join-Path $mockDirectory 'docker.cmd') -Encoding Ascii
+
+          $env:PATH = "$mockDirectory;$env:PATH"
+          Remove-Item -LiteralPath '.env' -Force -ErrorAction SilentlyContinue
+
+          .\scripts\setup-local.ps1 -NoStart
+
+          if (-not (Test-Path -LiteralPath '.env')) {
+            throw 'The setup script did not create .env in a clean environment.'
+          }
+
+          $postgresPassword = (Get-Content -LiteralPath '.env' |
+            Where-Object { $_ -like 'POSTGRES_PASSWORD=*' } |
+            Select-Object -Last 1) -replace '^POSTGRES_PASSWORD=', ''
+          $minioPassword = (Get-Content -LiteralPath '.env' |
+            Where-Object { $_ -like 'MINIO_ROOT_PASSWORD=*' } |
+            Select-Object -Last 1) -replace '^MINIO_ROOT_PASSWORD=', ''
+
+          if ([string]::IsNullOrWhiteSpace($postgresPassword) -or
+              [string]::IsNullOrWhiteSpace($minioPassword)) {
+            throw 'The setup script did not generate both required passwords.'
+          }
+
+          if ($postgresPassword -eq $minioPassword) {
+            throw 'The generated PostgreSQL and MinIO passwords must be different.'
+          }
+
+          Remove-Item -LiteralPath '.env' -Force
+
   secret-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 10
