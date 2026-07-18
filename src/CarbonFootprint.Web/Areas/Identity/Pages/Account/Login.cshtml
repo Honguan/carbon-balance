@@ -45,14 +45,14 @@
 
             <span class="eyebrow">角色登入</span>
             <h2 id="login-title">歡迎回來</h2>
-            <p class="auth-card__intro">輸入帳號與密碼，系統會依你的角色顯示可使用的碳足跡功能。</p>
+            <p class="auth-card__intro">請輸入帳號與密碼。空白表單不會建立登入狀態。</p>
 
             @if (TempData["AccountMessage"] is string accountMessage)
             {
                 <div class="status-message" role="status">@accountMessage</div>
             }
 
-            <form method="post" class="auth-form">
+            <form method="post" class="auth-form" novalidate>
                 <input type="hidden" asp-for="ReturnUrl" />
                 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
 
@@ -94,10 +94,11 @@
                 <p>新帳號需先完成 Email 確認；密碼只需至少 6 個字元。</p>
             </div>
 
-            <div class="auth-account-links">
-                <a class="initial-account-link" asp-page="./Register">建立帳號</a>
-                <a class="initial-account-link" asp-page="./ResendEmailConfirmation">重寄確認信</a>
-            </div>
+            <nav class="auth-account-links" aria-label="帳號操作">
+                <a class="initial-account-link" href="/Identity/Account/Register">建立帳號</a>
+                <a class="initial-account-link" href="/Identity/Account/ResendEmailConfirmation">重寄確認信</a>
+            </nav>
+            <a class="auth-back" href="/">← 返回首頁</a>
         </div>
     </div>
 </section>
