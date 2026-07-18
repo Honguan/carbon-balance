@@ -4,7 +4,7 @@
 
 | ID | 決策 | 所需角色 | 目前處置 |
 |---|---|---|---|
-| DEC-001 | repository 授權方式 | Owner／法務 | 保持 private/unlicensed，不建立 LICENSE |
+| DEC-001 | repository 授權方式 | Owner／法務 | Repository 目前可公開讀取但未提供 `LICENSE`；維持 unlicensed，待正式決策後再新增授權文件 |
 | DEC-002 | 歷史 PCR 與案例係數的現行有效性 | 碳足跡領域審核者 | 只作 historical／pending-domain-review，不發布 |
 | DEC-003 | 舊 ZIP 內暴露 Google Maps Key 與服務帳戶是否已撤銷 | 憑證 owner | 不複製值；發布前需取得撤銷證據 |
 | DEC-004 | 係數來源資料的再散布授權 | 法務／資料 owner | 未確認資料只可 quarantined/staging |
