@@ -141,7 +141,7 @@ try {
 
     await page.locator('input[name="Input.Identifier"]').fill(testEmail);
     await page.locator('input[name="Input.Password"]').fill(testPassword);
-    await page.locator('input[name="Input.RememberMe"]').check();
+    await page.getByRole("checkbox", { name: "在這台裝置保持登入 30 天" }).check();
     await page.getByRole("button", { name: "登入碳足跡系統" }).click();
     await expectUrl(page, "/Workspace", "Confirmed account did not enter the workspace");
     await page.getByText("建立組織").first().waitFor({ state: "visible" });
