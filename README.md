@@ -57,6 +57,7 @@ dotnet test --configuration Release --no-build
 - [規劃基線](docs/planning-baseline/README.md)
 - [實作狀態](docs/IMPLEMENTATION_STATUS.md)
 - [待決事項](docs/DECISIONS_NEEDED.md)
+- [Legacy staging 匯入](docs/migration/README.md)
 - [安全政策](SECURITY.md)
 - [貢獻指南](CONTRIBUTING.md)
 

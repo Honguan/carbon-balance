@@ -5,6 +5,7 @@ public enum LegacyParseStatus
     Pending,
     Parsed,
     Invalid,
+    Conflict,
     Published
 }
 
@@ -18,4 +19,3 @@ public sealed record LegacyStagingRow(
     string RawSha256,
     LegacyParseStatus ParseStatus,
     string? ValidationErrorsJson);
-

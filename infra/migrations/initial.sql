@@ -738,3 +738,106 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718092341_AddLegacyStaging') THEN
+        IF NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = 'staging') THEN
+            CREATE SCHEMA staging;
+        END IF;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718092341_AddLegacyStaging') THEN
+    CREATE TABLE staging.import_batches (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        source_file_name character varying(300) NOT NULL,
+        source_file_sha256 character varying(64) NOT NULL,
+        entity_type character varying(100) NOT NULL,
+        status character varying(30) NOT NULL,
+        parsed_rows integer NOT NULL,
+        invalid_rows integer NOT NULL,
+        conflict_rows integer NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        completed_at timestamp with time zone,
+        CONSTRAINT pk_import_batches PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718092341_AddLegacyStaging') THEN
+    CREATE TABLE staging.rows (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        import_batch_id uuid NOT NULL,
+        source_row_number bigint NOT NULL,
+        raw_payload_json text NOT NULL,
+        raw_sha256 character varying(64) NOT NULL,
+        parse_status character varying(30) NOT NULL,
+        validation_errors_json text,
+        CONSTRAINT pk_rows PRIMARY KEY (id),
+        CONSTRAINT fk_rows_import_batches_import_batch_id FOREIGN KEY (import_batch_id) REFERENCES staging.import_batches (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718092341_AddLegacyStaging') THEN
+    CREATE TABLE staging.conflicts (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        import_batch_id uuid NOT NULL,
+        staging_row_id uuid NOT NULL,
+        conflict_key character varying(500) NOT NULL,
+        details_json text NOT NULL,
+        CONSTRAINT pk_conflicts PRIMARY KEY (id),
+        CONSTRAINT fk_conflicts_import_batches_import_batch_id FOREIGN KEY (import_batch_id) REFERENCES staging.import_batches (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_conflicts_rows_staging_row_id FOREIGN KEY (staging_row_id) REFERENCES staging.rows (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718092341_AddLegacyStaging') THEN
+    CREATE INDEX ix_conflicts_import_batch_id_conflict_key ON staging.conflicts (import_batch_id, conflict_key);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718092341_AddLegacyStaging') THEN
+    CREATE INDEX ix_conflicts_staging_row_id ON staging.conflicts (staging_row_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718092341_AddLegacyStaging') THEN
+    CREATE UNIQUE INDEX ix_import_batches_organization_id_source_file_sha256_entity_ty ON staging.import_batches (organization_id, source_file_sha256, entity_type);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718092341_AddLegacyStaging') THEN
+    CREATE UNIQUE INDEX ix_rows_import_batch_id_source_row_number ON staging.rows (import_batch_id, source_row_number);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718092341_AddLegacyStaging') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260718092341_AddLegacyStaging', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
+

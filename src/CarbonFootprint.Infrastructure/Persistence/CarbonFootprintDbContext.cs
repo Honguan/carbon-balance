@@ -32,6 +32,9 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
     public DbSet<CalculationStageSummaryRecord> CalculationStageSummaries => Set<CalculationStageSummaryRecord>();
     public DbSet<CalculationWarningRecord> CalculationWarnings => Set<CalculationWarningRecord>();
     public DbSet<AuditEventRecord> AuditEvents => Set<AuditEventRecord>();
+    public DbSet<LegacyImportBatchRecord> LegacyImportBatches => Set<LegacyImportBatchRecord>();
+    public DbSet<LegacyStagingRowRecord> LegacyStagingRows => Set<LegacyStagingRowRecord>();
+    public DbSet<LegacyImportConflictRecord> LegacyImportConflicts => Set<LegacyImportConflictRecord>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -44,6 +47,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         ConfigureUnitsAndFactors(builder);
         ConfigureCalculations(builder);
         ConfigureAudit(builder);
+        ConfigureLegacyStaging(builder);
         ConfigureTenantFilters(builder);
     }
 
@@ -247,6 +251,38 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         });
     }
 
+    private static void ConfigureLegacyStaging(ModelBuilder builder)
+    {
+        builder.Entity<LegacyImportBatchRecord>(entity =>
+        {
+            entity.ToTable("import_batches", "staging");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.SourceFileName).HasMaxLength(300);
+            entity.Property(item => item.SourceFileSha256).HasMaxLength(64);
+            entity.Property(item => item.EntityType).HasMaxLength(100);
+            entity.Property(item => item.Status).HasMaxLength(30);
+            entity.HasIndex(item => new { item.OrganizationId, item.SourceFileSha256, item.EntityType }).IsUnique();
+        });
+        builder.Entity<LegacyStagingRowRecord>(entity =>
+        {
+            entity.ToTable("rows", "staging");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.RawSha256).HasMaxLength(64);
+            entity.Property(item => item.ParseStatus).HasMaxLength(30);
+            entity.HasIndex(item => new { item.ImportBatchId, item.SourceRowNumber }).IsUnique();
+            entity.HasOne<LegacyImportBatchRecord>().WithMany().HasForeignKey(item => item.ImportBatchId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<LegacyImportConflictRecord>(entity =>
+        {
+            entity.ToTable("conflicts", "staging");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ConflictKey).HasMaxLength(500);
+            entity.HasIndex(item => new { item.ImportBatchId, item.ConflictKey });
+            entity.HasOne<LegacyImportBatchRecord>().WithMany().HasForeignKey(item => item.ImportBatchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<LegacyStagingRowRecord>().WithMany().HasForeignKey(item => item.StagingRowId).OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
     private void ConfigureTenantFilters(ModelBuilder builder)
     {
         builder.Entity<OrganizationRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.Id == _organizationScope.OrganizationId);
@@ -263,6 +299,9 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         builder.Entity<CalculationStageSummaryRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<CalculationWarningRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<AuditEventRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<LegacyImportBatchRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<LegacyStagingRowRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<LegacyImportConflictRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
     }
 
     private void ValidateChanges()
@@ -270,7 +309,8 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         var immutableTypes = new[]
         {
             typeof(CalculationRunRecord), typeof(CalculationLineRecord),
-            typeof(CalculationStageSummaryRecord), typeof(CalculationWarningRecord), typeof(AuditEventRecord)
+            typeof(CalculationStageSummaryRecord), typeof(CalculationWarningRecord), typeof(AuditEventRecord),
+            typeof(LegacyImportBatchRecord), typeof(LegacyStagingRowRecord), typeof(LegacyImportConflictRecord)
         };
         var immutableChange = ChangeTracker.Entries().FirstOrDefault(entry =>
             immutableTypes.Contains(entry.Metadata.ClrType)

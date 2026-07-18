@@ -1,4 +1,5 @@
 using CarbonFootprint.Infrastructure.Persistence;
+using CarbonFootprint.Infrastructure.LegacyImport;
 using Microsoft.EntityFrameworkCore;
 
 namespace CarbonFootprint.Integration.Tests;
@@ -104,6 +105,47 @@ public sealed class PostgreSqlPersistenceTests
 
         scope.OrganizationId = organizationId;
         Assert.Equal([productId], await context.Products.Select(item => item.Id).ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task LegacyFactorImporter_StagesValidInvalidAndConflictRowsWithoutPublishing()
+    {
+        var organizationId = Guid.NewGuid();
+        var uniqueName = Guid.NewGuid().ToString("N");
+        var sourcePath = Path.Combine(Path.GetTempPath(), $"legacy-factors-{uniqueName}.csv");
+        await File.WriteAllTextAsync(
+            sourcePath,
+            $"name,value,denominator_unit,source_version,license_code\n" +
+            $"factor-{uniqueName},2.5,kg,dataset-1,fixture\n" +
+            $"invalid-{uniqueName},-1,unknown,dataset-1,fixture\n" +
+            $"factor-{uniqueName},2.5,kg,dataset-1,fixture\n");
+
+        try
+        {
+            await using var context = CreateContext(organizationId);
+            context.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationId,
+                Name = "Legacy staging 測試組織",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+
+            var report = await new LegacyFactorCsvImporter(context).ImportAsync(
+                organizationId,
+                sourcePath,
+                CancellationToken.None);
+
+            Assert.Equal(1, report.ParsedRows);
+            Assert.Equal(1, report.InvalidRows);
+            Assert.Equal(1, report.ConflictRows);
+            Assert.Equal(3, await context.LegacyStagingRows.CountAsync());
+            Assert.Empty(await context.EmissionFactorVersions.ToArrayAsync());
+        }
+        finally
+        {
+            File.Delete(sourcePath);
+        }
     }
 
     private static CarbonFootprintDbContext CreateContext(Guid organizationId)

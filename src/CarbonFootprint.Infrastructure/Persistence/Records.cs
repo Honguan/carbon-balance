@@ -205,3 +205,40 @@ public sealed class AuditEventRecord : IOrganizationOwned
     public required string CorrelationId { get; set; }
     public required string MetadataJson { get; set; }
 }
+
+public sealed class LegacyImportBatchRecord : IOrganizationOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public required string SourceFileName { get; set; }
+    public required string SourceFileSha256 { get; set; }
+    public required string EntityType { get; set; }
+    public required string Status { get; set; }
+    public int ParsedRows { get; set; }
+    public int InvalidRows { get; set; }
+    public int ConflictRows { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
+}
+
+public sealed class LegacyStagingRowRecord : IOrganizationOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid ImportBatchId { get; set; }
+    public long SourceRowNumber { get; set; }
+    public required string RawPayloadJson { get; set; }
+    public required string RawSha256 { get; set; }
+    public required string ParseStatus { get; set; }
+    public string? ValidationErrorsJson { get; set; }
+}
+
+public sealed class LegacyImportConflictRecord : IOrganizationOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid ImportBatchId { get; set; }
+    public Guid StagingRowId { get; set; }
+    public required string ConflictKey { get; set; }
+    public required string DetailsJson { get; set; }
+}
