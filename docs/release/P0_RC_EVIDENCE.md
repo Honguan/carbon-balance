@@ -6,16 +6,16 @@
 | 閘門 | 實際結果 |
 |---|---|
 | Release build | 0 warning、0 error |
-| 自動測試 | 38/38 通過：Unit 27、Golden 2、Architecture 2、Contract 1、Integration 4、Security 2 |
+| 自動測試 | 44/44 通過：Unit 30、Golden 4、Architecture 2、Contract 1、Integration 5、Security 2；已產生 6 份 Cobertura coverage artifact |
 | E2E | 註冊、Email 確認、TOTP MFA、PCR／因子發布、五階段活動、證據掃描與儲存、重算、送審、核准、CSV／manifest 匯出通過 |
 | 計算一致性 | 產品總額 7 kgCO2e；相同輸入 hash 相同；supersedes lineage 正確 |
-| 空庫遷移 | 7 個 EF migrations，建立 25 張 app／identity／staging 資料表 |
-| 前版升級 | 從 `20260718091534_AddInventoryReview` 升級到目前 schema，25 張表，通過 |
-| 備份還原 | custom-format dump SHA-256 `0029a322b1237a8c33aaf5aaf9f7280da85ce4579ffb08fa5be550c03017e42c`；隔離資料庫還原 25 張表，通過 |
-| 效能 smoke | `/health/ready` 暖機後 100 次：P50 14.22 ms、P95 21.21 ms、P99 22.65 ms；門檻 P95 500 ms |
+| 空庫遷移 | 11 個 EF migrations，建立 28 張 app／identity／staging 資料表 |
+| 前版升級 | 從 `20260718100827_AddLifecycleActivityGovernance` 升級到目前 schema，28 張表，通過 |
+| 備份還原 | custom-format dump SHA-256 `6fe0a8c8b7665ebf0667b824d0847171f0007e562c2d0296dbdbd549110abe95`；隔離資料庫還原 28 張表，通過 |
+| 效能 smoke | `/health/ready` 暖機後 100 次：P50 14.83 ms、P95 16.80 ms、P99 23.96 ms；門檻 P95 500 ms |
 | NuGet audit | locked restore、全部 transitive 套件，Critical/High 0 |
-| 容器掃描 | Docker Scout，189 packages，Critical 0、High 0 |
-| Secret scan | Gitleaks v8.28.0，11 commits、約 10.85 MB，0 leaks |
+| 容器掃描 | Docker Scout，image digest `4deabbce0397`、189 packages，Critical 0、High 0 |
+| Secret scan | Gitleaks v8.28.0，15 commits、約 11.33 MB，0 leaks |
 | SBOM | 產生 739,978 bytes 的容器 SBOM；CI 另發布 CycloneDX artifact |
 | 基礎無障礙 | Lighthouse 首頁 accessibility score 1.00，binary failed audits 0 |
 
