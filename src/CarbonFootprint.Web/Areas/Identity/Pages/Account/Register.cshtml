@@ -1,16 +1,16 @@
 @page
 @model CarbonFootprint.Web.Areas.Identity.Pages.Account.RegisterModel
 @{
-    ViewData["Title"] = "建立初始管理者";
+    ViewData["Title"] = Model.CreatesAdministrator ? "建立初始管理者" : "建立帳號";
     ViewData["BodyClass"] = "auth-page";
 }
 
 <section class="auth-shell auth-shell--setup" aria-labelledby="setup-title">
     <div class="auth-visual">
         <div class="auth-visual__content">
-            <span class="eyebrow eyebrow-light">FIRST-TIME SETUP</span>
-            <h1>建立第一個<br />碳管理角色</h1>
-            <p>初始帳號會取得系統管理者角色，用於建立組織、設定盤查權限與管理後續使用者。</p>
+            <span class="eyebrow eyebrow-light">ACCOUNT SETUP</span>
+            <h1>建立碳盤查<br />使用者帳號</h1>
+            <p>完成 Email 確認後即可登入；系統會依角色顯示可使用的盤查、計算與管理功能。</p>
             <div class="setup-cycle" aria-hidden="true">
                 <span>原料</span><span>製造</span><span>運輸</span><span>使用</span><span>回收</span>
             </div>
@@ -19,9 +19,18 @@
 
     <div class="auth-panel">
         <div class="auth-card">
-            <span class="eyebrow">系統初始化</span>
-            <h2 id="setup-title">建立初始管理者</h2>
-            <p class="auth-card__intro">此頁只會在系統尚無帳號時開放。密碼至少 6 個字元，不強制特殊符號。</p>
+            @if (Model.CreatesAdministrator)
+            {
+                <span class="eyebrow">首次設定</span>
+                <h2 id="setup-title">建立初始管理者</h2>
+                <p class="auth-card__intro">目前尚無系統管理者，此帳號確認 Email 後會取得管理者角色。</p>
+            }
+            else
+            {
+                <span class="eyebrow">帳號註冊</span>
+                <h2 id="setup-title">建立新帳號</h2>
+                <p class="auth-card__intro">新帳號預設為檢視者，完成 Email 確認後即可登入。</p>
+            }
 
             <form method="post" class="auth-form">
                 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
@@ -43,7 +52,7 @@
                         <span class="field-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 7l8 6 8-6" /></svg>
                         </span>
-                        <input asp-for="Input.Email" autocomplete="email" placeholder="admin@example.com" />
+                        <input asp-for="Input.Email" autocomplete="email" placeholder="name@example.com" />
                     </div>
                     <span asp-validation-for="Input.Email" class="field-error"></span>
                 </div>
@@ -66,7 +75,7 @@
                 </div>
 
                 <button type="submit" class="btn-carbon btn-carbon--wide">
-                    建立並進入系統
+                    建立帳號並寄送確認信
                     <span aria-hidden="true">→</span>
                 </button>
             </form>
