@@ -6,8 +6,12 @@
 @{
     ViewData["Title"] = "盤查工作區";
 }
-<h1>盤查工作區</h1>
-<p class="text-muted">Golden Vertical Slice：所有資料均為開發測試資料，不代表 PCR、係數或結果已獲領域核准、查驗或主管機關核定。</p>
+<header class="workspace-hero">
+    <p class="workspace-eyebrow">產品碳足跡盤查流程</p>
+    <h1>盤查工作區</h1>
+    <p>依序完成組織與產品資料、盤查邊界、係數、五階段活動數據，再建立可重現的計算結果。</p>
+    <p class="workspace-disclaimer">Golden Vertical Slice：所有資料均為開發測試資料，不代表 PCR、係數或結果已獲領域核准、查驗或主管機關核定。</p>
+</header>
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
 {
@@ -30,20 +34,41 @@
 }
 else
 {
-    <p>目前組織：<code>@Model.OrganizationId</code></p>
+    <div class="workspace-context">
+        <span>目前組織</span>
+        <code>@Model.OrganizationId</code>
+    </div>
 
-    <section class="card mb-4">
+    <nav class="workspace-stage-nav" aria-label="盤查作業階段">
+        <a href="#governance"><span>01</span>組織與廠場</a>
+        <a href="#product"><span>02</span>產品基本資料</a>
+        <a href="#pcr"><span>03</span>PCR 規範</a>
+        <a href="#inventory"><span>04</span>盤查範圍</a>
+        <a href="#factors"><span>05</span>排放係數</a>
+        <a href="#lifecycle"><span>06</span>五階段數據</a>
+        <a href="#calculation"><span>07</span>計算與結果</a>
+    </nav>
+
+    <section class="card mb-4 workspace-card" id="governance">
         <div class="card-body">
-            <h2 class="h4">組織成員與廠場</h2>
+            <div class="workspace-card-heading">
+                <span class="workspace-step">01</span>
+                <div>
+                    <h2 class="h4">組織、成員與廠場</h2>
+                    <p>先確認盤查資料的歸屬組織、作業廠場與協作權限。</p>
+                </div>
+            </div>
             <div class="row g-3">
-                <form class="col-lg-4" method="post" asp-page-handler="CreateFacility">
+                <form class="col-lg-4 workspace-subpanel" method="post" asp-page-handler="CreateFacility">
+                    <h3 class="h6">廠場基本資料</h3>
                     <label class="form-label" for="facilityCode">廠場代碼</label>
                     <input class="form-control" id="facilityCode" name="facilityCode" required maxlength="100" />
                     <label class="form-label mt-2" for="facilityName">廠場名稱</label>
                     <input class="form-control" id="facilityName" name="facilityName" required maxlength="300" />
                     <button class="btn btn-primary mt-2" type="submit">建立廠場</button>
                 </form>
-                <form class="col-lg-4" method="post" asp-page-handler="InviteMember">
+                <form class="col-lg-4 workspace-subpanel" method="post" asp-page-handler="InviteMember">
+                    <h3 class="h6">新增協作成員</h3>
                     <label class="form-label" for="invitationEmail">受邀 Email</label>
                     <input class="form-control" id="invitationEmail" name="invitationEmail" type="email" required maxlength="320" />
                     <label class="form-label mt-2" for="invitationRole">角色</label>
@@ -55,8 +80,8 @@ else
                     </select>
                     <button class="btn btn-primary mt-2" type="submit">寄送邀請</button>
                 </form>
-                <div class="col-lg-4">
-                    <h3 class="h6">成員</h3>
+                <div class="col-lg-4 workspace-subpanel">
+                    <h3 class="h6">現有成員與角色</h3>
                     <ul>
                         @foreach (var membership in Model.Memberships)
                         {
@@ -74,7 +99,7 @@ else
                     </ul>
                 </div>
             </div>
-            <h3 class="h6 mt-3">待處理邀請</h3>
+            <h3 class="h6 mt-4">待處理邀請</h3>
             <ul>
                 @foreach (var invitation in Model.Invitations.Where(item => item.AcceptedAt is null && item.RevokedAt is null))
                 {
@@ -92,10 +117,17 @@ else
 
     <div class="row g-4">
         <div class="col-lg-6">
-            <section class="card h-100">
+            <section class="card h-100 workspace-card" id="product">
                 <div class="card-body">
-                    <h2 class="h4">2. 產品版本</h2>
+                    <div class="workspace-card-heading">
+                        <span class="workspace-step">02</span>
+                        <div>
+                            <h2 class="h4">產品基本資料</h2>
+                            <p>建立盤查對象、分類與生產廠場的版本關係。</p>
+                        </div>
+                    </div>
                     <form method="post" asp-page-handler="CreateProduct">
+                        <h3 class="workspace-subheading">產品識別</h3>
                         <label class="form-label" for="productName">產品名稱</label>
                         <input class="form-control" id="productName" name="productName" required maxlength="300" />
                         <label class="form-label mt-2" for="categoryCode">產品分類代碼</label>
@@ -109,7 +141,8 @@ else
                         </select>
                         <button class="btn btn-primary mt-3" type="submit">建立產品第 1 版</button>
                     </form>
-                    <ul class="mt-3">
+                    <h3 class="workspace-subheading mt-4">已建立版本</h3>
+                    <ul class="workspace-records">
                         @foreach (var item in Model.ProductVersions)
                         {
                             <li>@item.NameZhTw（v@item.VersionNumber）</li>
@@ -120,10 +153,17 @@ else
         </div>
 
         <div class="col-lg-6">
-            <section class="card h-100">
+            <section class="card h-100 workspace-card" id="pcr">
                 <div class="card-body">
-                    <h2 class="h4">3. PCR 版本</h2>
+                    <div class="workspace-card-heading">
+                        <span class="workspace-step">03</span>
+                        <div>
+                            <h2 class="h4">PCR 規範版本</h2>
+                            <p>分別記錄規範識別、有效期間、適用範圍與原始文件完整性。</p>
+                        </div>
+                    </div>
                     <form method="post" asp-page-handler="CreatePcr">
+                        <h3 class="workspace-subheading">規範識別與有效期間</h3>
                         <label class="form-label" for="registrationNumber">登錄編號</label>
                         <input class="form-control" id="registrationNumber" name="registrationNumber" required />
                         <label class="form-label mt-2" for="pcrTitle">名稱</label>
@@ -134,6 +174,7 @@ else
                         <input class="form-control" type="date" id="pcrValidFrom" name="validFrom" value="2025-01-01" />
                         <label class="form-label mt-2" for="pcrValidTo">有效迄日</label>
                         <input class="form-control" type="date" id="pcrValidTo" name="validTo" value="2027-12-31" />
+                        <h3 class="workspace-subheading mt-4">標準與適用範圍</h3>
                         <label class="form-label mt-2" for="sourceReference">來源參照</label>
                         <input class="form-control" id="sourceReference" name="sourceReference" placeholder="文件編號或受控來源 URI" required />
                         <label class="form-label mt-2" for="standardCode">標準代碼</label>
@@ -144,13 +185,15 @@ else
                         <textarea class="form-control" id="pcrApplicability" name="pcrApplicability" required></textarea>
                         <label class="form-label mt-2" for="ruleRequirements">規則要求模板</label>
                         <textarea class="form-control" id="ruleRequirements" name="ruleRequirements" required></textarea>
+                        <h3 class="workspace-subheading mt-4">原始文件完整性</h3>
                         <label class="form-label mt-2" for="originalDocumentName">原始文件名稱</label>
                         <input class="form-control" id="originalDocumentName" name="originalDocumentName" required />
                         <label class="form-label mt-2" for="originalDocumentSha256">原始文件 SHA-256</label>
                         <input class="form-control" id="originalDocumentSha256" name="originalDocumentSha256" pattern="[0-9a-fA-F]{64}" required />
                         <button class="btn btn-primary mt-3" type="submit">建立 PCR 草稿</button>
                     </form>
-                    <ul class="mt-3">
+                    <h3 class="workspace-subheading mt-4">審查與發布狀態</h3>
+                    <ul class="workspace-records">
                         @foreach (var pcr in Model.PcrVersions)
                         {
                             <li class="mb-2">
@@ -181,10 +224,17 @@ else
         </div>
 
         <div class="col-lg-6">
-            <section class="card h-100">
+            <section class="card h-100 workspace-card" id="inventory">
                 <div class="card-body">
-                    <h2 class="h4">4. 盤查專案版本</h2>
+                    <div class="workspace-card-heading">
+                        <span class="workspace-step">04</span>
+                        <div>
+                            <h2 class="h4">盤查範圍與專案版本</h2>
+                            <p>界定盤查期間、計算單位、系統邊界與資料處理原則。</p>
+                        </div>
+                    </div>
                     <form method="post" asp-page-handler="CreateInventory">
+                        <h3 class="workspace-subheading">盤查對象與期間</h3>
                         <label class="form-label" for="productVersionId">產品版本</label>
                         <select class="form-select" id="productVersionId" name="productVersionId" required>
                             @foreach (var item in Model.ProductVersions)
@@ -196,12 +246,14 @@ else
                         <input class="form-control" type="date" id="periodStart" name="periodStart" value="2026-01-01" required />
                         <label class="form-label mt-2" for="periodEnd">期間迄日</label>
                         <input class="form-control" type="date" id="periodEnd" name="periodEnd" value="2026-12-31" required />
+                        <h3 class="workspace-subheading mt-4">單位與系統邊界</h3>
                         <label class="form-label mt-2" for="functionalUnit">功能單位</label>
                         <input class="form-control" id="functionalUnit" name="functionalUnit" value="1 個產品" required />
                         <label class="form-label mt-2" for="declaredUnit">標示單位</label>
                         <input class="form-control" id="declaredUnit" name="declaredUnit" value="1 件" required />
                         <label class="form-label mt-2" for="systemBoundary">系統邊界</label>
                         <textarea class="form-control" id="systemBoundary" name="systemBoundary" required maxlength="1000">搖籃到墳墓</textarea>
+                        <h3 class="workspace-subheading mt-4">分配、排除與資料假設</h3>
                         <label class="form-label mt-2" for="allocationMethod">分配方法</label>
                         <input class="form-control" id="allocationMethod" name="allocationMethod" value="物理量分配" required maxlength="200" />
                         <label class="form-label mt-2" for="allocationReason">分配理由</label>
@@ -212,6 +264,7 @@ else
                         <textarea class="form-control" id="assumptions" name="assumptions" maxlength="4000"></textarea>
                         <label class="form-label mt-2" for="estimationReason">估算／替代資料理由</label>
                         <textarea class="form-control" id="estimationReason" name="estimationReason" maxlength="4000"></textarea>
+                        <h3 class="workspace-subheading mt-4">適用 PCR</h3>
                         <label class="form-label mt-2" for="pcrVersionId">PCR 版本</label>
                         <select class="form-select" id="pcrVersionId" name="pcrVersionId" required>
                             @foreach (var pcr in Model.PcrVersions)
@@ -221,7 +274,8 @@ else
                         </select>
                         <button class="btn btn-primary mt-3" type="submit">建立盤查第 1 版</button>
                     </form>
-                    <ul class="mt-3">
+                    <h3 class="workspace-subheading mt-4">階段適用性與送審</h3>
+                    <ul class="workspace-records">
                         @foreach (var inventory in Model.InventoryProjects)
                         {
                             var workflowStatus = Enum.Parse<InventoryWorkflowStatus>(inventory.WorkflowStatus);
@@ -263,10 +317,17 @@ else
         </div>
 
         <div class="col-lg-6">
-            <section class="card h-100">
+            <section class="card h-100 workspace-card" id="factors">
                 <div class="card-body">
-                    <h2 class="h4">5. 係數版本</h2>
+                    <div class="workspace-card-heading">
+                        <span class="workspace-step">05</span>
+                        <div>
+                            <h2 class="h4">排放係數版本</h2>
+                            <p>保存係數值、單位、資料集來源、授權與適用性，供活動數據明確引用。</p>
+                        </div>
+                    </div>
                     <form method="post" asp-page-handler="CreateFactor">
+                        <h3 class="workspace-subheading">係數值與分母單位</h3>
                         <label class="form-label" for="factorName">係數名稱</label>
                         <input class="form-control" id="factorName" name="factorName" required />
                         <label class="form-label mt-2" for="factorValue">係數值</label>
@@ -278,6 +339,7 @@ else
                                 <option value="@unit.Code">kgCO2e / @unit.Code</option>
                             }
                         </select>
+                        <h3 class="workspace-subheading mt-4">來源、授權與適用性</h3>
                         <label class="form-label mt-2" for="sourceDatasetVersion">來源 dataset 版本</label>
                         <input class="form-control" id="sourceDatasetVersion" name="sourceDatasetVersion" value="golden-dataset-1" required />
                         <label class="form-label mt-2" for="licenseCode">授權識別</label>
@@ -290,7 +352,8 @@ else
                         <textarea class="form-control" id="factorApplicability" name="factorApplicability" required></textarea>
                         <button class="btn btn-primary mt-3" type="submit">建立係數草稿</button>
                     </form>
-                    <ul class="mt-3">
+                    <h3 class="workspace-subheading mt-4">審查、發布與取代版本</h3>
+                    <ul class="workspace-records">
                         @foreach (var factor in Model.Factors)
                         {
                             <li class="mb-2">
@@ -329,10 +392,24 @@ else
         </div>
 
         <div class="col-lg-6">
-            <section class="card h-100">
+            <section class="card h-100 workspace-card" id="lifecycle">
                 <div class="card-body">
-                    <h2 class="h4">6. 五階段活動數據</h2>
+                    <div class="workspace-card-heading">
+                        <span class="workspace-step">06</span>
+                        <div>
+                            <h2 class="h4">五階段活動數據</h2>
+                            <p>依舊版盤查表的階段脈絡，逐筆記錄活動量、換算單位、係數與資料品質。</p>
+                        </div>
+                    </div>
+                    <ol class="lifecycle-stage-strip" aria-label="產品生命週期五階段">
+                        <li><span>01</span><strong>原料取得</strong><small>原料與原料運輸</small></li>
+                        <li><span>02</span><strong>製造</strong><small>能資源與製造廢棄</small></li>
+                        <li><span>03</span><strong>配送銷售</strong><small>配送與銷售運輸</small></li>
+                        <li><span>04</span><strong>使用</strong><small>能源與耗材情境</small></li>
+                        <li><span>05</span><strong>廢棄處理</strong><small>處理方式與運輸</small></li>
+                    </ol>
                     <form method="post" asp-page-handler="AddActivity">
+                        <h3 class="workspace-subheading">階段與活動識別</h3>
                         <label class="form-label" for="inventoryProjectVersionId">盤查版本</label>
                         <select class="form-select" id="inventoryProjectVersionId" name="inventoryProjectVersionId" required>
                             @foreach (var item in Model.InventoryProjects)
@@ -358,6 +435,7 @@ else
                         <input class="form-control" id="activityName" name="activityName" required />
                         <label class="form-label mt-2" for="supplierOrScenario">供應商／運輸／處理／使用情境</label>
                         <input class="form-control" id="supplierOrScenario" name="supplierOrScenario" maxlength="1000" />
+                        <h3 class="workspace-subheading mt-4">活動量、單位與係數</h3>
                         <label class="form-label mt-2" for="rawValue">原始活動量</label>
                         <input class="form-control" type="number" step="any" min="0" id="rawValue" name="rawValue" required />
                         <label class="form-label mt-2" for="rawUnitCode">原始單位</label>
@@ -383,6 +461,7 @@ else
                         </select>
                         <label class="form-label mt-2" for="allocationFactor">分配比例（0～1）</label>
                         <input class="form-control" id="allocationFactor" name="allocationFactor" type="number" min="0.000000000000001" max="1" step="any" value="1" required />
+                        <h3 class="workspace-subheading mt-4">估算註記與資料品質</h3>
                         <div class="form-check mt-2">
                             <input class="form-check-input" id="isEstimated" name="isEstimated" type="checkbox" value="true" />
                             <label class="form-check-label" for="isEstimated">估算或替代資料</label>
@@ -397,7 +476,8 @@ else
                         </select>
                         <button class="btn btn-primary mt-3" type="submit">保存活動數據</button>
                     </form>
-                    <ul class="mt-3">
+                    <h3 class="workspace-subheading mt-4">已保存活動與證據</h3>
+                    <ul class="workspace-records">
                         @foreach (var activity in Model.Activities)
                         {
                             var evidence = Model.EvidenceFiles.SingleOrDefault(item => item.ActivityDataId == activity.Id);
@@ -424,10 +504,15 @@ else
         </div>
     </div>
 
-    <section class="card my-4">
+    <section class="card my-4 workspace-card workspace-calculation" id="calculation">
         <div class="card-body">
-            <h2 class="h4">7. 建立不可變計算 Run</h2>
-            <p>五個階段各至少需要一筆活動數據，且 canonical 單位須符合所選係數分母。</p>
+            <div class="workspace-card-heading">
+                <span class="workspace-step">07</span>
+                <div>
+                    <h2 class="h4">凍結盤查輸入並建立計算 Run</h2>
+                    <p>五個階段各至少需要一筆活動數據，且 canonical 單位須符合所選係數分母。</p>
+                </div>
+            </div>
             <form method="post" asp-page-handler="Calculate">
                 <label class="form-label" for="calculationInventoryId">盤查版本</label>
                 <select class="form-select" id="calculationInventoryId" name="inventoryProjectVersionId" required>
@@ -444,9 +529,15 @@ else
     @if (Model.Runs.Count > 0)
     {
         var run = Model.Runs[0];
-        <section class="card my-4">
+        <section class="card my-4 workspace-card" id="latest-result">
             <div class="card-body">
-                <h2 class="h4">最新計算結果</h2>
+                <div class="workspace-card-heading">
+                    <span class="workspace-step workspace-step--result">結果</span>
+                    <div>
+                        <h2 class="h4">最新計算結果與稽核資訊</h2>
+                        <p>核對輸入雜湊、引擎版本、產品總量、警告與逐項計算明細。</p>
+                    </div>
+                </div>
                 <dl class="row">
                     <dt class="col-sm-3">Run ID</dt><dd class="col-sm-9"><code>@run.Id</code></dd>
                     <dt class="col-sm-3">Input SHA-256</dt><dd class="col-sm-9"><code>@run.InputSha256</code></dd>
