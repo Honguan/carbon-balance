@@ -1,4 +1,21 @@
-﻿// Please see documentation at https://learn.microsoft.com/aspnet/core/client-side/bundling-and-minification
-// for details on configuring this project to bundle and minify static web assets.
+document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("[data-history-back]").forEach((link) => {
+        link.addEventListener("click", (event) => {
+            if (!document.referrer || window.history.length <= 1) {
+                return;
+            }
 
-// Write your JavaScript code.
+            try {
+                const previousUrl = new URL(document.referrer);
+                if (previousUrl.origin !== window.location.origin) {
+                    return;
+                }
+
+                event.preventDefault();
+                window.history.back();
+            } catch {
+                // Keep the anchor fallback when the referrer cannot be parsed.
+            }
+        });
+    });
+});
