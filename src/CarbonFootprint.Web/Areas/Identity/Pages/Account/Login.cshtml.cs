@@ -1,12 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 using CarbonFootprint.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace CarbonFootprint.Web.Areas.Identity.Pages.Account;
 
+[AllowAnonymous]
 public sealed class LoginModel : PageModel
 {
     private readonly SignInManager<ApplicationUser> _signInManager;
@@ -26,11 +28,19 @@ public sealed class LoginModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? ReturnUrl { get; set; }
 
-    public IActionResult OnGet()
+    public async Task<IActionResult> OnGetAsync(bool requestExpired = false)
     {
+        // Visiting the login page is an explicit request to authenticate again.
+        // Clear stale cookies from older builds so the page can never appear to
+        // log a user in without credentials.
         if (_signInManager.IsSignedIn(User))
         {
-            return RedirectToPage("/Workspace", new { area = string.Empty });
+            await _signInManager.SignOutAsync();
+            TempData["AccountMessage"] = "已清除原有登入狀態，請重新輸入帳號與密碼。";
+        }
+        else if (requestExpired)
+        {
+            TempData["AccountMessage"] = "頁面已更新或表單已逾時，請重新操作。";
         }
 
         return Page();
@@ -38,6 +48,13 @@ public sealed class LoginModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
+        // A stale authentication cookie must not survive an empty or invalid
+        // login submission.
+        if (_signInManager.IsSignedIn(User))
+        {
+            await _signInManager.SignOutAsync();
+        }
+
         if (!ModelState.IsValid)
         {
             return Page();
