@@ -32,8 +32,7 @@
                 <p class="auth-card__intro">新帳號預設為檢視者，完成 Email 確認後即可登入。</p>
             }
 
-            <form method="post" class="auth-form" novalidate>
-                @Html.AntiForgeryToken()
+            <form method="post" asp-antiforgery="true" class="auth-form" novalidate>
                 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
 
                 <div class="field-group">
