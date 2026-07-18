@@ -14,8 +14,5 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: security-sources
-          path: |
-            src/CarbonFootprint.Web/Security
-            src/CarbonFootprint.Web/Program.cs
-            src/CarbonFootprint.Infrastructure
+          path: src
           if-no-files-found: error
