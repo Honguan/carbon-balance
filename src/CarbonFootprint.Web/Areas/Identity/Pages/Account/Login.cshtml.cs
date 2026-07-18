@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using CarbonFootprint.Infrastructure.Identity;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -63,13 +64,29 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
+        if (passwordResult.IsNotAllowed)
+        {
+            ModelState.AddModelError(string.Empty, "此帳號尚未完成 Email 確認，請先開啟確認信或重新寄送確認信。");
+            return Page();
+        }
+
         if (!passwordResult.Succeeded)
         {
             ModelState.AddModelError(string.Empty, "帳號或密碼不正確。");
             return Page();
         }
 
-        await _signInManager.SignInAsync(user, Input.RememberMe);
+        var authenticationProperties = new AuthenticationProperties
+        {
+            IsPersistent = Input.RememberMe,
+            AllowRefresh = true
+        };
+        if (Input.RememberMe)
+        {
+            authenticationProperties.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30);
+        }
+
+        await _signInManager.SignInAsync(user, authenticationProperties);
 
         if (!string.IsNullOrWhiteSpace(ReturnUrl) && Url.IsLocalUrl(ReturnUrl))
         {
