@@ -20,14 +20,14 @@
             {
                 <span class="eyebrow">確認完成</span>
                 <h2 id="confirm-title">Email 已確認</h2>
-                <p class="auth-card__intro">@Model.Message</p>
+                <p class="auth-card__intro">@Html.Raw(Model.Message)</p>
                 <a class="btn-carbon btn-carbon--wide" href="/Identity/Account/Login">前往登入 <span aria-hidden="true">→</span></a>
             }
             else
             {
                 <span class="eyebrow">確認失敗</span>
                 <h2 id="confirm-title">無法確認 Email</h2>
-                <p class="auth-card__intro">@Model.Message</p>
+                <p class="auth-card__intro">@Html.Raw(Model.Message)</p>
                 <a class="btn-carbon btn-carbon--wide" href="/Identity/Account/ResendEmailConfirmation">重新寄送確認信 <span aria-hidden="true">→</span></a>
             }
 
