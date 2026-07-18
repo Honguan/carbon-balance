@@ -2,6 +2,7 @@ using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Domain.Modules.Factors;
 using CarbonFootprint.Domain.Modules.Inventories;
 using CarbonFootprint.Domain.Modules.Organizations;
+using CarbonFootprint.Domain.Modules.Standards;
 using CarbonFootprint.Domain.Modules.Units;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Organizations;
@@ -51,6 +52,8 @@ public sealed class WorkspaceModel : PageModel
     public IReadOnlyList<InventoryProjectVersionRecord> InventoryProjects { get; private set; } = [];
 
     public IReadOnlyList<EmissionFactorVersionRecord> Factors { get; private set; } = [];
+
+    public IReadOnlyList<PcrVersionRecord> PcrVersions { get; private set; } = [];
 
     public IReadOnlyList<ActivityDataRecord> Activities { get; private set; } = [];
 
@@ -128,7 +131,7 @@ public sealed class WorkspaceModel : PageModel
         DateOnly periodStart,
         DateOnly periodEnd,
         string functionalUnit,
-        string pcrVersion,
+        Guid pcrVersionId,
         CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
@@ -137,7 +140,7 @@ public sealed class WorkspaceModel : PageModel
         }
 
         var organizationId = RequireOrganization();
-        if (periodStart > periodEnd || string.IsNullOrWhiteSpace(functionalUnit) || string.IsNullOrWhiteSpace(pcrVersion))
+        if (periodStart > periodEnd || string.IsNullOrWhiteSpace(functionalUnit))
         {
             ModelState.AddModelError("inventory", "請提供有效期間、功能單位與 PCR 版本識別。");
             await LoadAsync(cancellationToken);
@@ -147,6 +150,20 @@ public sealed class WorkspaceModel : PageModel
         if (!await _dbContext.ProductVersions.AnyAsync(item => item.Id == productVersionId, cancellationToken))
         {
             return NotFound();
+        }
+
+        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(item => item.Id == pcrVersionId, cancellationToken);
+        if (pcr is null)
+        {
+            return NotFound();
+        }
+
+        var pcrReference = ToPcrReference(pcr);
+        if (!pcrReference.IsAvailableOn(periodEnd))
+        {
+            ModelState.AddModelError("inventory", "PCR 版本未發布、已撤回或不在盤查期間有效範圍。");
+            await LoadAsync(cancellationToken);
+            return Page();
         }
 
         var projectId = Guid.NewGuid();
@@ -159,13 +176,115 @@ public sealed class WorkspaceModel : PageModel
             PeriodStart = periodStart,
             PeriodEnd = periodEnd,
             FunctionalUnit = functionalUnit.Trim(),
-            PcrVersion = pcrVersion.Trim(),
+            PcrVersionId = pcr.Id,
+            PcrVersion = $"{pcr.RegistrationNumber}-v{pcr.VersionNumber}",
             WorkflowStatus = "Draft",
             CreatedAt = DateTimeOffset.UtcNow
         });
         AddAudit("inventory.version.created", "InventoryProjectVersion", projectId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "盤查專案第 1 版已建立。";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostCreatePcrAsync(
+        string registrationNumber,
+        int versionNumber,
+        string title,
+        DateOnly? validFrom,
+        DateOnly? validTo,
+        string sourceReference,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
+        {
+            return Forbid();
+        }
+
+        if (string.IsNullOrWhiteSpace(registrationNumber)
+            || versionNumber < 1
+            || string.IsNullOrWhiteSpace(title)
+            || string.IsNullOrWhiteSpace(sourceReference)
+            || validFrom > validTo)
+        {
+            ModelState.AddModelError("pcr", "PCR 登錄編號、正整數版本、名稱、來源與有效期間必須有效。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var pcrVersionId = Guid.NewGuid();
+        _dbContext.PcrVersions.Add(new PcrVersionRecord
+        {
+            Id = pcrVersionId,
+            OrganizationId = RequireOrganization(),
+            RegistrationNumber = registrationNumber.Trim(),
+            VersionNumber = versionNumber,
+            Title = title.Trim(),
+            ValidFrom = validFrom,
+            ValidTo = validTo,
+            PublicationStatus = PcrPublicationStatus.Draft.ToString(),
+            SourceReference = sourceReference.Trim(),
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        AddAudit("pcr.version.created", "PcrVersion", pcrVersionId);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        StatusMessage = "PCR 草稿已建立；發布後才可建立新盤查。";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostPublishPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
+        {
+            return Forbid();
+        }
+
+        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(item => item.Id == pcrVersionId, cancellationToken);
+        if (pcr is null)
+        {
+            return NotFound();
+        }
+
+        if (!string.Equals(pcr.PublicationStatus, PcrPublicationStatus.Draft.ToString(), StringComparison.Ordinal))
+        {
+            ModelState.AddModelError("pcr", "只有草稿 PCR 版本可發布。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        pcr.PublicationStatus = PcrPublicationStatus.Published.ToString();
+        pcr.PublishedAt = DateTimeOffset.UtcNow;
+        AddAudit("pcr.version.published", "PcrVersion", pcr.Id);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        StatusMessage = "PCR 版本已發布。";
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostWithdrawPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
+        {
+            return Forbid();
+        }
+
+        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(item => item.Id == pcrVersionId, cancellationToken);
+        if (pcr is null)
+        {
+            return NotFound();
+        }
+
+        if (!string.Equals(pcr.PublicationStatus, PcrPublicationStatus.Published.ToString(), StringComparison.Ordinal))
+        {
+            ModelState.AddModelError("pcr", "只有已發布 PCR 版本可撤回。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        pcr.PublicationStatus = PcrPublicationStatus.Withdrawn.ToString();
+        pcr.WithdrawnAt = DateTimeOffset.UtcNow;
+        AddAudit("pcr.version.withdrawn", "PcrVersion", pcr.Id);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        StatusMessage = "PCR 版本已撤回；歷史計算不受影響。";
         return RedirectToPage();
     }
 
@@ -405,6 +524,23 @@ public sealed class WorkspaceModel : PageModel
             return NotFound();
         }
 
+        if (!project.PcrVersionId.HasValue)
+        {
+            ModelState.AddModelError("calculation", "盤查版本未綁定受治理的 PCR 版本。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(
+            item => item.Id == project.PcrVersionId.Value,
+            cancellationToken);
+        if (pcr is null || !ToPcrReference(pcr).IsAvailableOn(project.PeriodEnd))
+        {
+            ModelState.AddModelError("calculation", "PCR 版本未發布、已撤回或不在盤查期間有效範圍。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
         var activities = await _dbContext.ActivityData
             .Where(item => item.InventoryProjectVersionId == project.Id)
             .OrderBy(item => item.LifecycleStage)
@@ -487,6 +623,7 @@ public sealed class WorkspaceModel : PageModel
         }
 
         ProductVersions = await _dbContext.ProductVersions.AsNoTracking().OrderBy(item => item.NameZhTw).ToArrayAsync(cancellationToken);
+        PcrVersions = await _dbContext.PcrVersions.AsNoTracking().OrderBy(item => item.RegistrationNumber).ThenByDescending(item => item.VersionNumber).ToArrayAsync(cancellationToken);
         InventoryProjects = await _dbContext.InventoryProjectVersions.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         Factors = await _dbContext.EmissionFactorVersions.AsNoTracking().OrderBy(item => item.Name).ToArrayAsync(cancellationToken);
         Activities = await _dbContext.ActivityData.AsNoTracking().OrderBy(item => item.LifecycleStage).ThenBy(item => item.Name).ToArrayAsync(cancellationToken);
@@ -512,6 +649,14 @@ public sealed class WorkspaceModel : PageModel
             new OrganizationPermissionRequirement(permission));
         return result.Succeeded;
     }
+
+    private static PcrVersionReference ToPcrReference(PcrVersionRecord record) => new(
+        record.Id,
+        record.RegistrationNumber,
+        record.VersionNumber,
+        record.ValidFrom,
+        record.ValidTo,
+        Enum.Parse<PcrPublicationStatus>(record.PublicationStatus));
 
     private void AddAudit(string action, string resourceType, Guid resourceId)
     {

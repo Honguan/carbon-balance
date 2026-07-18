@@ -3,6 +3,7 @@ using System;
 using CarbonFootprint.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CarbonFootprint.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(CarbonFootprintDbContext))]
-    partial class CarbonFootprintDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260718085311_AddPcrGovernance")]
+    partial class AddPcrGovernance
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

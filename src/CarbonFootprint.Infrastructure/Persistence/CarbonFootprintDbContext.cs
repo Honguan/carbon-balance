@@ -22,6 +22,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
     public DbSet<ProductRecord> Products => Set<ProductRecord>();
     public DbSet<ProductVersionRecord> ProductVersions => Set<ProductVersionRecord>();
     public DbSet<InventoryProjectVersionRecord> InventoryProjectVersions => Set<InventoryProjectVersionRecord>();
+    public DbSet<PcrVersionRecord> PcrVersions => Set<PcrVersionRecord>();
     public DbSet<UnitRecord> Units => Set<UnitRecord>();
     public DbSet<EmissionFactorVersionRecord> EmissionFactorVersions => Set<EmissionFactorVersionRecord>();
     public DbSet<ActivityDataRecord> ActivityData => Set<ActivityDataRecord>();
@@ -119,7 +120,19 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.PcrVersion).HasMaxLength(200);
             entity.Property(item => item.WorkflowStatus).HasMaxLength(50);
             entity.HasIndex(item => new { item.ProductVersionId, item.VersionNumber }).IsUnique();
+            entity.HasIndex(item => item.PcrVersionId);
             entity.HasOne<ProductVersionRecord>().WithMany().HasForeignKey(item => item.ProductVersionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<PcrVersionRecord>().WithMany().HasForeignKey(item => item.PcrVersionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<PcrVersionRecord>(entity =>
+        {
+            entity.ToTable("pcr_versions");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.RegistrationNumber).HasMaxLength(100);
+            entity.Property(item => item.Title).HasMaxLength(300);
+            entity.Property(item => item.PublicationStatus).HasMaxLength(30);
+            entity.Property(item => item.SourceReference).HasMaxLength(500);
+            entity.HasIndex(item => new { item.OrganizationId, item.RegistrationNumber, item.VersionNumber }).IsUnique();
         });
         builder.Entity<ActivityDataRecord>(entity =>
         {
@@ -217,6 +230,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         builder.Entity<ProductRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<ProductVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<InventoryProjectVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<PcrVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<EmissionFactorVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<ActivityDataRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<CalculationRunRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);

@@ -554,3 +554,63 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718085311_AddPcrGovernance') THEN
+    ALTER TABLE app.inventory_project_versions ADD pcr_version_id uuid;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718085311_AddPcrGovernance') THEN
+    CREATE TABLE app.pcr_versions (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        registration_number character varying(100) NOT NULL,
+        version_number integer NOT NULL,
+        title character varying(300) NOT NULL,
+        valid_from date,
+        valid_to date,
+        publication_status character varying(30) NOT NULL,
+        source_reference character varying(500) NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        published_at timestamp with time zone,
+        withdrawn_at timestamp with time zone,
+        CONSTRAINT pk_pcr_versions PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718085311_AddPcrGovernance') THEN
+    CREATE INDEX ix_inventory_project_versions_pcr_version_id ON app.inventory_project_versions (pcr_version_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718085311_AddPcrGovernance') THEN
+    CREATE UNIQUE INDEX ix_pcr_versions_organization_id_registration_number_version_nu ON app.pcr_versions (organization_id, registration_number, version_number);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718085311_AddPcrGovernance') THEN
+    ALTER TABLE app.inventory_project_versions ADD CONSTRAINT fk_inventory_project_versions_pcr_versions_pcr_version_id FOREIGN KEY (pcr_version_id) REFERENCES app.pcr_versions (id) ON DELETE RESTRICT;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718085311_AddPcrGovernance') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260718085311_AddPcrGovernance', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
+

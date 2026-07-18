@@ -1,16 +1,22 @@
 namespace CarbonFootprint.Domain.Modules.Standards;
 
+public enum PcrPublicationStatus
+{
+    Draft,
+    Published,
+    Withdrawn
+}
+
 public sealed record PcrVersionReference(
     Guid Id,
     string RegistrationNumber,
     int VersionNumber,
     DateOnly? ValidFrom,
     DateOnly? ValidTo,
-    string Status)
+    PcrPublicationStatus Status)
 {
     public bool IsAvailableOn(DateOnly date) =>
-        string.Equals(Status, "published", StringComparison.OrdinalIgnoreCase)
+        Status == PcrPublicationStatus.Published
         && (ValidFrom is null || ValidFrom <= date)
         && (ValidTo is null || ValidTo >= date);
 }
-

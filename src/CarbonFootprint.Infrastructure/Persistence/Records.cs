@@ -50,9 +50,26 @@ public sealed class InventoryProjectVersionRecord : IOrganizationOwned
     public DateOnly PeriodStart { get; set; }
     public DateOnly PeriodEnd { get; set; }
     public required string FunctionalUnit { get; set; }
+    public Guid? PcrVersionId { get; set; }
     public required string PcrVersion { get; set; }
     public required string WorkflowStatus { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+}
+
+public sealed class PcrVersionRecord : IOrganizationOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public required string RegistrationNumber { get; set; }
+    public int VersionNumber { get; set; }
+    public required string Title { get; set; }
+    public DateOnly? ValidFrom { get; set; }
+    public DateOnly? ValidTo { get; set; }
+    public required string PublicationStatus { get; set; }
+    public required string SourceReference { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? PublishedAt { get; set; }
+    public DateTimeOffset? WithdrawnAt { get; set; }
 }
 
 public sealed class UnitRecord

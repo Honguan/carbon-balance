@@ -2,6 +2,7 @@
 @model CarbonFootprint.Web.Pages.WorkspaceModel
 @using CarbonFootprint.Domain.Modules.Factors
 @using CarbonFootprint.Domain.Modules.Inventories
+@using CarbonFootprint.Domain.Modules.Standards
 @{
     ViewData["Title"] = "盤查工作區";
 }
@@ -54,7 +55,52 @@ else
         <div class="col-lg-6">
             <section class="card h-100">
                 <div class="card-body">
-                    <h2 class="h4">3. 盤查專案版本</h2>
+                    <h2 class="h4">3. PCR 版本</h2>
+                    <form method="post" asp-page-handler="CreatePcr">
+                        <label class="form-label" for="registrationNumber">登錄編號</label>
+                        <input class="form-control" id="registrationNumber" name="registrationNumber" required />
+                        <label class="form-label mt-2" for="pcrTitle">名稱</label>
+                        <input class="form-control" id="pcrTitle" name="title" required />
+                        <label class="form-label mt-2" for="pcrVersionNumber">版本</label>
+                        <input class="form-control" type="number" min="1" id="pcrVersionNumber" name="versionNumber" value="1" required />
+                        <label class="form-label mt-2" for="pcrValidFrom">有效起日</label>
+                        <input class="form-control" type="date" id="pcrValidFrom" name="validFrom" value="2025-01-01" />
+                        <label class="form-label mt-2" for="pcrValidTo">有效迄日</label>
+                        <input class="form-control" type="date" id="pcrValidTo" name="validTo" value="2027-12-31" />
+                        <label class="form-label mt-2" for="sourceReference">來源參照</label>
+                        <input class="form-control" id="sourceReference" name="sourceReference" placeholder="文件編號或受控來源 URI" required />
+                        <button class="btn btn-primary mt-3" type="submit">建立 PCR 草稿</button>
+                    </form>
+                    <ul class="mt-3">
+                        @foreach (var pcr in Model.PcrVersions)
+                        {
+                            <li class="mb-2">
+                                @pcr.RegistrationNumber v@pcr.VersionNumber：@pcr.Title（@pcr.PublicationStatus）
+                                @if (pcr.PublicationStatus == PcrPublicationStatus.Draft.ToString())
+                                {
+                                    <form class="d-inline" method="post" asp-page-handler="PublishPcr">
+                                        <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
+                                        <button class="btn btn-sm btn-success" type="submit">發布</button>
+                                    </form>
+                                }
+                                else if (pcr.PublicationStatus == PcrPublicationStatus.Published.ToString())
+                                {
+                                    <form class="d-inline" method="post" asp-page-handler="WithdrawPcr">
+                                        <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">撤回</button>
+                                    </form>
+                                }
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </section>
+        </div>
+
+        <div class="col-lg-6">
+            <section class="card h-100">
+                <div class="card-body">
+                    <h2 class="h4">4. 盤查專案版本</h2>
                     <form method="post" asp-page-handler="CreateInventory">
                         <label class="form-label" for="productVersionId">產品版本</label>
                         <select class="form-select" id="productVersionId" name="productVersionId" required>
@@ -69,8 +115,13 @@ else
                         <input class="form-control" type="date" id="periodEnd" name="periodEnd" value="2026-12-31" required />
                         <label class="form-label mt-2" for="functionalUnit">功能單位</label>
                         <input class="form-control" id="functionalUnit" name="functionalUnit" value="1 個產品" required />
-                        <label class="form-label mt-2" for="pcrVersion">PCR 版本識別</label>
-                        <input class="form-control" id="pcrVersion" name="pcrVersion" value="pcr-golden-unapproved-1" required />
+                        <label class="form-label mt-2" for="pcrVersionId">PCR 版本</label>
+                        <select class="form-select" id="pcrVersionId" name="pcrVersionId" required>
+                            @foreach (var pcr in Model.PcrVersions)
+                            {
+                                <option value="@pcr.Id">@pcr.RegistrationNumber v@pcr.VersionNumber - @pcr.Title</option>
+                            }
+                        </select>
                         <button class="btn btn-primary mt-3" type="submit">建立盤查第 1 版</button>
                     </form>
                 </div>
@@ -80,7 +131,7 @@ else
         <div class="col-lg-6">
             <section class="card h-100">
                 <div class="card-body">
-                    <h2 class="h4">4. 係數版本</h2>
+                    <h2 class="h4">5. 係數版本</h2>
                     <form method="post" asp-page-handler="CreateFactor">
                         <label class="form-label" for="factorName">係數名稱</label>
                         <input class="form-control" id="factorName" name="factorName" required />
@@ -128,7 +179,7 @@ else
         <div class="col-lg-6">
             <section class="card h-100">
                 <div class="card-body">
-                    <h2 class="h4">5. 五階段活動數據</h2>
+                    <h2 class="h4">6. 五階段活動數據</h2>
                     <form method="post" asp-page-handler="AddActivity">
                         <label class="form-label" for="inventoryProjectVersionId">盤查版本</label>
                         <select class="form-select" id="inventoryProjectVersionId" name="inventoryProjectVersionId" required>
@@ -178,7 +229,7 @@ else
 
     <section class="card my-4">
         <div class="card-body">
-            <h2 class="h4">6. 建立不可變計算 Run</h2>
+            <h2 class="h4">7. 建立不可變計算 Run</h2>
             <p>五個階段各至少需要一筆活動數據，且 canonical 單位須符合所選係數分母。</p>
             <form method="post" asp-page-handler="Calculate">
                 <label class="form-label" for="calculationInventoryId">盤查版本</label>

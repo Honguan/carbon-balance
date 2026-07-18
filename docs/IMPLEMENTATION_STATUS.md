@@ -13,8 +13,8 @@
 | 1 | ARC-002 PostgreSQL／EF migration | complete | PostgreSQL 18.4 空庫套用兩版 migration；19 張 app／identity 表、4 筆單位種子 | — |
 | 1 | DEV-001 Docker Compose | complete | postgres、MinIO、Mailpit、web 全部 healthy；首頁與 health 200；Data Protection key 持久化 | — |
 | 1 | CAL Golden Vertical Slice | complete | E2E 完成註冊、確認、登入、組織、盤查、五階段資料與 7 kgCO2e 不可變計算 | PCR 與係數仍為未核准測試 fixture |
-| 2 | Identity／Organizations／Products／Inventory | in-progress | confirmed account、租戶範圍、產品與盤查版本 UI 已可操作 | MFA、角色矩陣與完整工作流待完成 |
-| 3 | Units／Factors／PCR 治理 | pending | — | — |
+| 2 | Identity／Organizations／Products／Inventory | in-progress | confirmed account、租戶範圍、角色權限矩陣、產品與盤查版本 UI 已可操作 | MFA、邀請與完整工作流待完成 |
+| 3 | Units／Factors／PCR 治理 | in-progress | 單位種子；係數與 PCR 草稿、發布、撤回、有效期防護；盤查綁定 PCR 主鍵 | 匯入 staging、差異與 supersede 待完成 |
 | 4 | 五階段生命週期資料與 Evidence | pending | — | — |
 | 5 | 完整不可變計算引擎 | pending | — | — |
 | 6 | 審核、報告、匯出與查驗準備 | pending | — | — |
@@ -24,9 +24,9 @@
 ## 最近驗證
 
 - `dotnet build --configuration Release --no-restore`：成功，0 warning／0 error。
-- `dotnet test --configuration Release --no-restore`：14 項通過（Unit 4、Golden 2、Architecture 2、Contract 1、Integration 3、Security 2）。
+- `dotnet test --configuration Release --no-build`：25 項通過（Unit 15、Golden 2、Architecture 2、Contract 1、Integration 3、Security 2）。
 - `docker compose config --quiet`：成功。
 - `docker compose up -d --build`：PostgreSQL 18.4、MinIO、Mailpit、Web healthy。
-- 空資料庫 migration：`20260718081447_InitialCreate` 與 `20260718082504_SeedUnitCatalogueV1` 成功，`app`／`identity` 共 19 張表。
+- 既有資料庫 migration：依序套用 `InitialCreate`、`SeedUnitCatalogueV1`、`AddPcrGovernance` 成功，共 20 張 app／identity 表。
 - Smoke：`/`、`/health/live`、`/health/ready` 均為 HTTP 200。
 - E2E Smoke：註冊信、確認、登入、建檔、五階段計算通過；總量 7 kgCO2e 且有 64 字元 input SHA-256。

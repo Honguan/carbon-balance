@@ -46,6 +46,16 @@ function Get-OptionValue([string]$Html, [string]$VisibleTextPattern) {
     return $match.Groups[1].Value
 }
 
+function Get-HiddenValue([string]$Html, [string]$Name) {
+    $pattern = '<input type="hidden" name="{0}" value="([0-9a-f-]{{36}})"' -f [regex]::Escape($Name)
+    $match = [regex]::Match($Html, $pattern, 'IgnoreCase')
+    if (-not $match.Success) {
+        throw "Hidden value was not found: $Name"
+    }
+
+    return $match.Groups[1].Value
+}
+
 $register = Get-PageToken "$BaseUrl/Identity/Account/Register"
 Invoke-WebRequest -UseBasicParsing -WebSession $session -Method Post -Uri "$BaseUrl/Identity/Account/Register" -Body @{
     'Input.Email' = $email
@@ -90,12 +100,24 @@ Post-Workspace 'CreateProduct' @{ productName = "$namePrefix Product" } | Out-Nu
 $workspace = (Invoke-WebRequest -UseBasicParsing -WebSession $session "$BaseUrl/Workspace").Content
 $productVersionId = Get-OptionValue $workspace ([regex]::Escape("$namePrefix Product"))
 
+Post-Workspace 'CreatePcr' @{
+    registrationNumber = "$namePrefix-PCR"
+    versionNumber = '1'
+    title = "$namePrefix PCR"
+    validFrom = '2025-01-01'
+    validTo = '2027-12-31'
+    sourceReference = 'golden-pcr-source-1'
+} | Out-Null
+$workspace = (Invoke-WebRequest -UseBasicParsing -WebSession $session "$BaseUrl/Workspace").Content
+$pcrVersionId = Get-HiddenValue $workspace 'pcrVersionId'
+Post-Workspace 'PublishPcr' @{ pcrVersionId = $pcrVersionId } | Out-Null
+
 Post-Workspace 'CreateInventory' @{
     productVersionId = $productVersionId
     periodStart = '2026-01-01'
     periodEnd = '2026-12-31'
     functionalUnit = '1 product'
-    pcrVersion = 'pcr-golden-unapproved-1'
+    pcrVersionId = $pcrVersionId
 } | Out-Null
 $workspace = (Invoke-WebRequest -UseBasicParsing -WebSession $session "$BaseUrl/Workspace").Content
 $inventoryId = Get-OptionValue $workspace ([regex]::Escape('1 product'))
