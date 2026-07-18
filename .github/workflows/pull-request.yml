@@ -30,7 +30,7 @@ jobs:
       ConnectionStrings__Database: Host=127.0.0.1;Port=5432;Database=carbon_footprint_ci;Username=carbon_ci;Password=ci-only-password;SSL Mode=Disable;GSS Encryption Mode=Disable
       CARBON_TEST_DB_CONNECTION: Host=127.0.0.1;Port=5432;Database=carbon_footprint_ci;Username=carbon_ci;Password=ci-only-password;SSL Mode=Disable;GSS Encryption Mode=Disable
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.302
@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Scan repository history for secrets
@@ -91,7 +91,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Build release image
         run: docker build --tag carbon-footprint:${{ github.sha }} --file src/CarbonFootprint.Web/Dockerfile .
       - name: Scan filesystem for Critical and High vulnerabilities
