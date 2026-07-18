@@ -62,7 +62,25 @@ jobs:
         run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory TestResults
       - name: NuGet vulnerability audit
         run: dotnet restore --locked-mode -p:NuGetAudit=true -p:NuGetAuditMode=all -p:TreatWarningsAsErrors=true
+      - name: Validate Bash setup script
+        run: bash -n scripts/setup-local.sh
+      - name: Validate PowerShell setup script
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/setup-local.ps1'),
+            [ref]$tokens,
+            [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
       - name: Validate Compose
+        env:
+          POSTGRES_PASSWORD: ci-compose-postgres-password
+          MINIO_ROOT_PASSWORD: ci-compose-minio-password
         run: docker compose config --quiet
       - name: Upload test results
         if: always()

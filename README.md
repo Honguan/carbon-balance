@@ -20,7 +20,7 @@
 - 建議至少 4 GB 可用記憶體；ClamAV 首次啟動會需要較多時間與記憶體
 - 約 5 GB 以上可用磁碟空間
 
-確認 Docker 可正常使用：
+確認 Docker 已啟動且可正常使用：
 
 ```bash
 docker --version
@@ -38,7 +38,55 @@ cd carbon-balance
 
 不熟悉 Git 的使用者也可以在 GitHub 頁面選擇 **Code → Download ZIP**，解壓縮後在終端機進入該資料夾。
 
-### 2. 建立本機設定
+### 2. 一鍵建立密碼並啟動
+
+首次執行時，設定腳本會：
+
+1. 自動產生兩組不同的 48 字元本機密碼。
+2. 建立不會提交到 Git 的 `.env`。
+3. 在終端機顯示 PostgreSQL 與 MinIO 的帳號、密碼及 `.env` 位置。
+4. 驗證 Docker Compose 設定。
+5. 建置映像、執行資料庫 migration 並啟動全部服務。
+
+Windows PowerShell：
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\setup-local.ps1
+```
+
+macOS／Linux：
+
+```bash
+bash scripts/setup-local.sh
+```
+
+> [!IMPORTANT]
+> 密碼只會在第一次建立 `.env` 時顯示。之後腳本會沿用原本的 `.env`，不會自動覆寫密碼。請勿把 `.env` 上傳到 GitHub、貼到聊天或傳給其他人。
+
+### 手動設定密碼
+
+不想使用自動產生的密碼時，可使用隱藏輸入模式。
+
+Windows PowerShell：
+
+```powershell
+.\scripts\setup-local.ps1 -Manual
+```
+
+macOS／Linux：
+
+```bash
+bash scripts/setup-local.sh --manual
+```
+
+手動密碼規則：
+
+- 16～128 字元
+- PostgreSQL 與 MinIO 必須使用不同密碼
+- 為避免 `.env` 與連線字串解析問題，只使用英文字母、數字、句點、底線或連字號
+
+也可以自行建立設定檔：
 
 Windows PowerShell：
 
@@ -54,26 +102,38 @@ cp .env.example .env
 nano .env
 ```
 
-至少修改以下兩個預設密碼，請使用不同且足夠長的隨機密碼：
+至少填入：
 
 ```dotenv
-POSTGRES_PASSWORD=請替換成資料庫密碼
-MINIO_ROOT_PASSWORD=請替換成物件儲存密碼
+POSTGRES_PASSWORD=你的資料庫密碼
+MINIO_ROOT_PASSWORD=另一組物件儲存密碼
 ```
 
-`docker-compose.yml` 會依 `POSTGRES_PASSWORD` 自動組合容器內的資料庫連線字串。`.env` 裡的 `CONNECTIONSTRINGS__DATABASE` 主要供不透過 Docker 啟動 Web 時使用；一般 Docker 使用者不需要修改它。
-
-請勿將包含真實密碼的 `.env` 上傳到 GitHub 或傳給其他人。
-
-### 3. 啟動系統
+填寫完成後啟動：
 
 ```bash
-docker compose config
+docker compose config --quiet
 docker compose up -d --build
-docker compose ps
+docker compose ps -a
 ```
 
-第一次啟動時會自動：
+Docker Compose 不再提供公開的固定預設密碼；沒有設定兩組密碼時會直接停止，避免意外建立使用已知密碼的服務。
+
+### 只建立設定、不啟動服務
+
+Windows PowerShell：
+
+```powershell
+.\scripts\setup-local.ps1 -NoStart
+```
+
+macOS／Linux：
+
+```bash
+bash scripts/setup-local.sh --no-start
+```
+
+### 第一次啟動會執行的工作
 
 1. 下載並啟動 PostgreSQL、MinIO、Mailpit 與 ClamAV。
 2. 建置 Web 應用程式映像。
@@ -83,31 +143,35 @@ docker compose ps
 ClamAV 第一次初始化可能較慢。可重複執行以下指令，直到 `web` 顯示為 `healthy`：
 
 ```bash
-docker compose ps
+docker compose ps -a
 ```
 
-若啟動失敗，先查看完整記錄：
+`migrate` 顯示 `Exited (0)` 代表資料庫 migration 已成功完成，屬於正常狀態。
+
+若啟動失敗，查看記錄：
 
 ```bash
-docker compose logs --tail=200
+docker compose logs migrate --tail=200
+docker compose logs web --tail=200
+docker compose logs postgres --tail=200
 ```
 
 ## 開啟系統
 
 | 服務 | 網址 | 用途 |
 |---|---|---|
-| 碳足跡系統 | http://localhost:8088 | 主要操作介面 |
-| Mailpit | http://localhost:8025 | 查看註冊確認信與測試郵件 |
-| MinIO Console | http://localhost:9001 | 查看證據附件物件儲存 |
-| Liveness | http://localhost:8088/health/live | 確認 Web 程序存活 |
-| Readiness | http://localhost:8088/health/ready | 確認 Web 與資料庫可用 |
+| 碳足跡系統 | http://127.0.0.1:8088 | 主要操作介面 |
+| Mailpit | http://127.0.0.1:8025 | 查看註冊確認信與測試郵件 |
+| MinIO Console | http://127.0.0.1:9001 | 查看證據附件物件儲存 |
+| Liveness | http://127.0.0.1:8088/health/live | 確認 Web 程序存活 |
+| Readiness | http://127.0.0.1:8088/health/ready | 確認 Web 與資料庫可用 |
 
 MinIO Console 的帳號與密碼分別為 `.env` 中的 `MINIO_ROOT_USER` 與 `MINIO_ROOT_PASSWORD`。
 
 ## 第一次使用
 
-1. 開啟 `http://localhost:8088`，選擇註冊帳號。
-2. 完成註冊後，開啟 `http://localhost:8025`。
+1. 開啟 `http://127.0.0.1:8088`，選擇註冊帳號。
+2. 完成註冊後，開啟 `http://127.0.0.1:8025`。
 3. 在 Mailpit 找到系統寄出的確認信，點擊信中的確認連結。
 4. 回到系統登入。
 5. 在帳號管理頁啟用驗證器 MFA；發布係數、PCR 與其他敏感操作會要求 MFA。
@@ -135,7 +199,7 @@ MinIO Console 的帳號與密碼分別為 `.env` 中的 `MINIO_ROOT_USER` 與 `M
 查看服務狀態：
 
 ```bash
-docker compose ps
+docker compose ps -a
 ```
 
 持續查看 Web 記錄：
@@ -169,32 +233,80 @@ git pull
 docker compose up -d --build
 ```
 
-### 清除全部本機資料
+### 清除全部本機資料並重建
 
 > [!CAUTION]
-> 以下指令會刪除 PostgreSQL 資料、MinIO 附件、Mailpit 郵件、ClamAV 資料與 Data Protection Keys，無法復原。
+> 以下操作會刪除 PostgreSQL 資料、MinIO 附件、Mailpit 郵件、ClamAV 資料與 Data Protection Keys，無法復原。
 
-```bash
-docker compose down -v
+Windows PowerShell：
+
+```powershell
+.\scripts\setup-local.ps1 -ResetData
 ```
 
-清除後重新啟動：
+macOS／Linux：
 
 ```bash
+bash scripts/setup-local.sh --reset-data
+```
+
+也可以手動執行：
+
+```bash
+docker compose down -v --remove-orphans
 docker compose up -d --build
 ```
 
+## 密碼與資料 Volume 注意事項
+
+PostgreSQL 密碼只會在資料 Volume 第一次初始化時套用。資料庫建立後，單純修改 `.env` 的 `POSTGRES_PASSWORD` 不會同步修改資料庫內的帳號密碼。
+
+因此：
+
+- 不要刪除仍在使用中的 `.env`。
+- 不要在已有資料的情況下任意修改 `POSTGRES_PASSWORD`。
+- 若 `.env` 遺失但 PostgreSQL Volume 還存在，設定腳本會停止，不會產生一組無法登入舊資料的新密碼。
+- 需要保留資料時，請找回原本 `.env`，或由資料庫管理員修改 PostgreSQL 帳號密碼。
+- 純測試資料可刪除時，使用 `-ResetData` 或 `--reset-data` 重建。
+
 ## 常見問題
 
-### 網頁無法開啟
+### `password authentication failed for user "carbon_app"`
+
+代表 PostgreSQL Volume 內的密碼和目前 `.env` 不一致。
+
+若資料不需要保留：
+
+```powershell
+.\scripts\setup-local.ps1 -ResetData
+```
+
+需要保留資料時，不要刪除 Volume，請恢復原本 `.env` 或修改資料庫帳號密碼。
+
+### 網頁無法開啟或顯示 `ERR_EMPTY_RESPONSE`
+
+先使用完整 HTTP 網址：
+
+```text
+http://127.0.0.1:8088
+```
+
+再檢查：
 
 ```bash
-docker compose ps
+docker compose ps -a
 docker compose logs web --tail=200
 docker compose logs migrate --tail=200
 ```
 
-確認 `migrate` 已正常結束，且 `web` 已進入 `healthy`。
+確認 `migrate` 為 `Exited (0)`，且 `web` 已進入 `healthy`。
+
+Windows 可用以下方式測試：
+
+```powershell
+curl.exe -i http://127.0.0.1:8088/health/live
+curl.exe -i http://127.0.0.1:8088/health/ready
+```
 
 ### ClamAV 長時間無法健康
 
@@ -204,17 +316,17 @@ docker compose logs migrate --tail=200
 
 ### 收不到註冊確認信
 
-本機環境不會寄到真實信箱。請開啟 Mailpit：
+本機環境不會寄到真實信箱。請開啟：
 
 ```text
-http://localhost:8025
+http://127.0.0.1:8025
 ```
 
 確認信會直接出現在 Mailpit 收件匣。
 
 ### 連接埠被占用
 
-預設會使用以下連接埠：
+預設會使用：
 
 - `8088`：Web
 - `5432`：PostgreSQL
@@ -228,18 +340,7 @@ ports:
   - "8090:8080"
 ```
 
-修改後 Web 網址會變成 `http://localhost:8090`。
-
-### 修改 `.env` 後沒有生效
-
-重新建立容器：
-
-```bash
-docker compose down
-docker compose up -d --build
-```
-
-若已建立 PostgreSQL volume，事後只改 `POSTGRES_PASSWORD` 不會自動修改資料庫內既有帳號密碼。純測試環境可先備份必要資料，再使用 `docker compose down -v` 重建。
+修改後 Web 網址會變成 `http://127.0.0.1:8090`。
 
 ## 開發者環境
 
@@ -252,12 +353,12 @@ docker compose up -d --build
 Windows PowerShell：
 
 ```powershell
-Copy-Item .env.example .env
+.\scripts\setup-local.ps1 -NoStart
 dotnet restore --locked-mode
 dotnet format --verify-no-changes --no-restore
 dotnet build --configuration Release --no-restore
 dotnet test --configuration Release --no-build
-docker compose config
+docker compose config --quiet
 docker compose up -d --build
 ```
 
