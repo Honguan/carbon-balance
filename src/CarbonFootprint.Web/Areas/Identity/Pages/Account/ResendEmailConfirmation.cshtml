@@ -25,7 +25,7 @@
                 <div class="status-message" role="status">@Model.StatusMessage</div>
             }
 
-            <form method="post" class="auth-form">
+            <form method="post" asp-antiforgery="true" class="auth-form" novalidate>
                 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
                 <div class="field-group">
                     <label asp-for="Input.Email"></label>
@@ -44,11 +44,10 @@
                 </button>
             </form>
 
-            <a class="auth-back" asp-page="./Login">← 返回登入</a>
+            <div class="auth-account-links auth-account-links--single">
+                <a class="initial-account-link" href="/Identity/Account/Register">尚未註冊？建立帳號</a>
+            </div>
+            <a class="auth-back" href="/Identity/Account/Login" data-history-back>← 返回上一頁</a>
         </div>
     </div>
 </section>
-
-@section Scripts {
-    <partial name="_ValidationScriptsPartial" />
-}

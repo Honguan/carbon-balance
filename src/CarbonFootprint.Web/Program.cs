@@ -96,6 +96,20 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+app.UseStatusCodePages(async statusCodeContext =>
+{
+    var httpContext = statusCodeContext.HttpContext;
+    if (httpContext.Response.StatusCode == StatusCodes.Status400BadRequest
+        && httpContext.Request.Path.StartsWithSegments("/Identity/Account")
+        && !httpContext.Response.HasStarted)
+    {
+        httpContext.Response.Redirect("/Identity/Account/Login?requestExpired=true");
+        return;
+    }
+
+    await Task.CompletedTask;
+});
+
 app.Use(async (context, next) =>
 {
     const string headerName = "X-Correlation-ID";

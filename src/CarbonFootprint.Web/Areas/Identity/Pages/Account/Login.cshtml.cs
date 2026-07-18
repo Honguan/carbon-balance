@@ -1,12 +1,14 @@
 using System.ComponentModel.DataAnnotations;
 using CarbonFootprint.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace CarbonFootprint.Web.Areas.Identity.Pages.Account;
 
+[AllowAnonymous]
 public sealed class LoginModel : PageModel
 {
     private readonly SignInManager<ApplicationUser> _signInManager;
@@ -26,11 +28,21 @@ public sealed class LoginModel : PageModel
     [BindProperty(SupportsGet = true)]
     public string? ReturnUrl { get; set; }
 
-    public IActionResult OnGet()
+    public async Task<IActionResult> OnGetAsync(bool requestExpired = false)
     {
+        // The anti-forgery token is bound to the current identity. After an
+        // explicit sign-out, redirect once so the login form and token are
+        // rendered in a fresh anonymous request.
         if (_signInManager.IsSignedIn(User))
         {
-            return RedirectToPage("/Workspace", new { area = string.Empty });
+            await _signInManager.SignOutAsync();
+            TempData["AccountMessage"] = "已清除原有登入狀態，請重新輸入帳號與密碼。";
+            return RedirectToPage("./Login", new { returnUrl = ReturnUrl });
+        }
+
+        if (requestExpired)
+        {
+            TempData["AccountMessage"] = "頁面已更新或表單已逾時，請重新操作。";
         }
 
         return Page();
@@ -38,6 +50,11 @@ public sealed class LoginModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
+        if (_signInManager.IsSignedIn(User))
+        {
+            await _signInManager.SignOutAsync();
+        }
+
         if (!ModelState.IsValid)
         {
             return Page();
