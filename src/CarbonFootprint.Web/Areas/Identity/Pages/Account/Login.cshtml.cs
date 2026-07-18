@@ -30,15 +30,17 @@ public sealed class LoginModel : PageModel
 
     public async Task<IActionResult> OnGetAsync(bool requestExpired = false)
     {
-        // Visiting the login page is an explicit request to authenticate again.
-        // Clear stale cookies from older builds so the page can never appear to
-        // log a user in without credentials.
+        // The anti-forgery token is bound to the current identity. After an
+        // explicit sign-out, redirect once so the login form and token are
+        // rendered in a fresh anonymous request.
         if (_signInManager.IsSignedIn(User))
         {
             await _signInManager.SignOutAsync();
             TempData["AccountMessage"] = "已清除原有登入狀態，請重新輸入帳號與密碼。";
+            return RedirectToPage("./Login", new { returnUrl = ReturnUrl });
         }
-        else if (requestExpired)
+
+        if (requestExpired)
         {
             TempData["AccountMessage"] = "頁面已更新或表單已逾時，請重新操作。";
         }
@@ -48,8 +50,6 @@ public sealed class LoginModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
-        // A stale authentication cookie must not survive an empty or invalid
-        // login submission.
         if (_signInManager.IsSignedIn(User))
         {
             await _signInManager.SignOutAsync();
