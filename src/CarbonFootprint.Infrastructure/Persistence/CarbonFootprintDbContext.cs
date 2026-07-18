@@ -26,6 +26,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
     public DbSet<UnitRecord> Units => Set<UnitRecord>();
     public DbSet<EmissionFactorVersionRecord> EmissionFactorVersions => Set<EmissionFactorVersionRecord>();
     public DbSet<ActivityDataRecord> ActivityData => Set<ActivityDataRecord>();
+    public DbSet<EvidenceFileRecord> EvidenceFiles => Set<EvidenceFileRecord>();
     public DbSet<CalculationRunRecord> CalculationRuns => Set<CalculationRunRecord>();
     public DbSet<CalculationLineRecord> CalculationLineItems => Set<CalculationLineRecord>();
     public DbSet<CalculationStageSummaryRecord> CalculationStageSummaries => Set<CalculationStageSummaryRecord>();
@@ -148,6 +149,18 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.HasOne<InventoryProjectVersionRecord>().WithMany().HasForeignKey(item => item.InventoryProjectVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<EmissionFactorVersionRecord>().WithMany().HasForeignKey(item => item.FactorVersionId).OnDelete(DeleteBehavior.Restrict);
         });
+        builder.Entity<EvidenceFileRecord>(entity =>
+        {
+            entity.ToTable("evidence_files");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ObjectKey).HasMaxLength(500);
+            entity.Property(item => item.OriginalFileName).HasMaxLength(300);
+            entity.Property(item => item.ContentType).HasMaxLength(200);
+            entity.Property(item => item.Sha256).HasMaxLength(64);
+            entity.Property(item => item.ScanStatus).HasMaxLength(30);
+            entity.HasIndex(item => new { item.OrganizationId, item.Sha256 });
+            entity.HasOne<ActivityDataRecord>().WithMany().HasForeignKey(item => item.ActivityDataId).OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureUnitsAndFactors(ModelBuilder builder)
@@ -233,6 +246,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         builder.Entity<PcrVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<EmissionFactorVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<ActivityDataRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<EvidenceFileRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<CalculationRunRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<CalculationLineRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<CalculationStageSummaryRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);

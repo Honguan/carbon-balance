@@ -222,6 +222,28 @@ else
                         </select>
                         <button class="btn btn-primary mt-3" type="submit">保存活動數據</button>
                     </form>
+                    <ul class="mt-3">
+                        @foreach (var activity in Model.Activities)
+                        {
+                            var evidence = Model.EvidenceFiles.SingleOrDefault(item => item.ActivityDataId == activity.Id);
+                            <li class="mb-3">
+                                @activity.Name（@((LifecycleStage)activity.LifecycleStage)，@activity.CanonicalValue @activity.CanonicalUnitCode）
+                                @if (evidence is null)
+                                {
+                                    <form method="post" enctype="multipart/form-data" asp-page-handler="UploadEvidence">
+                                        <input type="hidden" name="activityDataId" value="@activity.Id" />
+                                        <label class="form-label" for="evidence-@activity.Id">Evidence 檔案</label>
+                                        <input class="form-control" type="file" id="evidence-@activity.Id" name="evidenceFile" required />
+                                        <button class="btn btn-sm btn-outline-primary mt-1" type="submit">掃描並上傳</button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <span>Evidence：@evidence.OriginalFileName／@evidence.ScanStatus／<code>@evidence.Sha256</code></span>
+                                }
+                            </li>
+                        }
+                    </ul>
                 </div>
             </section>
         </div>

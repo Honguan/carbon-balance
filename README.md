@@ -7,7 +7,7 @@
 ## 開發前置需求
 
 - .NET SDK 10.0.302 或相容的 10.0.3xx patch
-- Docker Desktop 及 Docker Compose
+- Docker Desktop 及 Docker Compose（ClamAV 建議至少配置 4 GB 可用記憶體）
 - Git
 
 ## 快速開始
@@ -19,6 +19,13 @@ dotnet build --configuration Release --no-restore
 dotnet test --configuration Release --no-build
 docker compose config
 docker compose up -d --build
+```
+
+完整本機 Golden E2E（密碼須符合 Identity policy）：
+
+```powershell
+$smokePassword = Read-Host '輸入一次性 E2E 密碼'
+.\scripts\smoke-e2e.ps1 -Password $smokePassword
 ```
 
 服務啟動後：

@@ -1,5 +1,6 @@
 using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Infrastructure.Identity;
+using CarbonFootprint.Infrastructure.Evidence;
 using CarbonFootprint.Infrastructure.Organizations;
 using CarbonFootprint.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -21,6 +22,10 @@ public static class DependencyInjection
         services.TryAddScoped<IOrganizationScope, UnscopedOrganizationScope>();
         services.AddScoped<ICalculationRunStore, CalculationRunStore>();
         services.AddScoped<OrganizationOnboardingService>();
+        services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.SectionName));
+        services.Configure<MalwareScannerOptions>(configuration.GetSection(MalwareScannerOptions.SectionName));
+        services.AddScoped<ClamAvMalwareScanner>();
+        services.AddScoped<EvidenceStorageService>();
         services.Configure<MailOptions>(configuration.GetSection(MailOptions.SectionName));
         services.AddScoped<IEmailSender<ApplicationUser>, SmtpEmailSender>();
         services.AddDefaultIdentity<ApplicationUser>(options =>

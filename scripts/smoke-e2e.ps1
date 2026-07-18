@@ -56,6 +56,28 @@ function Get-HiddenValue([string]$Html, [string]$Name) {
     return $match.Groups[1].Value
 }
 
+function Post-Evidence([string]$ActivityDataId) {
+    $page = Get-PageToken "$BaseUrl/Workspace"
+    $boundary = "----------------p0smoke$suffix"
+    $encoding = [System.Text.Encoding]::UTF8
+    $prefix = "--$boundary`r`nContent-Disposition: form-data; name=`"__RequestVerificationToken`"`r`n`r`n$($page.Token)`r`n" +
+        "--$boundary`r`nContent-Disposition: form-data; name=`"activityDataId`"`r`n`r`n$ActivityDataId`r`n" +
+        "--$boundary`r`nContent-Disposition: form-data; name=`"evidenceFile`"; filename=`"evidence.txt`"`r`n" +
+        "Content-Type: text/plain`r`n`r`n"
+    $fileBytes = $encoding.GetBytes("P0 evidence $suffix")
+    $suffixBytes = $encoding.GetBytes("`r`n--$boundary--`r`n")
+    $prefixBytes = $encoding.GetBytes($prefix)
+    $body = New-Object System.IO.MemoryStream
+    $body.Write($prefixBytes, 0, $prefixBytes.Length)
+    $body.Write($fileBytes, 0, $fileBytes.Length)
+    $body.Write($suffixBytes, 0, $suffixBytes.Length)
+
+    return Invoke-WebRequest -UseBasicParsing -WebSession $session -Method Post `
+        -Uri "$BaseUrl/Workspace?handler=UploadEvidence" `
+        -ContentType "multipart/form-data; boundary=$boundary" `
+        -Body $body.ToArray()
+}
+
 $register = Get-PageToken "$BaseUrl/Identity/Account/Register"
 Invoke-WebRequest -UseBasicParsing -WebSession $session -Method Post -Uri "$BaseUrl/Identity/Account/Register" -Body @{
     'Input.Email' = $email
@@ -165,6 +187,13 @@ foreach ($activity in $activities) {
         canonicalUnitCode = $activity.CanonicalUnit
         factorVersionId = $activity.Factor
     } | Out-Null
+}
+
+$workspace = (Invoke-WebRequest -UseBasicParsing -WebSession $session "$BaseUrl/Workspace").Content
+$activityDataId = Get-HiddenValue $workspace 'activityDataId'
+$evidenceResult = Post-Evidence $activityDataId
+if ($evidenceResult.Content -notmatch 'Clean' -or $evidenceResult.Content -notmatch '[0-9a-f]{64}') {
+    throw 'Evidence upload did not produce a clean SHA-256 record.'
 }
 
 $result = Post-Workspace 'Calculate' @{ inventoryProjectVersionId = $inventoryId }

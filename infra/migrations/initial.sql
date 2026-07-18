@@ -614,3 +614,48 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718090200_AddEvidenceStorage') THEN
+    CREATE TABLE app.evidence_files (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        activity_data_id uuid NOT NULL,
+        object_key character varying(500) NOT NULL,
+        original_file_name character varying(300) NOT NULL,
+        content_type character varying(200) NOT NULL,
+        size_bytes bigint NOT NULL,
+        sha256 character varying(64) NOT NULL,
+        scan_status character varying(30) NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        CONSTRAINT pk_evidence_files PRIMARY KEY (id),
+        CONSTRAINT fk_evidence_files_activity_data_versions_activity_data_id FOREIGN KEY (activity_data_id) REFERENCES app.activity_data_versions (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718090200_AddEvidenceStorage') THEN
+    CREATE INDEX ix_evidence_files_activity_data_id ON app.evidence_files (activity_data_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718090200_AddEvidenceStorage') THEN
+    CREATE INDEX ix_evidence_files_organization_id_sha256 ON app.evidence_files (organization_id, sha256);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718090200_AddEvidenceStorage') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260718090200_AddEvidenceStorage', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
+

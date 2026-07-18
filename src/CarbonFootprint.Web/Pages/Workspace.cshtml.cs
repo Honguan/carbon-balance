@@ -5,6 +5,7 @@ using CarbonFootprint.Domain.Modules.Organizations;
 using CarbonFootprint.Domain.Modules.Standards;
 using CarbonFootprint.Domain.Modules.Units;
 using CarbonFootprint.Infrastructure.Identity;
+using CarbonFootprint.Infrastructure.Evidence;
 using CarbonFootprint.Infrastructure.Organizations;
 using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Web.Security;
@@ -26,6 +27,7 @@ public sealed class WorkspaceModel : PageModel
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly CalculateInventoryHandler _calculateHandler;
     private readonly IAuthorizationService _authorizationService;
+    private readonly EvidenceStorageService _evidenceStorageService;
 
     public WorkspaceModel(
         CarbonFootprintDbContext dbContext,
@@ -34,7 +36,8 @@ public sealed class WorkspaceModel : PageModel
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
         CalculateInventoryHandler calculateHandler,
-        IAuthorizationService authorizationService)
+        IAuthorizationService authorizationService,
+        EvidenceStorageService evidenceStorageService)
     {
         _dbContext = dbContext;
         _organizationScope = organizationScope;
@@ -43,6 +46,7 @@ public sealed class WorkspaceModel : PageModel
         _signInManager = signInManager;
         _calculateHandler = calculateHandler;
         _authorizationService = authorizationService;
+        _evidenceStorageService = evidenceStorageService;
     }
 
     public Guid? OrganizationId => _organizationScope.OrganizationId;
@@ -56,6 +60,8 @@ public sealed class WorkspaceModel : PageModel
     public IReadOnlyList<PcrVersionRecord> PcrVersions { get; private set; } = [];
 
     public IReadOnlyList<ActivityDataRecord> Activities { get; private set; } = [];
+
+    public IReadOnlyList<EvidenceFileRecord> EvidenceFiles { get; private set; } = [];
 
     public IReadOnlyList<UnitRecord> Units { get; private set; } = [];
 
@@ -508,6 +514,74 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
+    public async Task<IActionResult> OnPostUploadEvidenceAsync(
+        Guid activityDataId,
+        IFormFile evidenceFile,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
+        {
+            return Forbid();
+        }
+
+        var activity = await _dbContext.ActivityData.SingleOrDefaultAsync(
+            item => item.Id == activityDataId,
+            cancellationToken);
+        if (activity is null)
+        {
+            return NotFound();
+        }
+
+        if (evidenceFile is null || evidenceFile.Length <= 0)
+        {
+            ModelState.AddModelError("evidence", "請選擇非空白 Evidence 檔案。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        if (await _dbContext.EvidenceFiles.AnyAsync(item => item.ActivityDataId == activity.Id, cancellationToken))
+        {
+            ModelState.AddModelError("evidence", "P0 每筆活動僅允許一份 Evidence；請建立活動資料新版本以更換。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        try
+        {
+            await using var content = evidenceFile.OpenReadStream();
+            var stored = await _evidenceStorageService.StoreAsync(
+                RequireOrganization(),
+                content,
+                evidenceFile.FileName,
+                evidenceFile.ContentType,
+                cancellationToken);
+            _dbContext.EvidenceFiles.Add(new EvidenceFileRecord
+            {
+                Id = stored.Id,
+                OrganizationId = RequireOrganization(),
+                ActivityDataId = activity.Id,
+                ObjectKey = stored.ObjectKey,
+                OriginalFileName = stored.OriginalFileName,
+                ContentType = stored.ContentType,
+                SizeBytes = stored.SizeBytes,
+                Sha256 = stored.Sha256,
+                ScanStatus = stored.ScanStatus.ToString(),
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            activity.EvidenceSha256 = stored.Sha256;
+            AddAudit("evidence.uploaded", "EvidenceFile", stored.Id);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            StatusMessage = "Evidence 已通過惡意程式掃描、寫入物件儲存並綁定活動。";
+            return RedirectToPage();
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            ModelState.AddModelError("evidence", $"Evidence 未保存：{exception.Message}");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+    }
+
     public async Task<IActionResult> OnPostCalculateAsync(Guid inventoryProjectVersionId, CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.CreateCalculationRun))
@@ -627,6 +701,7 @@ public sealed class WorkspaceModel : PageModel
         InventoryProjects = await _dbContext.InventoryProjectVersions.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         Factors = await _dbContext.EmissionFactorVersions.AsNoTracking().OrderBy(item => item.Name).ToArrayAsync(cancellationToken);
         Activities = await _dbContext.ActivityData.AsNoTracking().OrderBy(item => item.LifecycleStage).ThenBy(item => item.Name).ToArrayAsync(cancellationToken);
+        EvidenceFiles = await _dbContext.EvidenceFiles.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         Runs = await _dbContext.CalculationRuns.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         if (Runs.Count > 0)
         {

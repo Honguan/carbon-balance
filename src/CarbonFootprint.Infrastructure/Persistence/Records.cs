@@ -121,6 +121,20 @@ public sealed class ActivityDataRecord : IOrganizationOwned
     public string? EvidenceSha256 { get; set; }
 }
 
+public sealed class EvidenceFileRecord : IOrganizationOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid ActivityDataId { get; set; }
+    public required string ObjectKey { get; set; }
+    public required string OriginalFileName { get; set; }
+    public required string ContentType { get; set; }
+    public long SizeBytes { get; set; }
+    public required string Sha256 { get; set; }
+    public required string ScanStatus { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 public sealed class CalculationRunRecord : IOrganizationOwned
 {
     public Guid Id { get; set; }

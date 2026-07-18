@@ -45,7 +45,19 @@ services:
     volumes:
       - mailpit-data:/data
 
+  clamav:
+    image: clamav/clamav:1.5-debian13-slim@sha256:a73435b0fa51886e9e6dd1881656023ba9dce756e055f23981270badbb8ca3d7
+    volumes:
+      - clamav-data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "3"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
   migrate:
+    image: carbon-footprint-app:local
     build:
       context: .
       dockerfile: src/CarbonFootprint.Web/Dockerfile
@@ -59,6 +71,7 @@ services:
     restart: "no"
 
   web:
+    image: carbon-footprint-app:local
     build:
       context: .
       dockerfile: src/CarbonFootprint.Web/Dockerfile
@@ -67,6 +80,10 @@ services:
       ConnectionStrings__Database: Host=postgres;Port=5432;Database=${POSTGRES_DB:-carbon_footprint};Username=${POSTGRES_USER:-carbon_app};Password=${POSTGRES_PASSWORD:-change-this-local-password}
       OBJECTSTORAGE__ENDPOINT: http://minio:9000
       OBJECTSTORAGE__BUCKET: ${OBJECTSTORAGE__BUCKET:-carbon-evidence}
+      OBJECTSTORAGE__ACCESSKEY: ${MINIO_ROOT_USER:-carbon_minio}
+      OBJECTSTORAGE__SECRETKEY: ${MINIO_ROOT_PASSWORD:-change-this-local-password}
+      MALWARESCANNER__HOST: clamav
+      MALWARESCANNER__PORT: 3310
       MAIL__HOST: mailpit
       MAIL__PORT: 1025
     ports:
@@ -77,6 +94,8 @@ services:
       migrate:
         condition: service_completed_successfully
       minio:
+        condition: service_healthy
+      clamav:
         condition: service_healthy
       mailpit:
         condition: service_started
@@ -91,3 +110,4 @@ volumes:
   minio-data:
   mailpit-data:
   data-protection-keys:
+  clamav-data:
