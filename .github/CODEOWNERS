@@ -1,0 +1,7 @@
+# 請在建立遠端 repository 後，以實際 GitHub 帳號取代下列角色占位。
+/docs/compliance/ @domain-owner
+/src/Modules/Calculations/ @domain-owner @backend-owner
+/src/Modules/Factors/ @domain-owner @backend-owner
+/src/Modules/Identity/ @security-owner @backend-owner
+/infra/ @platform-owner
+/.github/workflows/ @platform-owner @security-owner

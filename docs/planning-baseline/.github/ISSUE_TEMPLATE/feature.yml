@@ -1,0 +1,38 @@
+name: 功能需求
+description: 建立可驗收的產品或工程功能
+title: "[Feature] "
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 問題與目標
+      description: 說明使用者問題與期望結果，不只描述畫面。
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 範圍與非範圍
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 驗收條件
+      placeholder: |
+        - [ ] Given / When / Then
+    validations:
+      required: true
+  - type: textarea
+    id: domain
+    attributes:
+      label: 法規、PCR、係數、公式或資料影響
+  - type: textarea
+    id: security
+    attributes:
+      label: 權限、個資與安全影響
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 必要測試與證據

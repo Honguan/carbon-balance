@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-18T00:00:00+08:00",
+  "sources": [
+    {
+      "id": "SRC-001",
+      "path": "public_html_Carbon-master.zip",
+      "sizeBytes": 6868969,
+      "sha256": "8646b612813ed38b177286cabe9a5a5a4da23e64030afb5011c158ad152e66db",
+      "type": "legacy-source-archive",
+      "purpose": ["historical-requirements", "data-mapping", "ui-reference", "test-case-source"],
+      "sensitivity": "high",
+      "committable": false
+    },
+    {
+      "id": "SRC-002",
+      "path": "docs/planning-baseline",
+      "fileCount": 29,
+      "aggregateSha256": "a4c5a78f9f4fb490d6a6441f55b1e79f81bc1a2d47293de22b1b8bc9f7badebc",
+      "type": "planning-baseline",
+      "purpose": ["requirements", "architecture", "acceptance", "risk", "adr"],
+      "sensitivity": "internal",
+      "committable": true
+    },
+    {
+      "id": "SRC-003",
+      "path": "CODEX_GOAL.md",
+      "sizeBytes": 21253,
+      "sha256": "9becd3688c4089008c24226dd916dc74170b4ef1f80bc9f629e6c6cea6130db8",
+      "type": "execution-instruction-copy",
+      "purpose": ["local-task-context"],
+      "sensitivity": "internal",
+      "committable": false
+    }
+  ]
+}

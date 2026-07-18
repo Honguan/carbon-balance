@@ -1,0 +1,35 @@
+name: 錯誤回報
+description: 回報可重現的程式、資料或計算問題
+title: "[Bug] "
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: 實際結果
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期結果
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 重現步驟
+    validations:
+      required: true
+  - type: input
+    id: run
+    attributes:
+      label: Calculation Run／版本識別（避免貼敏感資料）
+  - type: textarea
+    id: impact
+    attributes:
+      label: 影響範圍與嚴重度
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 日誌、截圖或最小資料（請先去識別）

@@ -1,0 +1,33 @@
+# Build output
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+coverage/
+
+# Local development state
+.env
+.env.*
+!.env.example
+.dotnet/
+.analysis/
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Local data and generated artifacts
+data/
+backups/
+reports/generated/
+*.log
+*.tmp
+*.bak
+
+# Historical source assets are inventoried by checksum, not committed.
+public_html_Carbon-master.zip
+CODEX_GOAL.md
+
+# OS files
+.DS_Store
+Thumbs.db

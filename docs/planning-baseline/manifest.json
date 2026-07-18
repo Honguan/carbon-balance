@@ -1,0 +1,122 @@
+[
+  {
+    "path": ".github/ISSUE_TEMPLATE/bug.yml",
+    "size": 793,
+    "sha256": "20c3078043bccaf53028b7a24ac4227c71dd148601432199298980b5911b75b1"
+  },
+  {
+    "path": ".github/ISSUE_TEMPLATE/feature.yml",
+    "size": 905,
+    "sha256": "e736ca57023d7c748efda914d1e6f8ad23507c35bc71514bf0d3c342ee35cd14"
+  },
+  {
+    "path": ".github/PULL_REQUEST_TEMPLATE.md",
+    "size": 645,
+    "sha256": "878b45e7b775dd99b8451155b06121a7386f35e703879004f85abd0f92a27c9f"
+  },
+  {
+    "path": "AGENTS.md",
+    "size": 4168,
+    "sha256": "c43634bdc3947ba920047413c985eaeb1f3170e1e9b184ebbb8930609ad30064"
+  },
+  {
+    "path": "README.md",
+    "size": 4245,
+    "sha256": "9c424321a8ed0debea25feceb622beb6a3647a124951f83f41286d9b9d4c3edf"
+  },
+  {
+    "path": "SOURCE_MANIFEST.md",
+    "size": 913,
+    "sha256": "fe3e0152e2bb50ff0d594db93fea077f76da4300ee37c638548b45962777646f"
+  },
+  {
+    "path": "docs/00_EXECUTIVE_DECISION.md",
+    "size": 3198,
+    "sha256": "a55ee01234755682e5f9e69500b81749575289ebd8d4048371ab0a2776410ab8"
+  },
+  {
+    "path": "docs/01_LEGACY_CODE_AUDIT.md",
+    "size": 5246,
+    "sha256": "6b4b7eead9aba6b660ea3c99a795bbc9502b5444d01bc3088584cbfca897622c"
+  },
+  {
+    "path": "docs/02_DOCUMENT_INVENTORY.md",
+    "size": 5872,
+    "sha256": "ea8db5782a748b4b5aea60ecb7874828e3ef0936c7d7e72d35b515aee067e16b"
+  },
+  {
+    "path": "docs/03_STANDARDS_AND_COMPLIANCE.md",
+    "size": 6803,
+    "sha256": "284825b7db6d5eb4c30191c70e02908c4db2cb9596f2e8de8ba45a9ba18c8735"
+  },
+  {
+    "path": "docs/04_PRODUCT_REQUIREMENTS.md",
+    "size": 5206,
+    "sha256": "0c2da0be706a133f0dfbef18731bd4ba0e5461ccf575d194dedc13e86e61a3b9"
+  },
+  {
+    "path": "docs/05_ARCHITECTURE.md",
+    "size": 5585,
+    "sha256": "8f9eb4af4649b04b4baceae4ef986c994ea7a98cb9d88bd16f17e48f09fe18d0"
+  },
+  {
+    "path": "docs/06_DATA_MODEL.md",
+    "size": 5042,
+    "sha256": "cc6d6f383a4057d8af07798447fcaa6215fed12fcceef0e9e5e9db5d7e3ee5b6"
+  },
+  {
+    "path": "docs/07_MIGRATION_PLAN.md",
+    "size": 3058,
+    "sha256": "eaaa80dea4700d172b5c2d1133ffcc5881dbb1f4c4640793f49b129846cb9361"
+  },
+  {
+    "path": "docs/08_ROADMAP.md",
+    "size": 2999,
+    "sha256": "86dda7d6414817e6378a1f9cb8a30b72797e40e6a322aad12bea15406b3e6092"
+  },
+  {
+    "path": "docs/09_GITHUB_GOVERNANCE.md",
+    "size": 3749,
+    "sha256": "45183f9857d1854d592dd7e29dba82cc8bed076ed9b6381a1a8199b0bf17a35d"
+  },
+  {
+    "path": "docs/10_TEST_AND_ACCEPTANCE.md",
+    "size": 2910,
+    "sha256": "dc7dd121c187ead91d247eb117e20b205214489cde376c0126b5be01bc9875f4"
+  },
+  {
+    "path": "docs/11_PROMPT_CONFIGURATION_GPT-5.6.md",
+    "size": 5688,
+    "sha256": "3d915c9b84dedf0b31533812bfa433403303e42a8402e985e9b821d085155b77"
+  },
+  {
+    "path": "docs/12_BACKLOG.md",
+    "size": 3718,
+    "sha256": "598d3df1407db1431afd8620bda07c5c2570fa384ba8a5a72c963acaf5ed051e"
+  },
+  {
+    "path": "docs/13_RISK_REGISTER.md",
+    "size": 2454,
+    "sha256": "688f6913b3e5d7665e365d14f0d836b64dd63aabb035cf3e846fe739c86da4c8"
+  },
+  {
+    "path": "docs/14_DEFINITION_OF_DONE.md",
+    "size": 1618,
+    "sha256": "3737cfffa3050621af4b8238e1caabe80707ed825a576d9aaef2f6016ef321d2"
+  },
+  {
+    "path": "docs/adr/0001-rebuild-instead-of-refactor.md",
+    "size": 729,
+    "sha256": "08912c73976534a853b352689196674b7e37792e2577855bffcc05f9d8f7fdbe"
+  },
+  {
+    "path": "docs/adr/0002-modular-monolith-dotnet-postgresql.md",
+    "size": 662,
+    "sha256": "0307e717b1e8afe137324f5e6cb38042400c3a492412ec7bfd19d25da7e82886"
+  },
+  {
+    "path": "docs/adr/0003-versioned-factors-and-immutable-calculations.md",
+    "size": 699,
+    "sha256": "705be03f5e199f90ab96a917683ac93daef43eab1df84643d1c9bbc4ded63cdf"
+  }
+]
