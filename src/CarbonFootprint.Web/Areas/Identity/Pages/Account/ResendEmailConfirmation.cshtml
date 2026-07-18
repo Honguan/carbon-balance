@@ -1,0 +1,54 @@
+@page
+@model CarbonFootprint.Web.Areas.Identity.Pages.Account.ResendEmailConfirmationModel
+@{
+    ViewData["Title"] = "重寄確認信";
+    ViewData["BodyClass"] = "auth-page";
+}
+
+<section class="auth-shell auth-shell--setup" aria-labelledby="resend-title">
+    <div class="auth-visual">
+        <div class="auth-visual__content">
+            <span class="eyebrow eyebrow-light">EMAIL CONFIRMATION</span>
+            <h1>重新寄送<br />帳號確認信</h1>
+            <p>輸入註冊使用的 Email，系統會重新寄送確認連結。</p>
+        </div>
+    </div>
+
+    <div class="auth-panel">
+        <div class="auth-card">
+            <span class="eyebrow">帳號確認</span>
+            <h2 id="resend-title">重寄確認信</h2>
+            <p class="auth-card__intro">本機 Docker 環境可在 Mailpit 查看確認信。</p>
+
+            @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+            {
+                <div class="status-message" role="status">@Model.StatusMessage</div>
+            }
+
+            <form method="post" class="auth-form">
+                <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+                <div class="field-group">
+                    <label asp-for="Input.Email"></label>
+                    <div class="field-control">
+                        <span class="field-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 7l8 6 8-6" /></svg>
+                        </span>
+                        <input asp-for="Input.Email" autocomplete="email" placeholder="name@example.com" />
+                    </div>
+                    <span asp-validation-for="Input.Email" class="field-error"></span>
+                </div>
+
+                <button type="submit" class="btn-carbon btn-carbon--wide">
+                    寄送確認信
+                    <span aria-hidden="true">→</span>
+                </button>
+            </form>
+
+            <a class="auth-back" asp-page="./Login">← 返回登入</a>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
