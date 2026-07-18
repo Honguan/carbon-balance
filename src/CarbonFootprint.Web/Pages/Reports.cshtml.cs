@@ -153,7 +153,16 @@ public sealed class ReportsModel : PageModel
             User,
             resource: null,
             new OrganizationPermissionRequirement(OrganizationPermission.ViewInventory));
-        return result.Succeeded;
+        if (!result.Succeeded)
+        {
+            return false;
+        }
+
+        var mfaResult = await _authorizationService.AuthorizeAsync(
+            User,
+            resource: null,
+            new MfaEnabledRequirement());
+        return mfaResult.Succeeded;
     }
 
     private async Task AddExportAuditAsync(string action, Guid runId, CancellationToken cancellationToken)

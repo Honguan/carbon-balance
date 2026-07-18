@@ -19,6 +19,7 @@ builder.Services.AddCarbonFootprintInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<CalculationEngine>();
 builder.Services.AddScoped<CalculateInventoryHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, OrganizationPermissionHandler>();
+builder.Services.AddScoped<IAuthorizationHandler, MfaEnabledHandler>();
 builder.Services.AddRazorPages();
 builder.Services.AddProblemDetails();
 var dataProtectionPath = builder.Configuration["DataProtection:KeyPath"];

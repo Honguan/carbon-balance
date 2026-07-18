@@ -251,6 +251,10 @@ public sealed class WorkspaceModel : PageModel
         {
             return Forbid();
         }
+        if (!await IsMfaEnabledAsync())
+        {
+            return Forbid();
+        }
 
         var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(item => item.Id == pcrVersionId, cancellationToken);
         if (pcr is null)
@@ -276,6 +280,10 @@ public sealed class WorkspaceModel : PageModel
     public async Task<IActionResult> OnPostWithdrawPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
+        {
+            return Forbid();
+        }
+        if (!await IsMfaEnabledAsync())
         {
             return Forbid();
         }
@@ -362,6 +370,10 @@ public sealed class WorkspaceModel : PageModel
         {
             return Forbid();
         }
+        if (!await IsMfaEnabledAsync())
+        {
+            return Forbid();
+        }
 
         var factor = await _dbContext.EmissionFactorVersions.SingleOrDefaultAsync(
             item => item.Id == factorVersionId,
@@ -388,6 +400,10 @@ public sealed class WorkspaceModel : PageModel
     public async Task<IActionResult> OnPostWithdrawFactorAsync(Guid factorVersionId, CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
+        {
+            return Forbid();
+        }
+        if (!await IsMfaEnabledAsync())
         {
             return Forbid();
         }
@@ -658,6 +674,10 @@ public sealed class WorkspaceModel : PageModel
         {
             return Forbid();
         }
+        if (!await IsMfaEnabledAsync())
+        {
+            return Forbid();
+        }
 
         if (!Guid.TryParse(_userManager.GetUserId(User), out var reviewerId))
         {
@@ -712,6 +732,10 @@ public sealed class WorkspaceModel : PageModel
     public async Task<IActionResult> OnPostCalculateAsync(Guid inventoryProjectVersionId, CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.CreateCalculationRun))
+        {
+            return Forbid();
+        }
+        if (!await IsMfaEnabledAsync())
         {
             return Forbid();
         }
@@ -887,6 +911,15 @@ public sealed class WorkspaceModel : PageModel
             User,
             resource: null,
             new OrganizationPermissionRequirement(permission));
+        return result.Succeeded;
+    }
+
+    private async Task<bool> IsMfaEnabledAsync()
+    {
+        var result = await _authorizationService.AuthorizeAsync(
+            User,
+            resource: null,
+            new MfaEnabledRequirement());
         return result.Succeeded;
     }
 

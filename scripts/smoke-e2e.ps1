@@ -88,6 +88,68 @@ function Post-Report([string]$Handler, [string]$RunId) {
         }
 }
 
+function ConvertFrom-Base32([string]$Value) {
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+    $bytes = New-Object 'System.Collections.Generic.List[byte]'
+    $bitBuffer = 0
+    $bitCount = 0
+    foreach ($character in $Value.Replace(' ', '').Replace('-', '').ToUpperInvariant().ToCharArray()) {
+        $index = $alphabet.IndexOf($character)
+        if ($index -lt 0) {
+            throw 'Authenticator secret is not valid Base32.'
+        }
+
+        $bitBuffer = ($bitBuffer -shl 5) -bor $index
+        $bitCount += 5
+        if ($bitCount -ge 8) {
+            $bitCount -= 8
+            $bytes.Add([byte](($bitBuffer -shr $bitCount) -band 255))
+            $bitBuffer = $bitBuffer -band ((1 -shl $bitCount) - 1)
+        }
+    }
+
+    return $bytes.ToArray()
+}
+
+function Get-Totp([string]$Secret) {
+    $counter = [long][Math]::Floor([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() / 30)
+    $counterBytes = [BitConverter]::GetBytes($counter)
+    if ([BitConverter]::IsLittleEndian) {
+        [Array]::Reverse($counterBytes)
+    }
+
+    $hmac = New-Object System.Security.Cryptography.HMACSHA1
+    $hmac.Key = ConvertFrom-Base32 $Secret
+    $hash = $hmac.ComputeHash($counterBytes)
+    $hmac.Dispose()
+    $offset = $hash[$hash.Length - 1] -band 15
+    $binary = (($hash[$offset] -band 127) -shl 24) -bor
+        (($hash[$offset + 1] -band 255) -shl 16) -bor
+        (($hash[$offset + 2] -band 255) -shl 8) -bor
+        ($hash[$offset + 3] -band 255)
+    return '{0:D6}' -f ($binary % 1000000)
+}
+
+function Enable-Mfa {
+    $page = Get-PageToken "$BaseUrl/Identity/Account/Manage/EnableAuthenticator"
+    $secretMatch = [regex]::Match($page.Content, 'secret=([A-Z2-7]+)', 'IgnoreCase')
+    if (-not $secretMatch.Success) {
+        throw 'Authenticator secret was not found.'
+    }
+
+    Invoke-WebRequest -UseBasicParsing -WebSession $session -Method Post `
+        -Uri "$BaseUrl/Identity/Account/Manage/EnableAuthenticator" `
+        -Body @{
+            'Input.Code' = Get-Totp $secretMatch.Groups[1].Value
+            '__RequestVerificationToken' = $page.Token
+        } | Out-Null
+    $twoFactorPage = Invoke-WebRequest -UseBasicParsing -WebSession $session `
+        "$BaseUrl/Identity/Account/Manage/TwoFactorAuthentication"
+    if ($twoFactorPage.Content -notmatch 'Disable2fa') {
+        throw 'MFA was not enabled.'
+    }
+}
+
 $register = Get-PageToken "$BaseUrl/Identity/Account/Register"
 Invoke-WebRequest -UseBasicParsing -WebSession $session -Method Post -Uri "$BaseUrl/Identity/Account/Register" -Body @{
     'Input.Email' = $email
@@ -126,6 +188,8 @@ Invoke-WebRequest -UseBasicParsing -WebSession $session -Method Post -Uri "$Base
     'Input.RememberMe' = 'false'
     '__RequestVerificationToken' = $login.Token
 } | Out-Null
+
+Enable-Mfa
 
 Post-Workspace 'CreateOrganization' @{ organizationName = "$namePrefix Organization" } | Out-Null
 Post-Workspace 'CreateProduct' @{ productName = "$namePrefix Product" } | Out-Null
