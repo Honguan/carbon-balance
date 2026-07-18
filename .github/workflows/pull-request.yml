@@ -46,7 +46,19 @@ jobs:
         run: dotnet build --configuration Release --no-restore
       - name: Apply migrations to empty PostgreSQL
         run: dotnet run --project src/CarbonFootprint.Web --configuration Release --no-build -- --migrate
-      - name: Run all tests
+      - name: Run unit and Golden Case tests
+        run: |
+          dotnet test tests/Unit --configuration Release --no-build
+          dotnet test tests/GoldenCases --configuration Release --no-build
+      - name: Run integration tests
+        run: dotnet test tests/Integration --configuration Release --no-build
+      - name: Run architecture and contract tests
+        run: |
+          dotnet test tests/Architecture --configuration Release --no-build
+          dotnet test tests/Contract --configuration Release --no-build
+      - name: Run security tests
+        run: dotnet test tests/Security --configuration Release --no-build
+      - name: Collect coverage
         run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory TestResults
       - name: NuGet vulnerability audit
         run: dotnet restore --locked-mode -p:NuGetAudit=true -p:NuGetAuditMode=all -p:TreatWarningsAsErrors=true

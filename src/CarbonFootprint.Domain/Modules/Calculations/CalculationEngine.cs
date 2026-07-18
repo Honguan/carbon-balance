@@ -51,7 +51,15 @@ public sealed class CalculationEngine
             .Concat(string.IsNullOrWhiteSpace(snapshot.Assumptions)
                 ? []
                 : [new CalculationWarning("INVENTORY_ASSUMPTIONS", snapshot.Assumptions)])
+            .Concat(string.IsNullOrWhiteSpace(snapshot.EstimationReason)
+                ? []
+                : [new CalculationWarning("INVENTORY_ESTIMATION_REASON", snapshot.EstimationReason)])
             .ToArray();
+
+        var dataQualitySummary = snapshot.Activities
+            .GroupBy(activity => activity.DataQuality, StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
 
         return new CalculationRun(
             runId,
@@ -67,7 +75,8 @@ public sealed class CalculationEngine
             snapshot.PcrVersion,
             lines,
             summaries,
-            warnings);
+            warnings,
+            dataQualitySummary);
     }
 
     private static void Validate(InventoryProjectSnapshot snapshot)

@@ -219,6 +219,7 @@ public sealed class CalculationRunRecord : IOrganizationOwned
     public required string UnitCatalogueVersion { get; set; }
     public required string GwpVersion { get; set; }
     public required string PcrVersion { get; set; }
+    public required string DataQualitySummaryJson { get; set; }
     public decimal ProductTotal { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }

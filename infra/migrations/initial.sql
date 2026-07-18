@@ -1272,3 +1272,21 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718101851_AddDataQualitySummary') THEN
+    ALTER TABLE app.calculation_runs ADD data_quality_summary_json jsonb NOT NULL DEFAULT '{}';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718101851_AddDataQualitySummary') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260718101851_AddDataQualitySummary', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
+

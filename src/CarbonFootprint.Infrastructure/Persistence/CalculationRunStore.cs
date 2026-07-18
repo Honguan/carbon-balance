@@ -1,5 +1,6 @@
 using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Domain.Modules.Calculations;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
 namespace CarbonFootprint.Infrastructure.Persistence;
@@ -30,6 +31,7 @@ public sealed class CalculationRunStore : ICalculationRunStore
             UnitCatalogueVersion = run.UnitCatalogueVersion,
             GwpVersion = run.GwpVersion,
             PcrVersion = run.PcrVersion,
+            DataQualitySummaryJson = JsonSerializer.Serialize(run.DataQualitySummary),
             ProductTotal = run.ProductTotal,
             CreatedAt = DateTimeOffset.UtcNow
         });

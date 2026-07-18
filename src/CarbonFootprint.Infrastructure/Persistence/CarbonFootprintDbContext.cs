@@ -265,6 +265,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.ToTable("calculation_runs");
             entity.HasKey(item => item.Id);
             entity.Property(item => item.CanonicalInputManifest).HasColumnType("jsonb");
+            entity.Property(item => item.DataQualitySummaryJson).HasColumnType("jsonb");
             entity.Property(item => item.InputSha256).HasMaxLength(64);
             entity.Property(item => item.ProductTotal).HasPrecision(38, 15);
             entity.HasIndex(item => new { item.OrganizationId, item.InputSha256 });

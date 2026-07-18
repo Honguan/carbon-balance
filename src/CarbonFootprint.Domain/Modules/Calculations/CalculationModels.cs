@@ -35,7 +35,8 @@ public sealed class CalculationRun
         string pcrVersion,
         IReadOnlyList<CalculationLineItem> lineItems,
         IReadOnlyList<CalculationStageSummary> stageSummaries,
-        IReadOnlyList<CalculationWarning> warnings)
+        IReadOnlyList<CalculationWarning> warnings,
+        IReadOnlyDictionary<string, int>? dataQualitySummary = null)
     {
         Id = id;
         OrganizationId = organizationId;
@@ -51,6 +52,9 @@ public sealed class CalculationRun
         LineItems = lineItems.ToArray();
         StageSummaries = stageSummaries.ToArray();
         Warnings = warnings.ToArray();
+        DataQualitySummary = dataQualitySummary is null
+            ? new Dictionary<string, int>()
+            : new Dictionary<string, int>(dataQualitySummary, StringComparer.Ordinal);
         ProductTotal = StageSummaries.Sum(summary => summary.Emissions);
     }
 
@@ -81,6 +85,8 @@ public sealed class CalculationRun
     public IReadOnlyList<CalculationStageSummary> StageSummaries { get; }
 
     public IReadOnlyList<CalculationWarning> Warnings { get; }
+
+    public IReadOnlyDictionary<string, int> DataQualitySummary { get; }
 
     public decimal ProductTotal { get; }
 }
