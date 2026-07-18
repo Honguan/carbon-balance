@@ -1,9 +1,7 @@
 name: Security source diagnostic
 
 on:
-  push:
-    branches:
-      - agent/simplify-auth-carbon-ui
+  pull_request:
 
 permissions:
   contents: read
