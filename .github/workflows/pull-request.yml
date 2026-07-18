@@ -171,40 +171,65 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Build release image
-        run: docker build --tag carbon-footprint:${{ github.sha }} --file src/CarbonFootprint.Web/Dockerfile .
+        run: docker build --quiet --tag carbon-footprint:${{ github.sha }} --file src/CarbonFootprint.Web/Dockerfile .
       - name: Verify Identity layout and static assets
         run: |
+          set -euo pipefail
+
+          cleanup() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              echo '----- login response -----'
+              sed -n '1,160p' /tmp/login.html 2>/dev/null || true
+              echo '----- container logs -----'
+              docker logs carbon-static-smoke 2>&1 || true
+            fi
+            docker rm --force carbon-static-smoke >/dev/null 2>&1 || true
+            exit "$status"
+          }
+          trap cleanup EXIT
+
           docker run --detach \
             --name carbon-static-smoke \
             --publish 18088:8080 \
             --env ASPNETCORE_ENVIRONMENT=Development \
             --env 'ConnectionStrings__Database=Host=127.0.0.1;Port=5432;Database=carbon_smoke;Username=smoke;Password=smoke-password-123;SSL Mode=Disable;GSS Encryption Mode=Disable' \
             carbon-footprint:${{ github.sha }}
-          trap 'docker rm --force carbon-static-smoke >/dev/null 2>&1 || true' EXIT
 
           for attempt in {1..30}; do
             if curl --fail --silent --show-error http://127.0.0.1:18088/health/live >/dev/null; then
               break
             fi
             if [ "$attempt" -eq 30 ]; then
-              docker logs carbon-static-smoke
+              echo 'Web container did not become live.'
               exit 1
             fi
             sleep 2
           done
 
-          curl --fail --silent --show-error \
+          login_status="$(curl --silent --show-error \
             --output /tmp/login.html \
-            http://127.0.0.1:18088/Identity/Account/Login
+            --write-out '%{http_code}' \
+            http://127.0.0.1:18088/Identity/Account/Login)"
+          echo "Login status: $login_status"
+          test "$login_status" = '200'
+          grep --quiet '<html lang="zh-Hant-TW">' /tmp/login.html
           grep --quiet '產品碳足跡系統' /tmp/login.html
           grep --quiet '/lib/bootstrap/dist/css/bootstrap.min.css' /tmp/login.html
+          grep --quiet '/css/site.css' /tmp/login.html
 
-          curl --fail --silent --show-error \
+          bootstrap_status="$(curl --silent --show-error \
             --output /tmp/bootstrap.css \
-            http://127.0.0.1:18088/lib/bootstrap/dist/css/bootstrap.min.css
-          curl --fail --silent --show-error \
+            --write-out '%{http_code}' \
+            http://127.0.0.1:18088/lib/bootstrap/dist/css/bootstrap.min.css)"
+          site_status="$(curl --silent --show-error \
             --output /tmp/site.css \
-            http://127.0.0.1:18088/css/site.css
+            --write-out '%{http_code}' \
+            http://127.0.0.1:18088/css/site.css)"
+          echo "Bootstrap status: $bootstrap_status"
+          echo "Site CSS status: $site_status"
+          test "$bootstrap_status" = '200'
+          test "$site_status" = '200'
           test -s /tmp/bootstrap.css
           test -s /tmp/site.css
       - name: Scan filesystem for Critical and High vulnerabilities
