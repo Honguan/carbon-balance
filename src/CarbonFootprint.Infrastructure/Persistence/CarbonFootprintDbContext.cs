@@ -7,14 +7,14 @@ namespace CarbonFootprint.Infrastructure.Persistence;
 
 public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>
 {
-    private readonly Guid? _organizationId;
+    private readonly IOrganizationScope _organizationScope;
 
     public CarbonFootprintDbContext(
         DbContextOptions<CarbonFootprintDbContext> options,
         IOrganizationScope organizationScope)
         : base(options)
     {
-        _organizationId = organizationScope.OrganizationId;
+        _organizationScope = organizationScope;
     }
 
     public DbSet<OrganizationRecord> Organizations => Set<OrganizationRecord>();
@@ -146,6 +146,11 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.ScaleToCanonical).HasPrecision(30, 15);
             entity.Property(item => item.OffsetToCanonical).HasPrecision(30, 15);
             entity.HasIndex(item => new { item.Code, item.CatalogueVersion }).IsUnique();
+            entity.HasData(
+                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000001"), Code = "kg", Symbol = "kg", Dimension = "mass", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v1" },
+                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000002"), Code = "g", Symbol = "g", Dimension = "mass", ScaleToCanonical = 0.001m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v1" },
+                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000003"), Code = "kWh", Symbol = "kWh", Dimension = "energy", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "kWh", CatalogueVersion = "units-p0-v1" },
+                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000004"), Code = "tonne-km", Symbol = "t·km", Dimension = "transport-work", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "tonne-km", CatalogueVersion = "units-p0-v1" });
         });
         builder.Entity<EmissionFactorVersionRecord>(entity =>
         {
@@ -207,17 +212,17 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
 
     private void ConfigureTenantFilters(ModelBuilder builder)
     {
-        builder.Entity<OrganizationRecord>().HasQueryFilter(item => _organizationId.HasValue && item.Id == _organizationId.Value);
-        builder.Entity<OrganizationMembershipRecord>().HasQueryFilter(item => _organizationId.HasValue && item.OrganizationId == _organizationId.Value);
-        builder.Entity<ProductRecord>().HasQueryFilter(item => _organizationId.HasValue && item.OrganizationId == _organizationId.Value);
-        builder.Entity<ProductVersionRecord>().HasQueryFilter(item => _organizationId.HasValue && item.OrganizationId == _organizationId.Value);
-        builder.Entity<InventoryProjectVersionRecord>().HasQueryFilter(item => _organizationId.HasValue && item.OrganizationId == _organizationId.Value);
-        builder.Entity<EmissionFactorVersionRecord>().HasQueryFilter(item => _organizationId.HasValue && item.OrganizationId == _organizationId.Value);
-        builder.Entity<ActivityDataRecord>().HasQueryFilter(item => _organizationId.HasValue && item.OrganizationId == _organizationId.Value);
-        builder.Entity<CalculationRunRecord>().HasQueryFilter(item => _organizationId.HasValue && item.OrganizationId == _organizationId.Value);
-        builder.Entity<CalculationLineRecord>().HasQueryFilter(item => _organizationId.HasValue && item.OrganizationId == _organizationId.Value);
-        builder.Entity<CalculationStageSummaryRecord>().HasQueryFilter(item => _organizationId.HasValue && item.OrganizationId == _organizationId.Value);
-        builder.Entity<AuditEventRecord>().HasQueryFilter(item => _organizationId.HasValue && item.OrganizationId == _organizationId.Value);
+        builder.Entity<OrganizationRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.Id == _organizationScope.OrganizationId);
+        builder.Entity<OrganizationMembershipRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<ProductRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<ProductVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<InventoryProjectVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<EmissionFactorVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<ActivityDataRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<CalculationRunRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<CalculationLineRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<CalculationStageSummaryRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<AuditEventRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
     }
 
     private void ValidateChanges()
@@ -238,7 +243,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         foreach (var entry in ChangeTracker.Entries<IOrganizationOwned>()
                      .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
         {
-            if (!_organizationId.HasValue || entry.Entity.OrganizationId != _organizationId.Value)
+            if (!_organizationScope.OrganizationId.HasValue || entry.Entity.OrganizationId != _organizationScope.OrganizationId.Value)
             {
                 throw new InvalidOperationException("資料寫入不符合目前組織範圍。");
             }

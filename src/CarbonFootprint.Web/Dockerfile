@@ -19,9 +19,12 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0.10 AS runtime
 WORKDIR /app
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl libgssapi-krb5-2 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /keys \
+    && chown $APP_UID:$APP_UID /keys
 COPY --from=build /app/publish ./
 USER $APP_UID
 EXPOSE 8080
 ENV ASPNETCORE_HTTP_PORTS=8080
+ENV DataProtection__KeyPath=/keys
 ENTRYPOINT ["dotnet", "CarbonFootprint.Web.dll"]

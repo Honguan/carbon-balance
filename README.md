@@ -2,7 +2,7 @@
 
 本專案是以 .NET 10、ASP.NET Core 與 PostgreSQL 18 建立的模組化單體，目標是提供可維護、可稽核、可重現的產品碳足跡盤查、計算與查驗準備流程。
 
-目前狀態：Phase 0 已完成，Phase 1 Golden Vertical Slice 建置中。實際完成範圍、驗證證據與阻塞項目請見 [實作狀態](docs/IMPLEMENTATION_STATUS.md)。
+目前狀態：Phase 0、Phase 1 Golden Vertical Slice 已完成，Phase 2 建置中。實際完成範圍、驗證證據與阻塞項目請見 [實作狀態](docs/IMPLEMENTATION_STATUS.md)。
 
 ## 開發前置需求
 

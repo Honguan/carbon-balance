@@ -5,308 +5,552 @@
 );
 
 START TRANSACTION;
+
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = 'app') THEN
-        CREATE SCHEMA app;
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+        IF NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = 'app') THEN
+            CREATE SCHEMA app;
+        END IF;
     END IF;
 END $EF$;
 
 DO $EF$
 BEGIN
-    IF NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = 'identity') THEN
-        CREATE SCHEMA identity;
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+        IF NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = 'identity') THEN
+            CREATE SCHEMA identity;
+        END IF;
     END IF;
 END $EF$;
 
-CREATE TABLE app.audit_events (
-    id uuid NOT NULL,
-    timestamp timestamp with time zone NOT NULL,
-    actor_id uuid,
-    organization_id uuid NOT NULL,
-    action text NOT NULL,
-    resource_type text NOT NULL,
-    resource_id uuid NOT NULL,
-    before_hash text,
-    after_hash text,
-    correlation_id character varying(100) NOT NULL,
-    metadata_json jsonb NOT NULL,
-    CONSTRAINT pk_audit_events PRIMARY KEY (id)
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE app.audit_events (
+        id uuid NOT NULL,
+        timestamp timestamp with time zone NOT NULL,
+        actor_id uuid,
+        organization_id uuid NOT NULL,
+        action text NOT NULL,
+        resource_type text NOT NULL,
+        resource_id uuid NOT NULL,
+        before_hash text,
+        after_hash text,
+        correlation_id character varying(100) NOT NULL,
+        metadata_json jsonb NOT NULL,
+        CONSTRAINT pk_audit_events PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE app.emission_factor_versions (
-    id uuid NOT NULL,
-    organization_id uuid NOT NULL,
-    factor_id uuid NOT NULL,
-    version_number integer NOT NULL,
-    name character varying(500) NOT NULL,
-    value numeric(30,15) NOT NULL,
-    numerator_unit_code character varying(50) NOT NULL,
-    denominator_unit_code character varying(50) NOT NULL,
-    geography text NOT NULL,
-    valid_from date,
-    valid_to date,
-    publication_status character varying(30) NOT NULL,
-    source_dataset_version text NOT NULL,
-    license_code text NOT NULL,
-    supersedes_version_id uuid,
-    CONSTRAINT pk_emission_factor_versions PRIMARY KEY (id),
-    CONSTRAINT fk_emission_factor_versions_emission_factor_versions_supersede FOREIGN KEY (supersedes_version_id) REFERENCES app.emission_factor_versions (id) ON DELETE RESTRICT
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE app.emission_factor_versions (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        factor_id uuid NOT NULL,
+        version_number integer NOT NULL,
+        name character varying(500) NOT NULL,
+        value numeric(30,15) NOT NULL,
+        numerator_unit_code character varying(50) NOT NULL,
+        denominator_unit_code character varying(50) NOT NULL,
+        geography text NOT NULL,
+        valid_from date,
+        valid_to date,
+        publication_status character varying(30) NOT NULL,
+        source_dataset_version text NOT NULL,
+        license_code text NOT NULL,
+        supersedes_version_id uuid,
+        CONSTRAINT pk_emission_factor_versions PRIMARY KEY (id),
+        CONSTRAINT fk_emission_factor_versions_emission_factor_versions_supersede FOREIGN KEY (supersedes_version_id) REFERENCES app.emission_factor_versions (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE app.organizations (
-    id uuid NOT NULL,
-    name character varying(200) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT pk_organizations PRIMARY KEY (id)
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE app.organizations (
+        id uuid NOT NULL,
+        name character varying(200) NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        CONSTRAINT pk_organizations PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE identity.roles (
-    id uuid NOT NULL,
-    name character varying(256),
-    normalized_name character varying(256),
-    concurrency_stamp text,
-    CONSTRAINT pk_roles PRIMARY KEY (id)
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE identity.roles (
+        id uuid NOT NULL,
+        name character varying(256),
+        normalized_name character varying(256),
+        concurrency_stamp text,
+        CONSTRAINT pk_roles PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE app.units (
-    id uuid NOT NULL,
-    code text NOT NULL,
-    symbol text NOT NULL,
-    dimension text NOT NULL,
-    scale_to_canonical numeric(30,15) NOT NULL,
-    offset_to_canonical numeric(30,15) NOT NULL,
-    canonical_code text NOT NULL,
-    catalogue_version text NOT NULL,
-    CONSTRAINT pk_units PRIMARY KEY (id)
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE app.units (
+        id uuid NOT NULL,
+        code text NOT NULL,
+        symbol text NOT NULL,
+        dimension text NOT NULL,
+        scale_to_canonical numeric(30,15) NOT NULL,
+        offset_to_canonical numeric(30,15) NOT NULL,
+        canonical_code text NOT NULL,
+        catalogue_version text NOT NULL,
+        CONSTRAINT pk_units PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE identity.users (
-    id uuid NOT NULL,
-    display_name text NOT NULL,
-    user_name character varying(256),
-    normalized_user_name character varying(256),
-    email character varying(256),
-    normalized_email character varying(256),
-    email_confirmed boolean NOT NULL,
-    password_hash text,
-    security_stamp text,
-    concurrency_stamp text,
-    phone_number text,
-    phone_number_confirmed boolean NOT NULL,
-    two_factor_enabled boolean NOT NULL,
-    lockout_end timestamp with time zone,
-    lockout_enabled boolean NOT NULL,
-    access_failed_count integer NOT NULL,
-    CONSTRAINT pk_users PRIMARY KEY (id)
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE identity.users (
+        id uuid NOT NULL,
+        display_name text NOT NULL,
+        user_name character varying(256),
+        normalized_user_name character varying(256),
+        email character varying(256),
+        normalized_email character varying(256),
+        email_confirmed boolean NOT NULL,
+        password_hash text,
+        security_stamp text,
+        concurrency_stamp text,
+        phone_number text,
+        phone_number_confirmed boolean NOT NULL,
+        two_factor_enabled boolean NOT NULL,
+        lockout_end timestamp with time zone,
+        lockout_enabled boolean NOT NULL,
+        access_failed_count integer NOT NULL,
+        CONSTRAINT pk_users PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE app.products (
-    id uuid NOT NULL,
-    organization_id uuid NOT NULL,
-    name character varying(300) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT pk_products PRIMARY KEY (id),
-    CONSTRAINT fk_products_organizations_organization_id FOREIGN KEY (organization_id) REFERENCES app.organizations (id) ON DELETE RESTRICT
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE app.products (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        name character varying(300) NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        CONSTRAINT pk_products PRIMARY KEY (id),
+        CONSTRAINT fk_products_organizations_organization_id FOREIGN KEY (organization_id) REFERENCES app.organizations (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE identity.role_claims (
-    id integer GENERATED BY DEFAULT AS IDENTITY,
-    role_id uuid NOT NULL,
-    claim_type text,
-    claim_value text,
-    CONSTRAINT pk_role_claims PRIMARY KEY (id),
-    CONSTRAINT fk_role_claims_roles_role_id FOREIGN KEY (role_id) REFERENCES identity.roles (id) ON DELETE CASCADE
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE identity.role_claims (
+        id integer GENERATED BY DEFAULT AS IDENTITY,
+        role_id uuid NOT NULL,
+        claim_type text,
+        claim_value text,
+        CONSTRAINT pk_role_claims PRIMARY KEY (id),
+        CONSTRAINT fk_role_claims_roles_role_id FOREIGN KEY (role_id) REFERENCES identity.roles (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE app.organization_memberships (
-    id uuid NOT NULL,
-    organization_id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    role character varying(50) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    revoked_at timestamp with time zone,
-    CONSTRAINT pk_organization_memberships PRIMARY KEY (id),
-    CONSTRAINT fk_organization_memberships_organizations_organization_id FOREIGN KEY (organization_id) REFERENCES app.organizations (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_organization_memberships_users_user_id FOREIGN KEY (user_id) REFERENCES identity.users (id) ON DELETE RESTRICT
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE app.organization_memberships (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        user_id uuid NOT NULL,
+        role character varying(50) NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        revoked_at timestamp with time zone,
+        CONSTRAINT pk_organization_memberships PRIMARY KEY (id),
+        CONSTRAINT fk_organization_memberships_organizations_organization_id FOREIGN KEY (organization_id) REFERENCES app.organizations (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_organization_memberships_users_user_id FOREIGN KEY (user_id) REFERENCES identity.users (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE identity.user_claims (
-    id integer GENERATED BY DEFAULT AS IDENTITY,
-    user_id uuid NOT NULL,
-    claim_type text,
-    claim_value text,
-    CONSTRAINT pk_user_claims PRIMARY KEY (id),
-    CONSTRAINT fk_user_claims_users_user_id FOREIGN KEY (user_id) REFERENCES identity.users (id) ON DELETE CASCADE
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE identity.user_claims (
+        id integer GENERATED BY DEFAULT AS IDENTITY,
+        user_id uuid NOT NULL,
+        claim_type text,
+        claim_value text,
+        CONSTRAINT pk_user_claims PRIMARY KEY (id),
+        CONSTRAINT fk_user_claims_users_user_id FOREIGN KEY (user_id) REFERENCES identity.users (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE identity.user_logins (
-    login_provider character varying(128) NOT NULL,
-    provider_key character varying(128) NOT NULL,
-    provider_display_name text,
-    user_id uuid NOT NULL,
-    CONSTRAINT pk_user_logins PRIMARY KEY (login_provider, provider_key),
-    CONSTRAINT fk_user_logins_users_user_id FOREIGN KEY (user_id) REFERENCES identity.users (id) ON DELETE CASCADE
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE identity.user_logins (
+        login_provider character varying(128) NOT NULL,
+        provider_key character varying(128) NOT NULL,
+        provider_display_name text,
+        user_id uuid NOT NULL,
+        CONSTRAINT pk_user_logins PRIMARY KEY (login_provider, provider_key),
+        CONSTRAINT fk_user_logins_users_user_id FOREIGN KEY (user_id) REFERENCES identity.users (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE identity.user_roles (
-    user_id uuid NOT NULL,
-    role_id uuid NOT NULL,
-    CONSTRAINT pk_user_roles PRIMARY KEY (user_id, role_id),
-    CONSTRAINT fk_user_roles_roles_role_id FOREIGN KEY (role_id) REFERENCES identity.roles (id) ON DELETE CASCADE,
-    CONSTRAINT fk_user_roles_users_user_id FOREIGN KEY (user_id) REFERENCES identity.users (id) ON DELETE CASCADE
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE identity.user_roles (
+        user_id uuid NOT NULL,
+        role_id uuid NOT NULL,
+        CONSTRAINT pk_user_roles PRIMARY KEY (user_id, role_id),
+        CONSTRAINT fk_user_roles_roles_role_id FOREIGN KEY (role_id) REFERENCES identity.roles (id) ON DELETE CASCADE,
+        CONSTRAINT fk_user_roles_users_user_id FOREIGN KEY (user_id) REFERENCES identity.users (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE identity.user_tokens (
-    user_id uuid NOT NULL,
-    login_provider character varying(128) NOT NULL,
-    name character varying(128) NOT NULL,
-    value text,
-    CONSTRAINT pk_user_tokens PRIMARY KEY (user_id, login_provider, name),
-    CONSTRAINT fk_user_tokens_users_user_id FOREIGN KEY (user_id) REFERENCES identity.users (id) ON DELETE CASCADE
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE identity.user_tokens (
+        user_id uuid NOT NULL,
+        login_provider character varying(128) NOT NULL,
+        name character varying(128) NOT NULL,
+        value text,
+        CONSTRAINT pk_user_tokens PRIMARY KEY (user_id, login_provider, name),
+        CONSTRAINT fk_user_tokens_users_user_id FOREIGN KEY (user_id) REFERENCES identity.users (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE app.product_versions (
-    id uuid NOT NULL,
-    organization_id uuid NOT NULL,
-    product_id uuid NOT NULL,
-    version_number integer NOT NULL,
-    name_zh_tw character varying(300) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT pk_product_versions PRIMARY KEY (id),
-    CONSTRAINT fk_product_versions_products_product_id FOREIGN KEY (product_id) REFERENCES app.products (id) ON DELETE RESTRICT
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE app.product_versions (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        product_id uuid NOT NULL,
+        version_number integer NOT NULL,
+        name_zh_tw character varying(300) NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        CONSTRAINT pk_product_versions PRIMARY KEY (id),
+        CONSTRAINT fk_product_versions_products_product_id FOREIGN KEY (product_id) REFERENCES app.products (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE app.inventory_project_versions (
-    id uuid NOT NULL,
-    organization_id uuid NOT NULL,
-    product_version_id uuid NOT NULL,
-    version_number integer NOT NULL,
-    period_start date NOT NULL,
-    period_end date NOT NULL,
-    functional_unit character varying(200) NOT NULL,
-    pcr_version character varying(200) NOT NULL,
-    workflow_status character varying(50) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT pk_inventory_project_versions PRIMARY KEY (id),
-    CONSTRAINT fk_inventory_project_versions_product_versions_product_version FOREIGN KEY (product_version_id) REFERENCES app.product_versions (id) ON DELETE RESTRICT
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE app.inventory_project_versions (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        product_version_id uuid NOT NULL,
+        version_number integer NOT NULL,
+        period_start date NOT NULL,
+        period_end date NOT NULL,
+        functional_unit character varying(200) NOT NULL,
+        pcr_version character varying(200) NOT NULL,
+        workflow_status character varying(50) NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        CONSTRAINT pk_inventory_project_versions PRIMARY KEY (id),
+        CONSTRAINT fk_inventory_project_versions_product_versions_product_version FOREIGN KEY (product_version_id) REFERENCES app.product_versions (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE app.activity_data_versions (
-    id uuid NOT NULL,
-    organization_id uuid NOT NULL,
-    inventory_project_version_id uuid NOT NULL,
-    lifecycle_stage integer NOT NULL,
-    name character varying(300) NOT NULL,
-    raw_value numeric(30,12) NOT NULL,
-    raw_unit_code character varying(50) NOT NULL,
-    canonical_value numeric(30,12) NOT NULL,
-    canonical_unit_code character varying(50) NOT NULL,
-    conversion_rule_version character varying(100) NOT NULL,
-    period_start date NOT NULL,
-    period_end date NOT NULL,
-    factor_version_id uuid NOT NULL,
-    evidence_sha256 character varying(64),
-    CONSTRAINT pk_activity_data_versions PRIMARY KEY (id),
-    CONSTRAINT fk_activity_data_versions_emission_factor_versions_factor_vers FOREIGN KEY (factor_version_id) REFERENCES app.emission_factor_versions (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_activity_data_versions_inventory_project_versions_inventory FOREIGN KEY (inventory_project_version_id) REFERENCES app.inventory_project_versions (id) ON DELETE RESTRICT
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE app.activity_data_versions (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        inventory_project_version_id uuid NOT NULL,
+        lifecycle_stage integer NOT NULL,
+        name character varying(300) NOT NULL,
+        raw_value numeric(30,12) NOT NULL,
+        raw_unit_code character varying(50) NOT NULL,
+        canonical_value numeric(30,12) NOT NULL,
+        canonical_unit_code character varying(50) NOT NULL,
+        conversion_rule_version character varying(100) NOT NULL,
+        period_start date NOT NULL,
+        period_end date NOT NULL,
+        factor_version_id uuid NOT NULL,
+        evidence_sha256 character varying(64),
+        CONSTRAINT pk_activity_data_versions PRIMARY KEY (id),
+        CONSTRAINT fk_activity_data_versions_emission_factor_versions_factor_vers FOREIGN KEY (factor_version_id) REFERENCES app.emission_factor_versions (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_activity_data_versions_inventory_project_versions_inventory FOREIGN KEY (inventory_project_version_id) REFERENCES app.inventory_project_versions (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE app.calculation_runs (
-    id uuid NOT NULL,
-    organization_id uuid NOT NULL,
-    project_version_id uuid NOT NULL,
-    supersedes_run_id uuid,
-    canonical_input_manifest jsonb NOT NULL,
-    input_sha256 character varying(64) NOT NULL,
-    engine_build text NOT NULL,
-    rule_set_version text NOT NULL,
-    unit_catalogue_version text NOT NULL,
-    gwp_version text NOT NULL,
-    pcr_version text NOT NULL,
-    product_total numeric(38,15) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT pk_calculation_runs PRIMARY KEY (id),
-    CONSTRAINT fk_calculation_runs_calculation_runs_supersedes_run_id FOREIGN KEY (supersedes_run_id) REFERENCES app.calculation_runs (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_calculation_runs_inventory_project_versions_project_version FOREIGN KEY (project_version_id) REFERENCES app.inventory_project_versions (id) ON DELETE RESTRICT
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE app.calculation_runs (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        project_version_id uuid NOT NULL,
+        supersedes_run_id uuid,
+        canonical_input_manifest jsonb NOT NULL,
+        input_sha256 character varying(64) NOT NULL,
+        engine_build text NOT NULL,
+        rule_set_version text NOT NULL,
+        unit_catalogue_version text NOT NULL,
+        gwp_version text NOT NULL,
+        pcr_version text NOT NULL,
+        product_total numeric(38,15) NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        CONSTRAINT pk_calculation_runs PRIMARY KEY (id),
+        CONSTRAINT fk_calculation_runs_calculation_runs_supersedes_run_id FOREIGN KEY (supersedes_run_id) REFERENCES app.calculation_runs (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_calculation_runs_inventory_project_versions_project_version FOREIGN KEY (project_version_id) REFERENCES app.inventory_project_versions (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE app.calculation_line_items (
-    id uuid NOT NULL,
-    organization_id uuid NOT NULL,
-    calculation_run_id uuid NOT NULL,
-    activity_id uuid NOT NULL,
-    lifecycle_stage integer NOT NULL,
-    formula_id text NOT NULL,
-    canonical_activity_value numeric(30,12) NOT NULL,
-    activity_unit_code text NOT NULL,
-    factor_version_id uuid NOT NULL,
-    factor_value numeric(30,15) NOT NULL,
-    factor_unit text NOT NULL,
-    emissions numeric(38,15) NOT NULL,
-    emissions_unit_code text NOT NULL,
-    CONSTRAINT pk_calculation_line_items PRIMARY KEY (id),
-    CONSTRAINT fk_calculation_line_items_calculation_runs_calculation_run_id FOREIGN KEY (calculation_run_id) REFERENCES app.calculation_runs (id) ON DELETE RESTRICT
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE app.calculation_line_items (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        calculation_run_id uuid NOT NULL,
+        activity_id uuid NOT NULL,
+        lifecycle_stage integer NOT NULL,
+        formula_id text NOT NULL,
+        canonical_activity_value numeric(30,12) NOT NULL,
+        activity_unit_code text NOT NULL,
+        factor_version_id uuid NOT NULL,
+        factor_value numeric(30,15) NOT NULL,
+        factor_unit text NOT NULL,
+        emissions numeric(38,15) NOT NULL,
+        emissions_unit_code text NOT NULL,
+        CONSTRAINT pk_calculation_line_items PRIMARY KEY (id),
+        CONSTRAINT fk_calculation_line_items_calculation_runs_calculation_run_id FOREIGN KEY (calculation_run_id) REFERENCES app.calculation_runs (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
 
-CREATE TABLE app.calculation_stage_summaries (
-    id uuid NOT NULL,
-    organization_id uuid NOT NULL,
-    calculation_run_id uuid NOT NULL,
-    lifecycle_stage integer NOT NULL,
-    emissions numeric(38,15) NOT NULL,
-    CONSTRAINT pk_calculation_stage_summaries PRIMARY KEY (id),
-    CONSTRAINT fk_calculation_stage_summaries_calculation_runs_calculation_ru FOREIGN KEY (calculation_run_id) REFERENCES app.calculation_runs (id) ON DELETE RESTRICT
-);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE TABLE app.calculation_stage_summaries (
+        id uuid NOT NULL,
+        organization_id uuid NOT NULL,
+        calculation_run_id uuid NOT NULL,
+        lifecycle_stage integer NOT NULL,
+        emissions numeric(38,15) NOT NULL,
+        CONSTRAINT pk_calculation_stage_summaries PRIMARY KEY (id),
+        CONSTRAINT fk_calculation_stage_summaries_calculation_runs_calculation_ru FOREIGN KEY (calculation_run_id) REFERENCES app.calculation_runs (id) ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_activity_data_versions_factor_version_id ON app.activity_data_versions (factor_version_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_activity_data_versions_factor_version_id ON app.activity_data_versions (factor_version_id);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_activity_data_versions_inventory_project_version_id ON app.activity_data_versions (inventory_project_version_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_activity_data_versions_inventory_project_version_id ON app.activity_data_versions (inventory_project_version_id);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_audit_events_organization_id_timestamp ON app.audit_events (organization_id, timestamp);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_audit_events_organization_id_timestamp ON app.audit_events (organization_id, timestamp);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_calculation_line_items_calculation_run_id ON app.calculation_line_items (calculation_run_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_calculation_line_items_calculation_run_id ON app.calculation_line_items (calculation_run_id);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_calculation_runs_organization_id_input_sha256 ON app.calculation_runs (organization_id, input_sha256);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_calculation_runs_organization_id_input_sha256 ON app.calculation_runs (organization_id, input_sha256);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_calculation_runs_project_version_id ON app.calculation_runs (project_version_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_calculation_runs_project_version_id ON app.calculation_runs (project_version_id);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_calculation_runs_supersedes_run_id ON app.calculation_runs (supersedes_run_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_calculation_runs_supersedes_run_id ON app.calculation_runs (supersedes_run_id);
+    END IF;
+END $EF$;
 
-CREATE UNIQUE INDEX ix_calculation_stage_summaries_calculation_run_id_lifecycle_st ON app.calculation_stage_summaries (calculation_run_id, lifecycle_stage);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE UNIQUE INDEX ix_calculation_stage_summaries_calculation_run_id_lifecycle_st ON app.calculation_stage_summaries (calculation_run_id, lifecycle_stage);
+    END IF;
+END $EF$;
 
-CREATE UNIQUE INDEX ix_emission_factor_versions_factor_id_version_number ON app.emission_factor_versions (factor_id, version_number);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE UNIQUE INDEX ix_emission_factor_versions_factor_id_version_number ON app.emission_factor_versions (factor_id, version_number);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_emission_factor_versions_supersedes_version_id ON app.emission_factor_versions (supersedes_version_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_emission_factor_versions_supersedes_version_id ON app.emission_factor_versions (supersedes_version_id);
+    END IF;
+END $EF$;
 
-CREATE UNIQUE INDEX ix_inventory_project_versions_product_version_id_version_number ON app.inventory_project_versions (product_version_id, version_number);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE UNIQUE INDEX ix_inventory_project_versions_product_version_id_version_number ON app.inventory_project_versions (product_version_id, version_number);
+    END IF;
+END $EF$;
 
-CREATE UNIQUE INDEX ix_organization_memberships_organization_id_user_id ON app.organization_memberships (organization_id, user_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE UNIQUE INDEX ix_organization_memberships_organization_id_user_id ON app.organization_memberships (organization_id, user_id);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_organization_memberships_user_id ON app.organization_memberships (user_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_organization_memberships_user_id ON app.organization_memberships (user_id);
+    END IF;
+END $EF$;
 
-CREATE UNIQUE INDEX ix_product_versions_product_id_version_number ON app.product_versions (product_id, version_number);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE UNIQUE INDEX ix_product_versions_product_id_version_number ON app.product_versions (product_id, version_number);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_products_organization_id ON app.products (organization_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_products_organization_id ON app.products (organization_id);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_role_claims_role_id ON identity.role_claims (role_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_role_claims_role_id ON identity.role_claims (role_id);
+    END IF;
+END $EF$;
 
-CREATE UNIQUE INDEX "RoleNameIndex" ON identity.roles (normalized_name);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE UNIQUE INDEX "RoleNameIndex" ON identity.roles (normalized_name);
+    END IF;
+END $EF$;
 
-CREATE UNIQUE INDEX ix_units_code_catalogue_version ON app.units (code, catalogue_version);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE UNIQUE INDEX ix_units_code_catalogue_version ON app.units (code, catalogue_version);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_user_claims_user_id ON identity.user_claims (user_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_user_claims_user_id ON identity.user_claims (user_id);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_user_logins_user_id ON identity.user_logins (user_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_user_logins_user_id ON identity.user_logins (user_id);
+    END IF;
+END $EF$;
 
-CREATE INDEX ix_user_roles_role_id ON identity.user_roles (role_id);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX ix_user_roles_role_id ON identity.user_roles (role_id);
+    END IF;
+END $EF$;
 
-CREATE INDEX "EmailIndex" ON identity.users (normalized_email);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE INDEX "EmailIndex" ON identity.users (normalized_email);
+    END IF;
+END $EF$;
 
-CREATE UNIQUE INDEX "UserNameIndex" ON identity.users (normalized_user_name);
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    CREATE UNIQUE INDEX "UserNameIndex" ON identity.users (normalized_user_name);
+    END IF;
+END $EF$;
 
-INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
-VALUES ('20260718081447_InitialCreate', '10.0.10');
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718081447_InitialCreate') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260718081447_InitialCreate', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718082504_SeedUnitCatalogueV1') THEN
+    INSERT INTO app.units (id, canonical_code, catalogue_version, code, dimension, offset_to_canonical, scale_to_canonical, symbol)
+    VALUES ('71000000-0000-0000-0000-000000000001', 'kg', 'units-p0-v1', 'kg', 'mass', 0.0, 1.0, 'kg');
+    INSERT INTO app.units (id, canonical_code, catalogue_version, code, dimension, offset_to_canonical, scale_to_canonical, symbol)
+    VALUES ('71000000-0000-0000-0000-000000000002', 'kg', 'units-p0-v1', 'g', 'mass', 0.0, 0.001, 'g');
+    INSERT INTO app.units (id, canonical_code, catalogue_version, code, dimension, offset_to_canonical, scale_to_canonical, symbol)
+    VALUES ('71000000-0000-0000-0000-000000000003', 'kWh', 'units-p0-v1', 'kWh', 'energy', 0.0, 1.0, 'kWh');
+    INSERT INTO app.units (id, canonical_code, catalogue_version, code, dimension, offset_to_canonical, scale_to_canonical, symbol)
+    VALUES ('71000000-0000-0000-0000-000000000004', 'tonne-km', 'units-p0-v1', 'tonne-km', 'transport-work', 0.0, 1.0, 't·km');
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260718082504_SeedUnitCatalogueV1') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260718082504_SeedUnitCatalogueV1', '10.0.10');
+    END IF;
+END $EF$;
 COMMIT;
 

@@ -74,7 +74,42 @@ public sealed class PostgreSqlPersistenceTests
         }
     }
 
+    [Fact]
+    public async Task QueryFilters_ResolveOrganizationWhenRequestScopeBecomesAvailable()
+    {
+        var organizationId = Guid.NewGuid();
+        var productId = Guid.NewGuid();
+
+        await using (var seededContext = CreateContext(organizationId))
+        {
+            seededContext.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationId,
+                Name = "延遲租戶測試組織",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            seededContext.Products.Add(new ProductRecord
+            {
+                Id = productId,
+                OrganizationId = organizationId,
+                Name = "延遲租戶測試產品",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await seededContext.SaveChangesAsync();
+        }
+
+        var scope = new MutableOrganizationScope();
+        await using var context = CreateContext(scope);
+        Assert.Empty(await context.Products.ToArrayAsync());
+
+        scope.OrganizationId = organizationId;
+        Assert.Equal([productId], await context.Products.Select(item => item.Id).ToArrayAsync());
+    }
+
     private static CarbonFootprintDbContext CreateContext(Guid organizationId)
+        => CreateContext(new TestOrganizationScope(organizationId));
+
+    private static CarbonFootprintDbContext CreateContext(IOrganizationScope organizationScope)
     {
         var connectionString = Environment.GetEnvironmentVariable("CARBON_TEST_DB_CONNECTION")
             ?? throw new InvalidOperationException("Integration test 需要 CARBON_TEST_DB_CONNECTION。");
@@ -82,12 +117,16 @@ public sealed class PostgreSqlPersistenceTests
             .UseNpgsql(connectionString)
             .UseSnakeCaseNamingConvention()
             .Options;
-        return new CarbonFootprintDbContext(options, new TestOrganizationScope(organizationId));
+        return new CarbonFootprintDbContext(options, organizationScope);
     }
 
     private sealed record TestOrganizationScope(Guid Value) : IOrganizationScope
     {
         public Guid? OrganizationId => Value;
     }
-}
 
+    private sealed class MutableOrganizationScope : IOrganizationScope
+    {
+        public Guid? OrganizationId { get; set; }
+    }
+}

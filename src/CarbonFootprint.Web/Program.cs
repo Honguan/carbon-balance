@@ -1,9 +1,11 @@
 using System.Threading.RateLimiting;
+using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Domain.Modules.Calculations;
 using CarbonFootprint.Infrastructure;
 using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Web.Security;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -14,8 +16,14 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IOrganizationScope, HttpOrganizationScope>();
 builder.Services.AddCarbonFootprintInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<CalculationEngine>();
+builder.Services.AddScoped<CalculateInventoryHandler>();
 builder.Services.AddRazorPages();
 builder.Services.AddProblemDetails();
+var dataProtectionPath = builder.Configuration["DataProtection:KeyPath"];
+if (!string.IsNullOrWhiteSpace(dataProtectionPath))
+{
+    builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath));
+}
 builder.Services.AddHealthChecks().AddDbContextCheck<CarbonFootprintDbContext>("postgresql");
 builder.Services.AddRateLimiter(options =>
 {
@@ -106,4 +114,3 @@ app.MapRazorPages().WithStaticAssets();
 app.Run();
 
 public partial class Program;
-

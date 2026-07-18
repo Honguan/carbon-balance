@@ -10,10 +10,10 @@
 | 0 | GOV-001 repository 與治理基線 | complete | Git commit `181a3d4`；本機 secret pattern scan 通過 | 遠端 ruleset 未獲授權 |
 | 0 | ADR-0001～0003 | complete | 正式 ADR 狀態為 Accepted | — |
 | 1 | ARC-001 .NET solution 與模組骨架 | complete | .NET SDK 10.0.302 Release build，0 warning／0 error | — |
-| 1 | ARC-002 PostgreSQL／EF migration | complete | PostgreSQL 18.4 空庫套用 `InitialCreate`；19 張 app／identity 表 | 前版升級測試待下一 migration |
-| 1 | DEV-001 Docker Compose | complete | postgres、MinIO、Mailpit、web 全部 healthy；首頁與 health 200 | Data Protection 持久化待補 |
-| 1 | CAL Golden Vertical Slice | in-progress | 五階段手算總量 7 kgCO2e；deterministic hash、總和測試通過 | 可操作登入到計算 UI 待完成 |
-| 2 | Identity／Organizations／Products／Inventory | pending | — | — |
+| 1 | ARC-002 PostgreSQL／EF migration | complete | PostgreSQL 18.4 空庫套用兩版 migration；19 張 app／identity 表、4 筆單位種子 | — |
+| 1 | DEV-001 Docker Compose | complete | postgres、MinIO、Mailpit、web 全部 healthy；首頁與 health 200；Data Protection key 持久化 | — |
+| 1 | CAL Golden Vertical Slice | complete | E2E 完成註冊、確認、登入、組織、盤查、五階段資料與 7 kgCO2e 不可變計算 | PCR 與係數仍為未核准測試 fixture |
+| 2 | Identity／Organizations／Products／Inventory | in-progress | confirmed account、租戶範圍、產品與盤查版本 UI 已可操作 | MFA、角色矩陣與完整工作流待完成 |
 | 3 | Units／Factors／PCR 治理 | pending | — | — |
 | 4 | 五階段生命週期資料與 Evidence | pending | — | — |
 | 5 | 完整不可變計算引擎 | pending | — | — |
@@ -24,8 +24,9 @@
 ## 最近驗證
 
 - `dotnet build --configuration Release --no-restore`：成功，0 warning／0 error。
-- `dotnet test --configuration Release --no-build`：13 項通過（Unit 4、Golden 2、Architecture 2、Contract 1、Integration 2、Security 2）。
+- `dotnet test --configuration Release --no-restore`：14 項通過（Unit 4、Golden 2、Architecture 2、Contract 1、Integration 3、Security 2）。
 - `docker compose config --quiet`：成功。
 - `docker compose up -d --build`：PostgreSQL 18.4、MinIO、Mailpit、Web healthy。
-- 空資料庫 migration：`20260718081447_InitialCreate` 成功，`app`／`identity` 共 19 張表。
+- 空資料庫 migration：`20260718081447_InitialCreate` 與 `20260718082504_SeedUnitCatalogueV1` 成功，`app`／`identity` 共 19 張表。
 - Smoke：`/`、`/health/live`、`/health/ready` 均為 HTTP 200。
+- E2E Smoke：註冊信、確認、登入、建檔、五階段計算通過；總量 7 kgCO2e 且有 64 字元 input SHA-256。

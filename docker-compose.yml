@@ -71,6 +71,8 @@ services:
       MAIL__PORT: 1025
     ports:
       - "8088:8080"
+    volumes:
+      - data-protection-keys:/keys
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -88,3 +90,4 @@ volumes:
   postgres-data:
   minio-data:
   mailpit-data:
+  data-protection-keys:

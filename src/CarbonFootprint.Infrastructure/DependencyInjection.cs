@@ -1,5 +1,6 @@
 using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Infrastructure.Identity;
+using CarbonFootprint.Infrastructure.Organizations;
 using CarbonFootprint.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,9 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString).UseSnakeCaseNamingConvention());
         services.TryAddScoped<IOrganizationScope, UnscopedOrganizationScope>();
         services.AddScoped<ICalculationRunStore, CalculationRunStore>();
+        services.AddScoped<OrganizationOnboardingService>();
+        services.Configure<MailOptions>(configuration.GetSection(MailOptions.SectionName));
+        services.AddScoped<IEmailSender<ApplicationUser>, SmtpEmailSender>();
         services.AddDefaultIdentity<ApplicationUser>(options =>
             {
                 options.SignIn.RequireConfirmedAccount = true;
