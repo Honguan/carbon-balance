@@ -48,6 +48,8 @@ jobs:
         run: dotnet run --project src/CarbonFootprint.Web --configuration Release --no-build -- --migrate
       - name: Run all tests
         run: dotnet test --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory TestResults
+      - name: NuGet vulnerability audit
+        run: dotnet restore --locked-mode -p:NuGetAudit=true -p:NuGetAuditMode=all -p:TreatWarningsAsErrors=true
       - name: Validate Compose
         run: docker compose config --quiet
       - name: Upload test results
@@ -58,3 +60,51 @@ jobs:
           path: TestResults
           if-no-files-found: warn
 
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Scan repository history for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  image-sbom-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build release image
+        run: docker build --tag carbon-footprint:${{ github.sha }} --file src/CarbonFootprint.Web/Dockerfile .
+      - name: Scan filesystem for Critical and High vulnerabilities
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+      - name: Scan image for Critical and High vulnerabilities
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: carbon-footprint:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: carbon-footprint:${{ github.sha }}
+          format: cyclonedx-json
+          output-file: carbon-footprint.sbom.cdx.json
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: carbon-footprint.sbom.cdx.json
