@@ -63,6 +63,9 @@ jobs:
       - name: NuGet vulnerability audit
         run: dotnet restore --locked-mode -p:NuGetAudit=true -p:NuGetAuditMode=all -p:TreatWarningsAsErrors=true
       - name: Validate Compose
+        env:
+          POSTGRES_PASSWORD: ci-compose-postgres-password
+          MINIO_ROOT_PASSWORD: ci-compose-minio-password
         run: docker compose config --quiet
       - name: Upload test results
         if: always()
