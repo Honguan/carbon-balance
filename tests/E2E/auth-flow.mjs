@@ -152,6 +152,13 @@ try {
         `Remember-me cookie expires too early: ${persistentCookie.expires}.`
     );
 
+    // The first authenticated workspace action must work, not end in HTTP 400.
+    await page.locator("#organizationName").fill("E2E 碳足跡組織");
+    await page.getByRole("button", { name: "建立組織" }).click();
+    await expectUrl(page, "/Workspace", "Organization creation left the workspace");
+    await page.getByText("組織已建立。").waitFor({ state: "visible" });
+    await page.getByText("目前組織：").waitFor({ state: "visible" });
+
     // Opening the login URL explicitly must clear the previous session instead of silently logging in.
     await page.goto(`${baseUrl}/Identity/Account/Login`, { waitUntil: "domcontentloaded" });
     await expectUrl(page, "/Identity/Account/Login", "Explicit login page visit redirected into the app");
