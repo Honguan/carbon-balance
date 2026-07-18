@@ -33,8 +33,8 @@ public static class DependencyInjection
         services.AddScoped<IEmailSender<ApplicationUser>>(provider => provider.GetRequiredService<SmtpEmailSender>());
         services.AddDefaultIdentity<ApplicationUser>(options =>
             {
-                options.SignIn.RequireConfirmedAccount = false;
-                options.SignIn.RequireConfirmedEmail = false;
+                options.SignIn.RequireConfirmedAccount = true;
+                options.SignIn.RequireConfirmedEmail = true;
                 options.User.RequireUniqueEmail = true;
                 options.Lockout.MaxFailedAccessAttempts = 8;
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
@@ -54,7 +54,7 @@ public static class DependencyInjection
             options.Cookie.SecurePolicy = configuration.GetValue<bool>("Security:RequireHttpsCookies")
                 ? CookieSecurePolicy.Always
                 : CookieSecurePolicy.SameAsRequest;
-            options.ExpireTimeSpan = TimeSpan.FromHours(8);
+            options.ExpireTimeSpan = TimeSpan.FromDays(30);
             options.SlidingExpiration = true;
         });
         services.Configure<SecurityStampValidatorOptions>(options =>
