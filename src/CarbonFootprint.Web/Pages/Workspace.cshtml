@@ -7,6 +7,11 @@
     ViewData["Title"] = "盤查工作區";
     var isSetupSection = Model.Section is "setup" or "product" or "pcr" or "inventory";
     var latestSelectedRun = Model.Runs.FirstOrDefault(item => item.ProjectVersionId == Model.ProjectVersionId);
+    var hasFacilities = Model.Facilities.Count > 0;
+    var hasProductVersions = Model.ProductVersions.Count > 0;
+    var hasSelectablePcrVersions = Model.SelectablePcrVersions.Count > 0;
+    var hasSelectableFactors = Model.SelectableFactors.Count > 0;
+    var canCreateInventory = hasProductVersions && hasSelectablePcrVersions;
     var lifecycleSections = new[]
     {
         new { Stage = LifecycleStage.RawMaterial, Number = "01", Slug = "raw-material", Title = "原料取得", Summary = "原物料投入與供應商運輸", ActivityLabel = "原物料名稱／運輸項目", ScenarioLabel = "材質／供應商名稱與地址", ValueLabel = "投入量／運輸量", Kinds = new[] { ActivityDataKind.Material, ActivityDataKind.MaterialTransport } },
@@ -161,20 +166,33 @@ else
                         <input class="form-control" id="productName" name="productName" required maxlength="300" />
                         <label class="form-label mt-2" for="categoryCode">產品分類代碼</label>
                         <input class="form-control" id="categoryCode" name="categoryCode" required maxlength="100" />
-                        <label class="form-label mt-2" for="facilityId">所屬廠場</label>
-                        <select class="form-select" id="facilityId" name="facilityId" required>
-                            @foreach (var facility in Model.Facilities)
-                            {
-                                <option value="@facility.Id">@facility.Code - @facility.Name</option>
-                            }
-                        </select>
-                        <button class="btn btn-primary mt-3" type="submit">儲存產品第 1 版</button>
+                        <div class="workspace-select-field">
+                            <label class="form-label mt-2" for="facilityId">所屬廠場</label>
+                            <select class="form-select" id="facilityId" name="facilityId" required disabled="@(!hasFacilities)" aria-describedby="facilityId-help">
+                                <option value="">@(hasFacilities ? "請選擇所屬廠場" : "尚無可選廠場")</option>
+                                @foreach (var facility in Model.Facilities)
+                                {
+                                    <option value="@facility.Id">@facility.Code - @facility.Name</option>
+                                }
+                            </select>
+                            <p class="workspace-select-help" id="facilityId-help">
+                                @if (hasFacilities)
+                                {
+                                    <span>選擇此產品實際生產或管理的廠場。</span>
+                                }
+                                else
+                                {
+                                    <span>目前沒有廠場。請先到 <a asp-page="/Workspace" asp-route-section="governance">組織與廠場</a> 建立廠場。</span>
+                                }
+                            </p>
+                        </div>
+                        <button class="btn btn-primary mt-3" type="submit" disabled="@(!hasFacilities)">儲存產品第 1 版</button>
                     </form>
                     <h3 class="workspace-subheading mt-4">已建立版本</h3>
                     <ul class="workspace-records">
                         @foreach (var item in Model.ProductVersions)
                         {
-                            <li>@item.NameZhTw（v@item.VersionNumber）</li>
+                            <li>@item.NameZhTw（v@(item.VersionNumber)）</li>
                         }
                     </ul>
                 </div>
@@ -229,7 +247,7 @@ else
                         @foreach (var pcr in Model.PcrVersions)
                         {
                             <li class="mb-2">
-                                @pcr.RegistrationNumber v@pcr.VersionNumber：@pcr.Title（@pcr.PublicationStatus）
+                                @pcr.RegistrationNumber v@(pcr.VersionNumber)：@pcr.Title（@pcr.PublicationStatus）
                                 @if (pcr.PublicationStatus == PcrPublicationStatus.Draft.ToString())
                                 {
                                     <form class="d-inline" method="post" asp-page-handler="ReviewPcr">
@@ -270,13 +288,26 @@ else
                     </div>
                     <form method="post" asp-page-handler="CreateInventory">
                         <h3 class="workspace-subheading">盤查對象與期間</h3>
-                        <label class="form-label" for="productVersionId">產品版本</label>
-                        <select class="form-select" id="productVersionId" name="productVersionId" required>
-                            @foreach (var item in Model.ProductVersions)
-                            {
-                                <option value="@item.Id">@item.NameZhTw v@item.VersionNumber</option>
-                            }
-                        </select>
+                        <div class="workspace-select-field">
+                            <label class="form-label" for="productVersionId">產品版本</label>
+                            <select class="form-select" id="productVersionId" name="productVersionId" required disabled="@(!hasProductVersions)" aria-describedby="productVersionId-help">
+                                <option value="">@(hasProductVersions ? "請選擇產品版本" : "尚無可選產品版本")</option>
+                                @foreach (var item in Model.ProductVersions)
+                                {
+                                    <option value="@item.Id">@item.NameZhTw v@(item.VersionNumber)</option>
+                                }
+                            </select>
+                            <p class="workspace-select-help" id="productVersionId-help">
+                                @if (!hasProductVersions)
+                                {
+                                    <span>請先到 <a asp-page="/Workspace" asp-route-section="product">產品基本資料</a> 建立產品版本。</span>
+                                }
+                                else
+                                {
+                                    <span>選擇本次盤查對應的產品版本。</span>
+                                }
+                            </p>
+                        </div>
                         <label class="form-label mt-2" for="periodStart">期間起日</label>
                         <input class="form-control" type="date" id="periodStart" name="periodStart" value="2026-01-01" required />
                         <label class="form-label mt-2" for="periodEnd">期間迄日</label>
@@ -300,14 +331,27 @@ else
                         <label class="form-label mt-2" for="estimationReason">估算／替代資料理由</label>
                         <textarea class="form-control" id="estimationReason" name="estimationReason" maxlength="4000"></textarea>
                         <h3 class="workspace-subheading mt-4">適用 PCR</h3>
-                        <label class="form-label mt-2" for="pcrVersionId">PCR 版本</label>
-                        <select class="form-select" id="pcrVersionId" name="pcrVersionId" required>
-                            @foreach (var pcr in Model.PcrVersions)
-                            {
-                                <option value="@pcr.Id">@pcr.RegistrationNumber v@pcr.VersionNumber - @pcr.Title</option>
-                            }
-                        </select>
-                        <button class="btn btn-primary mt-3" type="submit">儲存盤查第 1 版</button>
+                        <div class="workspace-select-field">
+                            <label class="form-label mt-2" for="pcrVersionId">PCR 版本</label>
+                            <select class="form-select" id="pcrVersionId" name="pcrVersionId" required disabled="@(!hasSelectablePcrVersions)" aria-describedby="pcrVersionId-help">
+                                <option value="">@(hasSelectablePcrVersions ? "請選擇已發布 PCR 版本" : "尚無已發布 PCR 版本")</option>
+                                @foreach (var pcr in Model.SelectablePcrVersions)
+                                {
+                                    <option value="@pcr.Id">@pcr.RegistrationNumber v@(pcr.VersionNumber) - @pcr.Title</option>
+                                }
+                            </select>
+                            <p class="workspace-select-help" id="pcrVersionId-help">
+                                @if (!hasSelectablePcrVersions)
+                                {
+                                    <span>草稿或已撤回版本不可使用。請先到 <a asp-page="/Workspace" asp-route-section="pcr">PCR 規範</a> 完成審查並發布。</span>
+                                }
+                                else
+                                {
+                                    <span>只列出目前已發布的 PCR 版本；期間有效性會在儲存時再次檢查。</span>
+                                }
+                            </p>
+                        </div>
+                        <button class="btn btn-primary mt-3" type="submit" disabled="@(!canCreateInventory)">儲存盤查第 1 版</button>
                     </form>
                     <h3 class="workspace-subheading mt-4">階段適用性與專案狀態</h3>
                     <p class="workspace-help">各階段資料與計算完成後，請至「計算與結果」頁統一提交整份盤查。</p>
@@ -447,13 +491,14 @@ else
                     {
                     <form class="lifecycle-project-selector" method="get" asp-page="/Workspace" asp-route-section="lifecycle">
                         <label class="form-label" for="projectVersionId">目前盤查版本</label>
-                        <select class="form-select" id="projectVersionId" name="projectVersionId" onchange="this.form.submit()">
+                        <select class="form-select" id="projectVersionId" name="projectVersionId" data-auto-submit-select aria-describedby="projectVersionId-help">
                             @foreach (var inventory in Model.InventoryProjects)
                             {
                                 <option value="@inventory.Id" selected="@(inventory.Id == Model.ProjectVersionId)">@inventory.FunctionalUnit / @inventory.PeriodStart～@inventory.PeriodEnd</option>
                             }
                         </select>
-                        <noscript><button class="btn btn-outline-primary mt-2" type="submit">切換盤查版本</button></noscript>
+                        <p class="workspace-select-help" id="projectVersionId-help">變更選項後會自動切換；也可使用下方按鈕。</p>
+                        <button class="btn btn-outline-primary mt-2" type="submit">切換盤查版本</button>
                     </form>
                     <nav class="lifecycle-section-nav" aria-label="五階段資料區塊">
                         @foreach (var stageSection in lifecycleSections)
@@ -533,12 +578,23 @@ else
                                         </div>
                                         <div class="lifecycle-field lifecycle-field--wide">
                                             <label class="form-label" for="factor-@stageSection.Slug">排放係數版本</label>
-                                            <select class="form-select" id="factor-@stageSection.Slug" name="factorVersionId" required>
-                                                @foreach (var factor in Model.Factors)
+                                            <select class="form-select" id="factor-@stageSection.Slug" name="factorVersionId" required disabled="@(!hasSelectableFactors)" aria-describedby="factor-@stageSection.Slug-help">
+                                                <option value="">@(hasSelectableFactors ? "請選擇已發布排放係數" : "尚無已發布排放係數")</option>
+                                                @foreach (var factor in Model.SelectableFactors)
                                                 {
                                                     <option value="@factor.Id">@factor.Name / kgCO2e／@factor.DenominatorUnitCode / @factor.SourceDatasetVersion</option>
                                                 }
                                             </select>
+                                            <p class="workspace-select-help" id="factor-@stageSection.Slug-help">
+                                                @if (!hasSelectableFactors)
+                                                {
+                                                    <span>請先到 <a asp-page="/Workspace" asp-route-section="factors">排放係數</a> 建立、審查並發布係數版本。</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>只列出已發布係數；有效期間與單位會在儲存時再次檢查。</span>
+                                                }
+                                            </p>
                                         </div>
                                         <div class="lifecycle-field">
                                             <label class="form-label" for="allocation-@stageSection.Slug">分配比例（0～1）</label>
@@ -561,7 +617,7 @@ else
                                             <textarea class="form-control" id="reason-@stageSection.Slug" name="activityEstimationReason" maxlength="4000"></textarea>
                                         </div>
                                     </div>
-                                    <button class="btn btn-primary mt-3" type="submit">儲存「@stageSection.Title」活動</button>
+                                    <button class="btn btn-primary mt-3" type="submit" disabled="@(!hasSelectableFactors)">儲存「@stageSection.Title」活動</button>
                                 </form>
 
                                 <div class="lifecycle-saved-data">
@@ -625,15 +681,16 @@ else
             @if (Model.InventoryProjects.Count > 0)
             {
             <form class="lifecycle-project-selector" method="get" asp-page="/Workspace" asp-route-section="calculation">
-                <label class="form-label" for="calculationProjectVersionId">目前盤查版本</label>
-                <select class="form-select" id="calculationProjectVersionId" name="projectVersionId" onchange="this.form.submit()">
-                    @foreach (var item in Model.InventoryProjects)
-                    {
-                        <option value="@item.Id" selected="@(item.Id == Model.ProjectVersionId)">@item.FunctionalUnit / @item.PcrVersion</option>
-                    }
-                </select>
-                <noscript><button class="btn btn-outline-primary mt-2" type="submit">切換盤查版本</button></noscript>
-            </form>
+            <label class="form-label" for="calculationProjectVersionId">目前盤查版本</label>
+            <select class="form-select" id="calculationProjectVersionId" name="projectVersionId" data-auto-submit-select aria-describedby="calculationProjectVersionId-help">
+                @foreach (var inventory in Model.InventoryProjects)
+                {
+                    <option value="@inventory.Id" selected="@(inventory.Id == Model.ProjectVersionId)">@inventory.FunctionalUnit / @inventory.PeriodStart～@inventory.PeriodEnd</option>
+                }
+            </select>
+            <p class="workspace-select-help" id="calculationProjectVersionId-help">變更選項後會自動切換；也可使用下方按鈕。</p>
+            <button class="btn btn-outline-primary mt-2" type="submit">切換盤查版本</button>
+        </form>
             <form method="post" asp-page-handler="Calculate" asp-route-projectVersionId="@Model.ProjectVersionId">
                 <input type="hidden" name="inventoryProjectVersionId" value="@Model.ProjectVersionId" />
                 <button class="btn btn-success mt-3" type="submit">凍結輸入並計算</button>
