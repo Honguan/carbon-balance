@@ -157,8 +157,12 @@ public sealed class EmissionFactorVersionRecord : IOrganizationOwned
     public required string PublicationStatus { get; set; }
     public required string SourceDatasetVersion { get; set; }
     public required string LicenseCode { get; set; }
+    public string SourceType { get; set; } = string.Empty;
     public string SourceName { get; set; } = string.Empty;
+    public string SourceReference { get; set; } = string.Empty;
     public string DatasetName { get; set; } = string.Empty;
+    public string OriginalDocumentName { get; set; } = string.Empty;
+    public string OriginalDocumentSha256 { get; set; } = string.Empty;
     public string Applicability { get; set; } = string.Empty;
     public string ReviewStatus { get; set; } = "Pending";
     public Guid? ReviewedBy { get; set; }
@@ -177,6 +181,11 @@ public sealed class ActivityDataRecord : IOrganizationOwned
     public required string Name { get; set; }
     public required string ActivityKind { get; set; }
     public string SupplierOrScenario { get; set; } = string.Empty;
+    public string EquipmentCategory { get; set; } = string.Empty;
+    public string DataSourceType { get; set; } = string.Empty;
+    public string DataProvider { get; set; } = string.Empty;
+    public string CollectionMethod { get; set; } = string.Empty;
+    public string SourceReference { get; set; } = string.Empty;
     public decimal RawValue { get; set; }
     public required string RawUnitCode { get; set; }
     public decimal CanonicalValue { get; set; }

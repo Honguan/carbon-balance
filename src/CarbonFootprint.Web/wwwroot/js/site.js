@@ -19,6 +19,21 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
+    document.querySelectorAll("select[data-controlled-other]").forEach((select) => {
+        const target = document.querySelector(select.dataset.otherTarget ?? "");
+        if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) {
+            return;
+        }
+        const sync = () => {
+            const enabled = select.value === "__other__";
+            target.hidden = !enabled;
+            target.required = enabled;
+            if (!enabled) target.value = "";
+        };
+        select.addEventListener("change", sync);
+        sync();
+    });
+
     document.querySelectorAll("select[data-auto-submit-select]").forEach((select) => {
         select.addEventListener("change", () => {
             if (!select.value || !(select.form instanceof HTMLFormElement)) {

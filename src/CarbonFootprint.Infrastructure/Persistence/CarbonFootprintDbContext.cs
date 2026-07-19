@@ -189,6 +189,11 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.Name).HasMaxLength(300);
             entity.Property(item => item.ActivityKind).HasMaxLength(100);
             entity.Property(item => item.SupplierOrScenario).HasMaxLength(1000);
+            entity.Property(item => item.EquipmentCategory).HasMaxLength(200);
+            entity.Property(item => item.DataSourceType).HasMaxLength(200);
+            entity.Property(item => item.DataProvider).HasMaxLength(300);
+            entity.Property(item => item.CollectionMethod).HasMaxLength(300);
+            entity.Property(item => item.SourceReference).HasMaxLength(500);
             entity.Property(item => item.RawValue).HasPrecision(30, 12);
             entity.Property(item => item.CanonicalValue).HasPrecision(30, 12);
             entity.Property(item => item.RawUnitCode).HasMaxLength(50);
@@ -256,8 +261,12 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.NumeratorUnitCode).HasMaxLength(50);
             entity.Property(item => item.DenominatorUnitCode).HasMaxLength(50);
             entity.Property(item => item.PublicationStatus).HasMaxLength(30);
+            entity.Property(item => item.SourceType).HasMaxLength(50);
             entity.Property(item => item.SourceName).HasMaxLength(300);
+            entity.Property(item => item.SourceReference).HasMaxLength(500);
             entity.Property(item => item.DatasetName).HasMaxLength(300);
+            entity.Property(item => item.OriginalDocumentName).HasMaxLength(300);
+            entity.Property(item => item.OriginalDocumentSha256).HasMaxLength(64);
             entity.Property(item => item.Applicability).HasMaxLength(2000);
             entity.Property(item => item.ReviewStatus).HasMaxLength(30);
             entity.HasIndex(item => new { item.FactorId, item.VersionNumber }).IsUnique();
