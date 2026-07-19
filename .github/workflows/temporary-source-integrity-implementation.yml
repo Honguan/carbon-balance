@@ -27,6 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           for script in .github/temporary-source-integrity/*.py; do
+            echo "Running $script"
             python "$script"
           done
       - name: Generate migration and validate
