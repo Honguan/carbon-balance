@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: pull-request-validation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test-migrate:
     runs-on: ubuntu-latest
@@ -171,6 +175,7 @@ jobs:
           - 8025:8025
     env:
       E2E_DATABASE: Host=127.0.0.1;Port=5432;Database=carbon_auth_e2e;Username=carbon_e2e;Password=auth-e2e-postgres-password;SSL Mode=Disable;GSS Encryption Mode=Disable
+      E2E_PG_URL: postgresql://carbon_e2e:auth-e2e-postgres-password@127.0.0.1:5432/carbon_auth_e2e
     steps:
       - uses: actions/checkout@v7
       - name: Build browser-test image
@@ -204,8 +209,9 @@ jobs:
             fi
             sleep 2
           done
-      - name: Run Chromium authentication flow
+      - name: Run Chromium authentication and workspace flow
         run: |
+          rm -rf tests/E2E/artifacts
           mkdir -p tests/E2E/artifacts
           docker run --rm \
             --network host \
@@ -214,8 +220,9 @@ jobs:
             --env CARBON_E2E_BASE_URL=http://127.0.0.1:18088 \
             --env CARBON_E2E_MAILPIT_URL=http://127.0.0.1:8025 \
             --env CARBON_E2E_ARTIFACTS=/work/artifacts \
+            --env "CARBON_E2E_PG_URL=${E2E_PG_URL}" \
             mcr.microsoft.com/playwright:v1.55.0-noble \
-            bash -lc 'npm install --no-save --no-package-lock playwright@1.55.0 >/tmp/playwright-npm.log && node auth-flow.mjs'
+            bash -lc 'npm install --no-save --no-package-lock playwright@1.55.0 pg@8.13.1 >/tmp/playwright-npm.log && node auth-flow.mjs'
       - name: Show application logs
         if: always()
         run: docker logs carbon-auth-e2e || true
