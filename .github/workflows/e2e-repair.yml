@@ -21,18 +21,10 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
-
           path = Path('tests/E2E/auth-flow.mjs')
           text = path.read_text()
-          old = '''    const factorName = `E2E 排放係數 ${Date.now()}`;
-    await page.goto(`${baseUrl}/Workspace/factors`, { waitUntil: "networkidle" });
-    await expectSelectOptions(page.locator("#denominatorUnitCode"), 4, "Denominator-unit select is unusable");
-'''
-          new = '''    const factorName = `E2E 排放係數 ${Date.now()}`;
-    const factorRegistry = page.locator("details.lifecycle-factor-registry");
-    await factorRegistry.locator("summary").click();
-    await expectSelectOptions(factorRegistry.locator("#denominatorUnitCode"), 4, "Denominator-unit select is unusable");
-'''
+          old = '    const factorName = `E2E 排放係數 ${Date.now()}`;\n    await page.goto(`${baseUrl}/Workspace/factors`, { waitUntil: "networkidle" });\n    await expectSelectOptions(page.locator("#denominatorUnitCode"), 4, "Denominator-unit select is unusable");\n'
+          new = '    const factorName = `E2E 排放係數 ${Date.now()}`;\n    const factorRegistry = page.locator("details.lifecycle-factor-registry");\n    await factorRegistry.locator("summary").click();\n    await expectSelectOptions(factorRegistry.locator("#denominatorUnitCode"), 4, "Denominator-unit select is unusable");\n'
           if old not in text:
               raise SystemExit('Integrated factor registry test block was not found.')
           path.write_text(text.replace(old, new, 1))
