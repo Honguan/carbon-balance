@@ -248,7 +248,8 @@ try {
     // Product versions are immediately selectable, while draft PCR records are deliberately excluded.
     await page.goto(`${baseUrl}/Workspace/inventory`, { waitUntil: "networkidle" });
     await expectSelectOptions(page.locator("#productVersionId"), 3, "Product-version select is unusable");
-    assert(await page.locator("#pcrVersionId").isDisabled(), "PCR select should be disabled without a published PCR.");
+    const emptyPcrSelect = page.locator("#pcrVersionId");
+    assert(await emptyPcrSelect.isDisabled(), "PCR select should be disabled without a published PCR.");
     assert((await emptyPcrSelect.locator("option").first().textContent()).includes("尚無已發布 PCR 版本"), "Empty PCR select did not explain its prerequisite.");
 
     const pcrRegistration = `PCR-E2E-${Date.now()}`;
