@@ -181,6 +181,11 @@ public sealed class ActivityDataRecord : IOrganizationOwned
     public required string Name { get; set; }
     public required string ActivityKind { get; set; }
     public string SupplierOrScenario { get; set; } = string.Empty;
+    public string EquipmentCategory { get; set; } = string.Empty;
+    public string DataSourceType { get; set; } = string.Empty;
+    public string DataProvider { get; set; } = string.Empty;
+    public string CollectionMethod { get; set; } = string.Empty;
+    public string SourceReference { get; set; } = string.Empty;
     public decimal RawValue { get; set; }
     public required string RawUnitCode { get; set; }
     public decimal CanonicalValue { get; set; }

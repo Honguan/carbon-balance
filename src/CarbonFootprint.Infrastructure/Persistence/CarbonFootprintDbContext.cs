@@ -189,6 +189,11 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.Name).HasMaxLength(300);
             entity.Property(item => item.ActivityKind).HasMaxLength(100);
             entity.Property(item => item.SupplierOrScenario).HasMaxLength(1000);
+            entity.Property(item => item.EquipmentCategory).HasMaxLength(200);
+            entity.Property(item => item.DataSourceType).HasMaxLength(200);
+            entity.Property(item => item.DataProvider).HasMaxLength(300);
+            entity.Property(item => item.CollectionMethod).HasMaxLength(300);
+            entity.Property(item => item.SourceReference).HasMaxLength(500);
             entity.Property(item => item.RawValue).HasPrecision(30, 12);
             entity.Property(item => item.CanonicalValue).HasPrecision(30, 12);
             entity.Property(item => item.RawUnitCode).HasMaxLength(50);

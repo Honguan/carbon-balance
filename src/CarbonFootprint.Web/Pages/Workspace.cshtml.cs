@@ -1046,16 +1046,13 @@ public sealed class WorkspaceModel : PageModel
                 ActivityKind = activityKind.ToString(),
                 SupplierOrScenario = string.Join(
                     "｜",
-                    new[]
-                    {
-                        supplierOrScenario?.Trim(),
-                        string.IsNullOrWhiteSpace(equipment) ? null : $"設備類別：{equipment}",
-                        $"資料來源：{sourceType}",
-                        $"資料提供者：{provider}",
-                        $"取得方式：{method}",
-                        $"來源參照：{sourceReference.Trim()}",
-                        $"計算基礎：{derivedAmount.FormulaTrace}"
-                    }.Where(item => !string.IsNullOrWhiteSpace(item))),
+                    new[] { supplierOrScenario?.Trim(), $"計算基礎：{derivedAmount.FormulaTrace}" }
+                        .Where(item => !string.IsNullOrWhiteSpace(item))),
+                EquipmentCategory = equipment,
+                DataSourceType = sourceType,
+                DataProvider = provider,
+                CollectionMethod = method,
+                SourceReference = sourceReference.Trim(),
                 RawValue = derivedAmount.Value,
                 RawUnitCode = derivedAmount.UnitCode,
                 CanonicalValue = canonicalValue,
@@ -1428,7 +1425,12 @@ public sealed class WorkspaceModel : PageModel
                     string.IsNullOrWhiteSpace(activity.EstimationReason) ? null : activity.EstimationReason,
                     activity.DataQuality,
                     activity.AmountFormulaId,
-                    activity.FormulaInputsJson);
+                    activity.FormulaInputsJson,
+                    activity.EquipmentCategory,
+                    activity.DataSourceType,
+                    activity.DataProvider,
+                    activity.CollectionMethod,
+                    activity.SourceReference);
             }).ToArray(),
             project.DeclaredUnit,
             project.SystemBoundary,

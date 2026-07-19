@@ -48,7 +48,12 @@ public sealed record ActivityDataSnapshot(
     string? EstimationReason = null,
     string DataQuality = "primary",
     string AmountFormulaId = "direct-activity-amount-v1",
-    string FormulaInputsJson = "{}");
+    string FormulaInputsJson = "{}",
+    string EquipmentCategory = "",
+    string DataSourceType = "",
+    string DataProvider = "",
+    string CollectionMethod = "",
+    string SourceReference = "");
 
 public sealed record InventoryProjectSnapshot(
     Guid OrganizationId,
