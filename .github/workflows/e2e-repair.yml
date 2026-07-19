@@ -1,0 +1,45 @@
+name: Temporary integrated E2E repair
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  integrated-e2e-repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Open lifecycle factor registry in browser flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/E2E/auth-flow.mjs')
+          text = path.read_text()
+          old = '''    const factorName = `E2E 排放係數 ${Date.now()}`;
+    await page.goto(`${baseUrl}/Workspace/factors`, { waitUntil: "networkidle" });
+    await expectSelectOptions(page.locator("#denominatorUnitCode"), 4, "Denominator-unit select is unusable");
+'''
+          new = '''    const factorName = `E2E 排放係數 ${Date.now()}`;
+    const factorRegistry = page.locator("details.lifecycle-factor-registry");
+    await factorRegistry.locator("summary").click();
+    await expectSelectOptions(factorRegistry.locator("#denominatorUnitCode"), 4, "Denominator-unit select is unusable");
+'''
+          if old not in text:
+              raise SystemExit('Integrated factor registry test block was not found.')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/E2E/auth-flow.mjs
+          git diff --cached --check
+          git commit -m 'test: open integrated lifecycle factor registry'
+          git push origin HEAD:${{ github.head_ref }}
