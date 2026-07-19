@@ -18,4 +18,19 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     });
+
+    document.querySelectorAll("select[data-auto-submit-select]").forEach((select) => {
+        select.addEventListener("change", () => {
+            if (!select.value || !(select.form instanceof HTMLFormElement)) {
+                return;
+            }
+
+            if (typeof select.form.requestSubmit === "function") {
+                select.form.requestSubmit();
+                return;
+            }
+
+            select.form.submit();
+        });
+    });
 });
