@@ -47,11 +47,11 @@ async function publishPcrFixture(registrationNumber) {
     const rowCount = await withDatabase(async (client) => {
         const result = await client.query(
             `UPDATE app.pcr_versions
-             SET "ReviewStatus" = 'Approved',
-                 "PublicationStatus" = 'Published',
-                 "ReviewedAt" = NOW(),
-                 "PublishedAt" = NOW()
-             WHERE "RegistrationNumber" = $1`,
+             SET review_status = 'Approved',
+                 publication_status = 'Published',
+                 reviewed_at = NOW(),
+                 published_at = NOW()
+             WHERE registration_number = $1`,
             [registrationNumber]
         );
         return result.rowCount;
@@ -63,11 +63,11 @@ async function publishFactorFixture(factorName) {
     const rowCount = await withDatabase(async (client) => {
         const result = await client.query(
             `UPDATE app.emission_factor_versions
-             SET "ReviewStatus" = 'Approved',
-                 "PublicationStatus" = 'Published',
-                 "ReviewedAt" = NOW(),
-                 "PublishedAt" = NOW()
-             WHERE "Name" = $1`,
+             SET review_status = 'Approved',
+                 publication_status = 'Published',
+                 reviewed_at = NOW(),
+                 published_at = NOW()
+             WHERE name = $1`,
             [factorName]
         );
         return result.rowCount;
