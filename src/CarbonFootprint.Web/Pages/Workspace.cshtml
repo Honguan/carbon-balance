@@ -192,7 +192,7 @@ else
                     <ul class="workspace-records">
                         @foreach (var item in Model.ProductVersions)
                         {
-                            <li>@item.NameZhTw（v@item.VersionNumber）</li>
+                            <li>@item.NameZhTw（v@(item.VersionNumber)）</li>
                         }
                     </ul>
                 </div>
@@ -247,7 +247,7 @@ else
                         @foreach (var pcr in Model.PcrVersions)
                         {
                             <li class="mb-2">
-                                @pcr.RegistrationNumber v@pcr.VersionNumber：@pcr.Title（@pcr.PublicationStatus）
+                                @pcr.RegistrationNumber v@(pcr.VersionNumber)：@pcr.Title（@pcr.PublicationStatus）
                                 @if (pcr.PublicationStatus == PcrPublicationStatus.Draft.ToString())
                                 {
                                     <form class="d-inline" method="post" asp-page-handler="ReviewPcr">
@@ -294,7 +294,7 @@ else
                                 <option value="">@(hasProductVersions ? "請選擇產品版本" : "尚無可選產品版本")</option>
                                 @foreach (var item in Model.ProductVersions)
                                 {
-                                    <option value="@item.Id">@item.NameZhTw v@item.VersionNumber</option>
+                                    <option value="@item.Id">@item.NameZhTw v@(item.VersionNumber)</option>
                                 }
                             </select>
                             <p class="workspace-select-help" id="productVersionId-help">
@@ -337,7 +337,7 @@ else
                                 <option value="">@(hasSelectablePcrVersions ? "請選擇已發布 PCR 版本" : "尚無已發布 PCR 版本")</option>
                                 @foreach (var pcr in Model.SelectablePcrVersions)
                                 {
-                                    <option value="@pcr.Id">@pcr.RegistrationNumber v@pcr.VersionNumber - @pcr.Title</option>
+                                    <option value="@pcr.Id">@pcr.RegistrationNumber v@(pcr.VersionNumber) - @pcr.Title</option>
                                 }
                             </select>
                             <p class="workspace-select-help" id="pcrVersionId-help">
