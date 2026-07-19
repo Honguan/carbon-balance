@@ -3,6 +3,8 @@ name: Temporary source integrity implementation
 on:
   push:
     branches: [agent/source-integrity-controlled-inputs]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
