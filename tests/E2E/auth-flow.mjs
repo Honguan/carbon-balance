@@ -211,7 +211,7 @@ try {
     await page.getByRole("button", { name: "建立組織" }).click();
     await expectUrl(page, "/Workspace", "Organization creation left the workspace");
     await page.getByText("組織已建立。").waitFor({ state: "visible" });
-    await page.getByText("目前組織：").waitFor({ state: "visible" });
+    await page.getByText("目前組織", { exact: true }).waitFor({ state: "visible" });
 
 
     if (postgresUrl) {
