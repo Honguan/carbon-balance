@@ -1,1 +1,1 @@
-run workspace select repair diagnostics
+apply workspace application repair
