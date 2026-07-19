@@ -26,4 +26,6 @@ jobs:
             src/CarbonFootprint.Web/wwwroot/js/site.js
             tests/E2E/auth-flow.mjs
             .github/workflows/pull-request.yml
+            .github/workflows/apply-workspace-select-fix.yml
+            .github/workflows/apply-workspace-select-fix-pr.yml
           if-no-files-found: error
