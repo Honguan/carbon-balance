@@ -1,39 +1,44 @@
-name: Temporary build diagnostic
+name: Temporary workspace build repair
 
 on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  build-diagnostic:
+  workspace-build-repair:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.302
-      - name: Restore locked packages
-        run: dotnet restore --locked-mode
-      - name: Capture build diagnostics
+          ref: ${{ github.head_ref }}
+      - name: Restore missing factor lookup and commit
         shell: bash
         run: |
-          set +e
-          dotnet build --configuration Release --no-restore --nologo --verbosity:minimal > build.log 2>&1
-          status=$?
-          grep -E '(: error |error (CS|RZ|NU|MSB)[0-9]+)' build.log > build-errors.txt || true
-          tail -n 120 build.log > build-tail.txt
-          printf '%s\n' "$status" > build-status.txt
-          cat build-errors.txt
-          exit 0
-      - name: Upload build diagnostics
-        uses: actions/upload-artifact@v7
-        with:
-          name: build-diagnostic
-          path: |
-            build-errors.txt
-            build-tail.txt
-            build-status.txt
-          if-no-files-found: error
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/CarbonFootprint.Web/Pages/Workspace.cshtml')
+          text = path.read_text()
+          anchor = '    var latestSelectedRun = Model.Runs.FirstOrDefault(item => item.ProjectVersionId == Model.ProjectVersionId);\n'
+          insertion = anchor + '    var factorsById = Model.Factors.ToDictionary(item => item.Id);\n'
+          if 'var factorsById = Model.Factors.ToDictionary(item => item.Id);' not in text:
+              if anchor not in text:
+                  raise SystemExit('Workspace factor lookup insertion point was not found.')
+              text = text.replace(anchor, insertion, 1)
+              path.write_text(text)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CarbonFootprint.Web/Pages/Workspace.cshtml
+          if git diff --cached --quiet; then
+            echo 'Workspace factor lookup already exists.'
+            exit 0
+          fi
+          git diff --cached --check
+          git commit -m 'fix: restore workspace factor lookup'
+          git push origin HEAD:${{ github.head_ref }}
