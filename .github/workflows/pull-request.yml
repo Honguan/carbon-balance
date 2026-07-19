@@ -16,14 +16,10 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
       - name: Apply and commit application repair
-        id: repair
-        continue-on-error: true
         shell: bash
         run: |
-          set +e
-          mkdir -p repair-diagnostic
-          {
-            python - <<'PY'
+          set -euo pipefail
+          python - <<'PY'
           from pathlib import Path
           import re
           workflow = Path('.github/workflows/apply-workspace-select-fix.yml').read_text()
@@ -31,14 +27,11 @@ jobs:
           if not match:
               raise SystemExit('Embedded repair patch was not found.')
           Path('/tmp/workspace-select-fix.patch.gz.b64').write_text(match.group(1))
-          print(f'embedded_base64_length={len(match.group(1))}')
           PY
-            base64 --decode /tmp/workspace-select-fix.patch.gz.b64 | gzip --decompress > /tmp/workspace-select-fix.patch
-            sha256sum /tmp/workspace-select-fix.patch
-            git apply --check /tmp/workspace-select-fix.patch
-            git apply /tmp/workspace-select-fix.patch
-            git restore .github/workflows/pull-request.yml
-            python - <<'PY'
+          base64 --decode /tmp/workspace-select-fix.patch.gz.b64 | gzip --decompress > /tmp/workspace-select-fix.patch
+          git apply --check --exclude='.github/workflows/pull-request.yml' /tmp/workspace-select-fix.patch
+          git apply --exclude='.github/workflows/pull-request.yml' /tmp/workspace-select-fix.patch
+          python - <<'PY'
           from pathlib import Path
           path = Path('tests/E2E/auth-flow.mjs')
           text = path.read_text()
@@ -57,25 +50,9 @@ jobs:
           text = text.replace('    await page.getByText("尚無已發布排放係數").first().waitFor({ state: "visible" });\n', '    assert((await emptyFactorSelect.locator("option").first().textContent()).includes("尚無已發布排放係數"), "Empty factor select did not explain its prerequisite.");\n')
           path.write_text(text)
           PY
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add src/CarbonFootprint.Web/Pages/Workspace.cshtml src/CarbonFootprint.Web/Pages/Workspace.cshtml.cs src/CarbonFootprint.Web/wwwroot/css/site.css src/CarbonFootprint.Web/wwwroot/js/site.js tests/E2E/auth-flow.mjs
-            git diff --cached --check
-            git diff --cached --stat
-            git commit -m 'fix: make workspace selects usable and testable'
-            git push origin HEAD:${{ github.head_ref }}
-          } > repair-diagnostic/repair.log 2>&1
-          status=$?
-          printf '%s\n' "$status" > repair-diagnostic/status.txt
-          cat repair-diagnostic/repair.log
-          exit "$status"
-      - name: Upload repair diagnostics
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: workspace-repair-diagnostic
-          path: repair-diagnostic
-          if-no-files-found: error
-      - name: Fail when repair did not complete
-        if: steps.repair.outcome == 'failure'
-        run: exit 1
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CarbonFootprint.Web/Pages/Workspace.cshtml src/CarbonFootprint.Web/Pages/Workspace.cshtml.cs src/CarbonFootprint.Web/wwwroot/css/site.css src/CarbonFootprint.Web/wwwroot/js/site.js tests/E2E/auth-flow.mjs
+          git diff --cached --check
+          git commit -m 'fix: make workspace selects usable and testable'
+          git push origin HEAD:${{ github.head_ref }}
