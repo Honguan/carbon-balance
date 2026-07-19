@@ -1,6 +1,6 @@
 from pathlib import Path
 p=Path('src/CarbonFootprint.Web/Pages/Workspace.cshtml.cs'); t=p.read_text()
-marker='''    private static string NormalizeSection(string? section)
+marker='''    private static string NormalizeSection(string? section) =>
 '''
 helpers='''    private static bool TryResolveControlledValue(string? selected, string? other, out string value)
     {
