@@ -6,9 +6,39 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  fix-workspace-version-labels:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Make Razor version expressions explicit and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          path = Path('src/CarbonFootprint.Web/Pages/Workspace.cshtml')
+          text = path.read_text()
+          updated, count = re.subn(r'v@([A-Za-z_][A-Za-z0-9_]*)\.VersionNumber', r'v@(\1.VersionNumber)', text)
+          if count == 0:
+              raise SystemExit('No implicit Razor version labels were found.')
+          path.write_text(updated)
+          print(f'updated_version_labels={count}')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CarbonFootprint.Web/Pages/Workspace.cshtml
+          git diff --cached --check
+          git commit -m 'fix: render workspace version labels correctly'
+          git push origin HEAD:${{ github.head_ref }}
+
   workspace-select-browser-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
