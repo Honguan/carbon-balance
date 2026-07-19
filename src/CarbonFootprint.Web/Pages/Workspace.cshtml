@@ -1,4 +1,4 @@
-@page
+@page "{section?}"
 @model CarbonFootprint.Web.Pages.WorkspaceModel
 @using CarbonFootprint.Domain.Modules.Factors
 @using CarbonFootprint.Domain.Modules.Inventories
@@ -39,16 +39,18 @@ else
         <code>@Model.OrganizationId</code>
     </div>
 
-    <nav class="workspace-stage-nav" aria-label="盤查作業階段">
-        <a href="#governance"><span>01</span>組織與廠場</a>
-        <a href="#product"><span>02</span>產品基本資料</a>
-        <a href="#pcr"><span>03</span>PCR 規範</a>
-        <a href="#inventory"><span>04</span>盤查範圍</a>
-        <a href="#factors"><span>05</span>排放係數</a>
-        <a href="#lifecycle"><span>06</span>五階段數據</a>
-        <a href="#calculation"><span>07</span>計算與結果</a>
+    <nav class="workspace-stage-nav" aria-label="盤查作業分頁">
+        <a asp-page="/Workspace" asp-route-section="governance" aria-current="@(Model.Section == "governance" ? "page" : null)"><span>01</span>組織與廠場</a>
+        <a asp-page="/Workspace" asp-route-section="product" aria-current="@(Model.Section == "product" ? "page" : null)"><span>02</span>產品基本資料</a>
+        <a asp-page="/Workspace" asp-route-section="pcr" aria-current="@(Model.Section == "pcr" ? "page" : null)"><span>03</span>PCR 規範</a>
+        <a asp-page="/Workspace" asp-route-section="inventory" aria-current="@(Model.Section == "inventory" ? "page" : null)"><span>04</span>盤查範圍</a>
+        <a asp-page="/Workspace" asp-route-section="factors" aria-current="@(Model.Section == "factors" ? "page" : null)"><span>05</span>排放係數</a>
+        <a asp-page="/Workspace" asp-route-section="lifecycle" aria-current="@(Model.Section == "lifecycle" ? "page" : null)"><span>06</span>五階段數據</a>
+        <a asp-page="/Workspace" asp-route-section="calculation" aria-current="@(Model.Section == "calculation" ? "page" : null)"><span>07</span>計算與結果</a>
     </nav>
 
+    @if (Model.Section == "governance")
+    {
     <section class="card mb-4 workspace-card" id="governance">
         <div class="card-body">
             <div class="workspace-card-heading">
@@ -114,9 +116,12 @@ else
             </ul>
         </div>
     </section>
+    }
 
     <div class="row g-4">
-        <div class="col-lg-6">
+        @if (Model.Section == "product")
+        {
+        <div class="col-12">
             <section class="card h-100 workspace-card" id="product">
                 <div class="card-body">
                     <div class="workspace-card-heading">
@@ -151,8 +156,11 @@ else
                 </div>
             </section>
         </div>
+        }
 
-        <div class="col-lg-6">
+        @if (Model.Section == "pcr")
+        {
+        <div class="col-12">
             <section class="card h-100 workspace-card" id="pcr">
                 <div class="card-body">
                     <div class="workspace-card-heading">
@@ -222,8 +230,11 @@ else
                 </div>
             </section>
         </div>
+        }
 
-        <div class="col-lg-6">
+        @if (Model.Section == "inventory")
+        {
+        <div class="col-12">
             <section class="card h-100 workspace-card" id="inventory">
                 <div class="card-body">
                     <div class="workspace-card-heading">
@@ -315,8 +326,11 @@ else
                 </div>
             </section>
         </div>
+        }
 
-        <div class="col-lg-6">
+        @if (Model.Section == "factors")
+        {
+        <div class="col-12">
             <section class="card h-100 workspace-card" id="factors">
                 <div class="card-body">
                     <div class="workspace-card-heading">
@@ -390,8 +404,11 @@ else
                 </div>
             </section>
         </div>
+        }
 
-        <div class="col-lg-6">
+        @if (Model.Section == "lifecycle")
+        {
+        <div class="col-12">
             <section class="card h-100 workspace-card" id="lifecycle">
                 <div class="card-body">
                     <div class="workspace-card-heading">
@@ -502,8 +519,11 @@ else
                 </div>
             </section>
         </div>
+        }
     </div>
 
+    @if (Model.Section == "calculation")
+    {
     <section class="card my-4 workspace-card workspace-calculation" id="calculation">
         <div class="card-body">
             <div class="workspace-card-heading">
@@ -586,6 +606,7 @@ else
                 <p class="alert alert-warning">此結果為系統內部盤查計算，不代表已查驗、ISO 認證或取得碳標籤。</p>
             </div>
         </section>
+    }
     }
 }
 

@@ -93,7 +93,14 @@ public sealed class WorkspaceModel : PageModel
     [TempData]
     public string? StatusMessage { get; set; }
 
-    public async Task OnGetAsync(CancellationToken cancellationToken) => await LoadAsync(cancellationToken);
+    [BindProperty(SupportsGet = true)]
+    public string? Section { get; set; } = "governance";
+
+    public async Task OnGetAsync(CancellationToken cancellationToken)
+    {
+        Section = NormalizeSection(Section);
+        await LoadAsync(cancellationToken);
+    }
 
     public async Task<IActionResult> OnPostCreateOrganizationAsync(string organizationName, CancellationToken cancellationToken)
     {
@@ -104,7 +111,7 @@ public sealed class WorkspaceModel : PageModel
             await _onboardingService.CreateAsync(user, organizationName, cancellationToken);
             await _signInManager.RefreshSignInAsync(user);
             StatusMessage = "組織已建立。";
-            return RedirectToPage();
+            return RedirectToPage(new { section = Section });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
@@ -151,7 +158,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("facility.created", "Facility", facilityId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "廠場已建立。";
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostInviteMemberAsync(
@@ -180,7 +187,7 @@ public sealed class WorkspaceModel : PageModel
                 ?? throw new InvalidOperationException("無法建立邀請連結。");
             await _emailSender.SendOrganizationInvitationAsync(invitationEmail.Trim(), link);
             StatusMessage = "組織邀請已寄出。";
-            return RedirectToPage();
+            return RedirectToPage(new { section = Section });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
@@ -207,7 +214,7 @@ public sealed class WorkspaceModel : PageModel
             AddAudit("organization.invitation.revoked", "OrganizationInvitation", invitation.Id);
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostRevokeMemberAsync(Guid membershipId, CancellationToken cancellationToken)
@@ -240,7 +247,7 @@ public sealed class WorkspaceModel : PageModel
         {
             await _userManager.UpdateSecurityStampAsync(revokedUser);
         }
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostCreateProductAsync(
@@ -289,7 +296,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("product.version.created", "ProductVersion", versionId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "產品與第 1 版已建立。";
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostCreateInventoryAsync(
@@ -379,7 +386,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("inventory.version.created", "InventoryProjectVersion", projectId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "盤查專案第 1 版已建立。";
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostSetStageApplicabilityAsync(
@@ -425,7 +432,7 @@ public sealed class WorkspaceModel : PageModel
         declaration.Reason = isApplicable ? string.Empty : reason.Trim();
         AddAudit("inventory.stage.applicability.changed", "LifecycleStageDeclaration", declaration.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostCreatePcrAsync(
@@ -488,7 +495,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("pcr.version.created", "PcrVersion", pcrVersionId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "PCR 草稿已建立；發布後才可建立新盤查。";
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostReviewPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
@@ -512,7 +519,7 @@ public sealed class WorkspaceModel : PageModel
         pcr.ReviewedBy = Guid.TryParse(_userManager.GetUserId(User), out var reviewerId) ? reviewerId : null;
         AddAudit("pcr.version.reviewed", "PcrVersion", pcr.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostPublishPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
@@ -545,7 +552,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("pcr.version.published", "PcrVersion", pcr.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "PCR 版本已發布。";
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostWithdrawPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
@@ -577,7 +584,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("pcr.version.withdrawn", "PcrVersion", pcr.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "PCR 版本已撤回；歷史計算不受影響。";
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostCreateFactorAsync(
@@ -642,7 +649,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("factor.version.created", "EmissionFactorVersion", factorVersionId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "係數草稿已建立；發布後才可用於新計算。";
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostReviewFactorAsync(Guid factorVersionId, CancellationToken cancellationToken)
@@ -666,7 +673,7 @@ public sealed class WorkspaceModel : PageModel
         factor.ReviewedBy = Guid.TryParse(_userManager.GetUserId(User), out var reviewerId) ? reviewerId : null;
         AddAudit("factor.version.reviewed", "EmissionFactorVersion", factor.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostPublishFactorAsync(Guid factorVersionId, CancellationToken cancellationToken)
@@ -701,7 +708,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("factor.version.published", "EmissionFactorVersion", factor.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "係數版本已發布。";
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostWithdrawFactorAsync(Guid factorVersionId, CancellationToken cancellationToken)
@@ -735,7 +742,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("factor.version.withdrawn", "EmissionFactorVersion", factor.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "係數版本已撤回；歷史計算不受影響。";
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostSupersedeFactorAsync(
@@ -792,7 +799,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("factor.version.superseded", "EmissionFactorVersion", newVersionId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "舊係數已撤回，取代版本草稿已建立；歷史計算未變更。";
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostAddActivityAsync(
@@ -930,7 +937,7 @@ public sealed class WorkspaceModel : PageModel
             AddAudit("activity.version.created", "ActivityDataVersion", activityId);
             await _dbContext.SaveChangesAsync(cancellationToken);
             StatusMessage = "活動數據已保存。";
-            return RedirectToPage();
+            return RedirectToPage(new { section = Section });
         }
         catch (InvalidOperationException exception)
         {
@@ -1008,7 +1015,7 @@ public sealed class WorkspaceModel : PageModel
             AddAudit("evidence.uploaded", "EvidenceFile", stored.Id);
             await _dbContext.SaveChangesAsync(cancellationToken);
             StatusMessage = "Evidence 已通過惡意程式掃描、寫入物件儲存並綁定活動。";
-            return RedirectToPage();
+            return RedirectToPage(new { section = Section });
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -1057,7 +1064,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("inventory.submitted", "InventoryProjectVersion", project.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "盤查版本已送審。";
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostReviewInventoryAsync(
@@ -1122,7 +1129,7 @@ public sealed class WorkspaceModel : PageModel
             project.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = decision == InventoryWorkflowStatus.Approved ? "盤查版本已核准。" : "盤查版本已退回補正。";
-        return RedirectToPage();
+        return RedirectToPage(new { section = Section });
     }
 
     public async Task<IActionResult> OnPostCalculateAsync(Guid inventoryProjectVersionId, CancellationToken cancellationToken)
@@ -1257,7 +1264,7 @@ public sealed class WorkspaceModel : PageModel
                 new CalculateInventoryCommand(Guid.NewGuid(), snapshot, engineBuild, supersedesRunId),
                 cancellationToken);
             StatusMessage = "不可變 CalculationRun 已建立。";
-            return RedirectToPage();
+            return RedirectToPage(new { section = Section });
         }
         catch (InvalidOperationException exception)
         {
@@ -1324,6 +1331,18 @@ public sealed class WorkspaceModel : PageModel
 
     private Guid RequireOrganization() => OrganizationId
         ?? throw new InvalidOperationException("請先建立組織。");
+
+    private static string NormalizeSection(string? section) => section?.Trim().ToLowerInvariant() switch
+    {
+        "governance" => "governance",
+        "product" => "product",
+        "pcr" => "pcr",
+        "inventory" => "inventory",
+        "factors" => "factors",
+        "lifecycle" => "lifecycle",
+        "calculation" => "calculation",
+        _ => "governance"
+    };
 
     private async Task<bool> IsAllowedAsync(OrganizationPermission permission)
     {
