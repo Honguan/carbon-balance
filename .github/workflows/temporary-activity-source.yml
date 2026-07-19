@@ -1,0 +1,49 @@
+name: Temporary structured activity source
+
+on:
+  push:
+    branches: [agent/source-integrity-controlled-inputs]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: temporary-activity-source-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/source-integrity-controlled-inputs
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.302
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Add structured activity source fields
+        run: python .github/temporary-activity-source.py
+      - name: Generate migration and validate
+        run: |
+          set -euo pipefail
+          dotnet tool restore
+          dotnet restore --locked-mode
+          dotnet ef migrations add AddActivitySourceTraceability --project src/CarbonFootprint.Infrastructure --startup-project src/CarbonFootprint.Web --context CarbonFootprintDbContext --output-dir Persistence/Migrations
+          dotnet format --no-restore
+          dotnet build --configuration Release --no-restore
+          dotnet test tests/Unit --configuration Release --no-build
+          git diff --check
+      - name: Commit structured source fields
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src tests
+          git commit -m 'feat: persist activity source traceability'
+          git push origin HEAD:agent/source-integrity-controlled-inputs
