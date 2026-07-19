@@ -293,8 +293,9 @@ try {
     assert((await emptyFactorSelect.locator("option").first().textContent()).includes("尚無已發布排放係數"), "Empty factor select did not explain its prerequisite.");
 
     const factorName = `E2E 排放係數 ${Date.now()}`;
-    await page.goto(`${baseUrl}/Workspace/factors`, { waitUntil: "networkidle" });
-    await expectSelectOptions(page.locator("#denominatorUnitCode"), 4, "Denominator-unit select is unusable");
+    const factorRegistry = page.locator("details.lifecycle-factor-registry");
+    await factorRegistry.locator("summary").click();
+    await expectSelectOptions(factorRegistry.locator("#denominatorUnitCode"), 4, "Denominator-unit select is unusable");
     await page.locator("#factorName").fill(factorName);
     await page.locator("#factorValue").fill("1.25");
     await page.locator("#denominatorUnitCode").selectOption("kg");
