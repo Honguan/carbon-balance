@@ -328,7 +328,9 @@ try {
     await expectSelectOptions(publishedFactorSelect, 2, "Published factor select is unusable");
     await rawUnitSelect.selectOption("kg");
     await canonicalUnitSelect.selectOption("kg");
-    await publishedFactorSelect.selectOption({ label: `${factorName} / kgCO2e／kg / e2e-dataset-v1` });
+    const publishedFactorValue = await publishedFactorSelect.locator("option").filter({ hasText: factorName }).getAttribute("value");
+    assert(publishedFactorValue, "Published factor option did not expose a stable value.");
+    await publishedFactorSelect.selectOption(publishedFactorValue);
     await page.locator("#activity-raw-material").fill("E2E 原物料");
     await page.locator("#value-raw-material").fill("2");
     await page.getByRole("button", { name: "儲存「原料取得」活動" }).click();
