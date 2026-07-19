@@ -1,6 +1,7 @@
 name: Workspace source snapshot
 
 on:
+  pull_request:
   push:
     branches:
       - agent/fix-workspace-selects-e2e
