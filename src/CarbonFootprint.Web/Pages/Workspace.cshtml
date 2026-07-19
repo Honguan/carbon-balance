@@ -8,6 +8,7 @@
     ViewData["Title"] = "盤查工作區";
     var isSetupSection = Model.Section is "setup" or "product" or "pcr" or "inventory";
     var latestSelectedRun = Model.Runs.FirstOrDefault(item => item.ProjectVersionId == Model.ProjectVersionId);
+    var factorsById = Model.Factors.ToDictionary(item => item.Id);
     var hasFacilities = Model.Facilities.Count > 0;
     var hasProductVersions = Model.ProductVersions.Count > 0;
     var hasSelectablePcrVersions = Model.SelectablePcrVersions.Count > 0;
