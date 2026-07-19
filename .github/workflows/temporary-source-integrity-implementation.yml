@@ -23,13 +23,18 @@ jobs:
           dotnet-version: 10.0.302
           cache: true
           cache-dependency-path: '**/packages.lock.json'
-      - name: Apply implementation transforms
-        run: |
-          set -euo pipefail
-          for script in .github/temporary-source-integrity/*.py; do
-            echo "Running $script"
-            python "$script"
-          done
+      - name: Transform persistence model
+        run: python .github/temporary-source-integrity/01-model.py
+      - name: Transform PCR and factor handlers
+        run: python .github/temporary-source-integrity/02-handlers.py
+      - name: Transform activity handler
+        run: python .github/temporary-source-integrity/03-activity-handler.py
+      - name: Transform factor form
+        run: python .github/temporary-source-integrity/04-factor-form.py
+      - name: Transform activity form
+        run: python .github/temporary-source-integrity/05-activity-form.py
+      - name: Transform client tests and docs
+        run: python .github/temporary-source-integrity/06-client-tests-docs.py
       - name: Generate migration and validate
         run: |
           set -euo pipefail
