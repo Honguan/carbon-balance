@@ -293,8 +293,9 @@ try {
     assert((await emptyFactorSelect.locator("option").first().textContent()).includes("尚無已發布排放係數"), "Empty factor select did not explain its prerequisite.");
 
     const factorName = `E2E 排放係數 ${Date.now()}`;
-    await page.goto(`${baseUrl}/Workspace/factors`, { waitUntil: "networkidle" });
-    await expectSelectOptions(page.locator("#denominatorUnitCode"), 4, "Denominator-unit select is unusable");
+    const factorRegistry = page.locator("details.lifecycle-factor-registry");
+    await factorRegistry.locator("summary").click();
+    await expectSelectOptions(factorRegistry.locator("#denominatorUnitCode"), 4, "Denominator-unit select is unusable");
     await page.locator("#factorName").fill(factorName);
     await page.locator("#factorValue").fill("1.25");
     await page.locator("#denominatorUnitCode").selectOption("kg");
@@ -327,7 +328,9 @@ try {
     await expectSelectOptions(publishedFactorSelect, 2, "Published factor select is unusable");
     await rawUnitSelect.selectOption("kg");
     await canonicalUnitSelect.selectOption("kg");
-    await publishedFactorSelect.selectOption({ label: `${factorName} / kgCO2e／kg / e2e-dataset-v1` });
+    const publishedFactorValue = await publishedFactorSelect.locator("option").filter({ hasText: factorName }).getAttribute("value");
+    assert(publishedFactorValue, "Published factor option did not expose a stable value.");
+    await publishedFactorSelect.selectOption(publishedFactorValue);
     await page.locator("#activity-raw-material").fill("E2E 原物料");
     await page.locator("#value-raw-material").fill("2");
     await page.getByRole("button", { name: "儲存「原料取得」活動" }).click();
