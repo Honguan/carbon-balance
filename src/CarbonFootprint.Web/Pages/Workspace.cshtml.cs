@@ -500,6 +500,7 @@ public sealed class WorkspaceModel : PageModel
             return Forbid();
         }
 
+        var validSha = SourceDocumentIntegrity.TryNormalizeSha256(originalDocumentSha256, out var normalizedSha);
         if (string.IsNullOrWhiteSpace(registrationNumber)
             || versionNumber < 1
             || string.IsNullOrWhiteSpace(title)
@@ -508,7 +509,8 @@ public sealed class WorkspaceModel : PageModel
             || string.IsNullOrWhiteSpace(cccClassification)
             || string.IsNullOrWhiteSpace(pcrApplicability)
             || string.IsNullOrWhiteSpace(ruleRequirements)
-            || originalDocumentSha256.Length != 64
+            || string.IsNullOrWhiteSpace(originalDocumentName)
+            || !validSha
             || validFrom > validTo)
         {
             ModelState.AddModelError("pcr", "PCR 登錄編號、正整數版本、名稱、來源與有效期間必須有效。");
@@ -533,7 +535,7 @@ public sealed class WorkspaceModel : PageModel
             Applicability = pcrApplicability.Trim(),
             RuleRequirements = ruleRequirements.Trim(),
             OriginalDocumentName = originalDocumentName?.Trim() ?? string.Empty,
-            OriginalDocumentSha256 = originalDocumentSha256.Trim().ToLowerInvariant(),
+            OriginalDocumentSha256 = normalizedSha,
             ReviewStatus = PcrReviewStatus.Pending.ToString(),
             CreatedAt = DateTimeOffset.UtcNow
         });
@@ -636,10 +638,19 @@ public sealed class WorkspaceModel : PageModel
         string factorName,
         decimal? factorValue,
         string denominatorUnitCode,
+        string factorSourceType,
+        string factorSourceTypeOther,
+        string factorGeography,
+        string factorGeographyOther,
+        DateOnly? factorValidFrom,
+        DateOnly? factorValidTo,
         string sourceDatasetVersion,
         string licenseCode,
         string factorSourceName,
+        string factorSourceReference,
         string datasetName,
+        string factorOriginalDocumentName,
+        string factorOriginalDocumentSha256,
         string factorApplicability,
         CancellationToken cancellationToken)
     {
@@ -649,15 +660,24 @@ public sealed class WorkspaceModel : PageModel
         }
 
         var organizationId = RequireOrganization();
+        var hasSourceType = TryResolveControlledValue(factorSourceType, factorSourceTypeOther, out var sourceType);
+        var hasGeography = TryResolveControlledValue(factorGeography, factorGeographyOther, out var geography);
+        var validSha = SourceDocumentIntegrity.TryNormalizeSha256(factorOriginalDocumentSha256, out var sourceSha);
         if (string.IsNullOrWhiteSpace(factorName)
             || factorValue is null or < 0m
+            || !hasSourceType
+            || !hasGeography
+            || factorValidFrom > factorValidTo
             || string.IsNullOrWhiteSpace(sourceDatasetVersion)
             || string.IsNullOrWhiteSpace(licenseCode)
             || string.IsNullOrWhiteSpace(factorSourceName)
+            || string.IsNullOrWhiteSpace(factorSourceReference)
             || string.IsNullOrWhiteSpace(datasetName)
+            || string.IsNullOrWhiteSpace(factorOriginalDocumentName)
+            || !validSha
             || string.IsNullOrWhiteSpace(factorApplicability))
         {
-            ModelState.AddModelError("factor", "係數名稱、非負數值、來源版本與授權識別皆為必填。");
+            ModelState.AddModelError("factor", "來源類型、地域、有效期間、原始文件與 SHA-256 皆為必填。");
             await LoadAsync(cancellationToken);
             return Page();
         }
@@ -682,14 +702,18 @@ public sealed class WorkspaceModel : PageModel
             Value = factorValue.Value,
             NumeratorUnitCode = "kgCO2e",
             DenominatorUnitCode = denominatorUnitCode,
-            Geography = "TW",
-            ValidFrom = new DateOnly(2025, 1, 1),
-            ValidTo = new DateOnly(2027, 12, 31),
+            Geography = geography,
+            ValidFrom = factorValidFrom,
+            ValidTo = factorValidTo,
             PublicationStatus = FactorPublicationStatus.Draft.ToString(),
             SourceDatasetVersion = sourceDatasetVersion.Trim(),
             LicenseCode = licenseCode.Trim(),
+            SourceType = sourceType,
             SourceName = factorSourceName.Trim(),
+            SourceReference = factorSourceReference.Trim(),
             DatasetName = datasetName.Trim(),
+            OriginalDocumentName = factorOriginalDocumentName.Trim(),
+            OriginalDocumentSha256 = sourceSha,
             Applicability = factorApplicability.Trim(),
             ReviewStatus = FactorReviewStatus.Pending.ToString()
         });
@@ -837,8 +861,12 @@ public sealed class WorkspaceModel : PageModel
             PublicationStatus = FactorPublicationStatus.Draft.ToString(),
             SourceDatasetVersion = newSourceDatasetVersion.Trim(),
             LicenseCode = current.LicenseCode,
+            SourceType = current.SourceType,
             SourceName = current.SourceName,
+            SourceReference = current.SourceReference,
             DatasetName = current.DatasetName,
+            OriginalDocumentName = current.OriginalDocumentName,
+            OriginalDocumentSha256 = current.OriginalDocumentSha256,
             Applicability = current.Applicability,
             ReviewStatus = FactorReviewStatus.Pending.ToString(),
             SupersedesVersionId = current.Id
@@ -854,7 +882,17 @@ public sealed class WorkspaceModel : PageModel
         LifecycleStage lifecycleStage,
         ActivityDataKind activityKind,
         string activityName,
+        string activityNameOther,
         string supplierOrScenario,
+        string equipmentCategory,
+        string equipmentCategoryOther,
+        string dataSourceType,
+        string dataSourceTypeOther,
+        string dataProviderType,
+        string dataProviderOther,
+        string collectionMethod,
+        string collectionMethodOther,
+        string sourceReference,
         decimal? rawValue,
         decimal? transportDistanceKm,
         decimal? transportWeightKg,
@@ -936,13 +974,23 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
-        if (string.IsNullOrWhiteSpace(activityName)
+        var hasName = TryResolveControlledValue(activityName, activityNameOther, out var resolvedName);
+        var hasEquipment = TryResolveOptionalControlledValue(equipmentCategory, equipmentCategoryOther, out var equipment);
+        var hasSource = TryResolveControlledValue(dataSourceType, dataSourceTypeOther, out var sourceType);
+        var hasProvider = TryResolveControlledValue(dataProviderType, dataProviderOther, out var provider);
+        var hasMethod = TryResolveControlledValue(collectionMethod, collectionMethodOther, out var method);
+        if (!hasName
+            || !hasEquipment
+            || !hasSource
+            || !hasProvider
+            || !hasMethod
+            || string.IsNullOrWhiteSpace(sourceReference)
             || !ActivityKindRules.IsAllowed(lifecycleStage, activityKind)
             || allocationFactor is null or <= 0m or > 1m
             || string.IsNullOrWhiteSpace(dataQuality)
             || (isEstimated && string.IsNullOrWhiteSpace(activityEstimationReason)))
         {
-            ModelState.AddModelError("activity", "活動名稱與非負活動量為必填。");
+            ModelState.AddModelError("activity", "活動項目、來源類型、提供者、取得方式與來源參照皆為必填。");
             await LoadAsync(cancellationToken);
             return Page();
         }
@@ -994,12 +1042,20 @@ public sealed class WorkspaceModel : PageModel
                 OrganizationId = organizationId,
                 InventoryProjectVersionId = project.Id,
                 LifecycleStage = (int)lifecycleStage,
-                Name = activityName.Trim(),
+                Name = resolvedName,
                 ActivityKind = activityKind.ToString(),
                 SupplierOrScenario = string.Join(
                     "｜",
-                    new[] { supplierOrScenario?.Trim(), $"計算基礎：{derivedAmount.FormulaTrace}" }
-                        .Where(item => !string.IsNullOrWhiteSpace(item))),
+                    new[]
+                    {
+                        supplierOrScenario?.Trim(),
+                        string.IsNullOrWhiteSpace(equipment) ? null : $"設備類別：{equipment}",
+                        $"資料來源：{sourceType}",
+                        $"資料提供者：{provider}",
+                        $"取得方式：{method}",
+                        $"來源參照：{sourceReference.Trim()}",
+                        $"計算基礎：{derivedAmount.FormulaTrace}"
+                    }.Where(item => !string.IsNullOrWhiteSpace(item))),
                 RawValue = derivedAmount.Value,
                 RawUnitCode = derivedAmount.UnitCode,
                 CanonicalValue = canonicalValue,
@@ -1505,6 +1561,27 @@ public sealed class WorkspaceModel : PageModel
             1 => distinctVersions[0],
             _ => throw new InvalidOperationException("同一盤查專案不可混用不同單位目錄版本。")
         };
+    }
+
+    private static bool TryResolveControlledValue(string? selected, string? other, out string value)
+    {
+        value = selected?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+        if (!string.Equals(value, "__other__", StringComparison.Ordinal))
+        {
+            return true;
+        }
+        value = other?.Trim() ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static bool TryResolveOptionalControlledValue(string? selected, string? other, out string value)
+    {
+        value = string.Empty;
+        return string.IsNullOrWhiteSpace(selected) || TryResolveControlledValue(selected, other, out value);
     }
 
     private static string NormalizeSection(string? section) => section?.Trim().ToLowerInvariant() switch

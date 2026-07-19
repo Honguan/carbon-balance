@@ -157,8 +157,12 @@ public sealed class EmissionFactorVersionRecord : IOrganizationOwned
     public required string PublicationStatus { get; set; }
     public required string SourceDatasetVersion { get; set; }
     public required string LicenseCode { get; set; }
+    public string SourceType { get; set; } = string.Empty;
     public string SourceName { get; set; } = string.Empty;
+    public string SourceReference { get; set; } = string.Empty;
     public string DatasetName { get; set; } = string.Empty;
+    public string OriginalDocumentName { get; set; } = string.Empty;
+    public string OriginalDocumentSha256 { get; set; } = string.Empty;
     public string Applicability { get; set; } = string.Empty;
     public string ReviewStatus { get; set; } = "Pending";
     public Guid? ReviewedBy { get; set; }
