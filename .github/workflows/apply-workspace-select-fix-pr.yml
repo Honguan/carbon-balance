@@ -22,7 +22,7 @@ jobs:
           from pathlib import Path
           import re
           workflow = Path('.github/workflows/apply-workspace-select-fix.yml').read_text()
-          match = re.search(r"printf '%s' '([A-Za-z0-9+/=]+)' \\| base64", workflow)
+          match = re.search(r"printf '%s' '([A-Za-z0-9+/=]+)' \| base64", workflow)
           if not match:
               raise SystemExit('Embedded repair patch was not found.')
           Path('/tmp/workspace-select-fix.patch.gz.b64').write_text(match.group(1))
