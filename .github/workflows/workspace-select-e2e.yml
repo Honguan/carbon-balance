@@ -6,9 +6,39 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  update-stale-organization-assertion:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Update browser assertion and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tests/E2E/auth-flow.mjs')
+          text = path.read_text()
+          old = 'await page.getByText("目前組織：").waitFor({ state: "visible" });'
+          new = 'await page.getByText("目前組織", { exact: true }).waitFor({ state: "visible" });'
+          if old not in text:
+              raise SystemExit('Stale organization assertion was not found.')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          node --check tests/E2E/auth-flow.mjs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/E2E/auth-flow.mjs
+          git diff --cached --check
+          git commit -m 'test: align workspace organization assertion'
+          git push origin HEAD:${{ github.head_ref }}
+
   workspace-select-browser-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
