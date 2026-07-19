@@ -99,4 +99,7 @@ public static class CanonicalManifest
 
     public static bool HasValidSha256(string canonicalManifest, string expectedSha256) =>
         string.Equals(ComputeSha256(canonicalManifest), expectedSha256, StringComparison.Ordinal);
+
+    public static bool Matches(InventoryProjectSnapshot snapshot, string engineBuild, string expectedSha256) =>
+        string.Equals(Create(snapshot, engineBuild).Sha256, expectedSha256, StringComparison.Ordinal);
 }

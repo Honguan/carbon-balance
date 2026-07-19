@@ -31,6 +31,16 @@ public sealed class CalculationEngineValidationTests
         Assert.Contains("未發布、已撤回或不在有效期", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CanonicalManifest_MatchesOnlyCurrentSnapshot()
+    {
+        var snapshot = CreateSnapshot(rawValue: 1m, canonicalValue: 1m);
+        var inputSha256 = CanonicalManifest.Create(snapshot, "engine-test").Sha256;
+
+        Assert.True(CanonicalManifest.Matches(snapshot, "engine-test", inputSha256));
+        Assert.False(CanonicalManifest.Matches(snapshot with { FunctionalUnit = "2 units" }, "engine-test", inputSha256));
+    }
+
     private static InventoryProjectSnapshot CreateSnapshot(
         decimal rawValue,
         decimal canonicalValue,
@@ -88,4 +98,3 @@ public sealed class CalculationEngineValidationTests
             [activity]);
     }
 }
-

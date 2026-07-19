@@ -90,11 +90,16 @@ public sealed class WorkspaceModel : PageModel
 
     public bool? LatestManifestHashValid { get; private set; }
 
+    public IReadOnlySet<Guid> CurrentRunProjectIds { get; private set; } = new HashSet<Guid>();
+
     [TempData]
     public string? StatusMessage { get; set; }
 
     [BindProperty(SupportsGet = true)]
     public string? Section { get; set; } = "governance";
+
+    [BindProperty(SupportsGet = true)]
+    public Guid? ProjectVersionId { get; set; }
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
@@ -937,7 +942,7 @@ public sealed class WorkspaceModel : PageModel
             AddAudit("activity.version.created", "ActivityDataVersion", activityId);
             await _dbContext.SaveChangesAsync(cancellationToken);
             StatusMessage = "活動數據已保存。";
-            return RedirectToPage(new { section = Section });
+            return RedirectToPage(new { section = Section, projectVersionId = project.Id });
         }
         catch (InvalidOperationException exception)
         {
@@ -1015,7 +1020,7 @@ public sealed class WorkspaceModel : PageModel
             AddAudit("evidence.uploaded", "EvidenceFile", stored.Id);
             await _dbContext.SaveChangesAsync(cancellationToken);
             StatusMessage = "Evidence 已通過惡意程式掃描、寫入物件儲存並綁定活動。";
-            return RedirectToPage(new { section = Section });
+            return RedirectToPage(new { section = Section, projectVersionId = activity.InventoryProjectVersionId });
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -1040,9 +1045,21 @@ public sealed class WorkspaceModel : PageModel
             return NotFound();
         }
 
-        if (!await _dbContext.CalculationRuns.AnyAsync(item => item.ProjectVersionId == project.Id, cancellationToken))
+        var latestRun = await _dbContext.CalculationRuns
+            .Where(item => item.ProjectVersionId == project.Id)
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (latestRun is null)
         {
             ModelState.AddModelError("review", "盤查至少需要一個不可變計算 Run 才能送審。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var currentSnapshot = await BuildSnapshotAsync(project, cancellationToken);
+        if (!CanonicalManifest.Matches(currentSnapshot, latestRun.EngineBuild, latestRun.InputSha256))
+        {
+            ModelState.AddModelError("review", "盤查資料已在最近一次計算後變更，請重新計算再提交。");
             await LoadAsync(cancellationToken);
             return Page();
         }
@@ -1143,7 +1160,6 @@ public sealed class WorkspaceModel : PageModel
             return Forbid();
         }
 
-        var organizationId = RequireOrganization();
         var project = await _dbContext.InventoryProjectVersions.SingleOrDefaultAsync(
             item => item.Id == inventoryProjectVersionId,
             cancellationToken);
@@ -1176,6 +1192,34 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
+        try
+        {
+            var snapshot = await BuildSnapshotAsync(project, cancellationToken);
+
+            var engineBuild = typeof(WorkspaceModel).Assembly.GetName().Version?.ToString() ?? "dev";
+            var supersedesRunId = await _dbContext.CalculationRuns
+                .Where(item => item.ProjectVersionId == project.Id)
+                .OrderByDescending(item => item.CreatedAt)
+                .Select(item => (Guid?)item.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            await _calculateHandler.HandleAsync(
+                new CalculateInventoryCommand(Guid.NewGuid(), snapshot, engineBuild, supersedesRunId),
+                cancellationToken);
+            StatusMessage = "不可變 CalculationRun 已建立。";
+            return RedirectToPage(new { section = Section, projectVersionId = project.Id });
+        }
+        catch (InvalidOperationException exception)
+        {
+            ModelState.AddModelError("calculation", exception.Message);
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+    }
+
+    private async Task<InventoryProjectSnapshot> BuildSnapshotAsync(
+        InventoryProjectVersionRecord project,
+        CancellationToken cancellationToken)
+    {
         var activities = await _dbContext.ActivityData
             .Where(item => item.InventoryProjectVersionId == project.Id)
             .OrderBy(item => item.LifecycleStage)
@@ -1190,88 +1234,67 @@ public sealed class WorkspaceModel : PageModel
             .Where(item => factorIds.Contains(item.Id))
             .ToDictionaryAsync(item => item.Id, cancellationToken);
 
-        try
-        {
-            var snapshot = new InventoryProjectSnapshot(
-                organizationId,
-                project.Id,
-                project.ProductVersionId,
-                project.PeriodStart,
-                project.PeriodEnd,
-                project.FunctionalUnit,
-                project.PcrVersion,
-                "rules-p0-v1",
-                "gwp-fixture-p0-v1",
-                "units-p0-v1",
-                stageDeclarations.Select(item => new StageDeclaration(
-                    (LifecycleStage)item.LifecycleStage,
-                    item.IsApplicable,
-                    string.IsNullOrWhiteSpace(item.Reason) ? null : item.Reason)).ToArray(),
-                activities.Select(activity =>
-                {
-                    var factor = factorRecords[activity.FactorVersionId];
-                    return new ActivityDataSnapshot(
-                        activity.Id,
-                        activity.OrganizationId,
-                        (LifecycleStage)activity.LifecycleStage,
-                        activity.Name,
-                        activity.RawValue,
-                        activity.RawUnitCode,
-                        activity.CanonicalValue,
-                        activity.CanonicalUnitCode,
-                        activity.ConversionRuleVersion,
-                        activity.PeriodStart,
-                        activity.PeriodEnd,
-                        new EmissionFactorVersion(
-                            factor.Id,
-                            factor.FactorId,
-                            factor.VersionNumber,
-                            factor.Name,
-                            factor.Value,
-                            factor.NumeratorUnitCode,
-                            factor.DenominatorUnitCode,
-                            factor.Geography,
-                            factor.ValidFrom,
-                            factor.ValidTo,
-                            Enum.Parse<FactorPublicationStatus>(factor.PublicationStatus),
-                            factor.SourceDatasetVersion,
-                            factor.LicenseCode,
-                            Enum.Parse<FactorReviewStatus>(factor.ReviewStatus),
-                            factor.Applicability),
-                        activity.EvidenceSha256,
-                        Enum.Parse<ActivityDataKind>(activity.ActivityKind),
-                        string.IsNullOrWhiteSpace(activity.SupplierOrScenario) ? null : activity.SupplierOrScenario,
-                        activity.AllocationFactor,
-                        activity.IsEstimated,
-                        string.IsNullOrWhiteSpace(activity.EstimationReason) ? null : activity.EstimationReason,
-                        activity.DataQuality);
-                }).ToArray(),
-                project.DeclaredUnit,
-                project.SystemBoundary,
-                project.AllocationMethod,
-                project.AllocationReason,
-                project.Exclusions,
-                project.Assumptions,
-                project.EstimationReason);
-
-            var engineBuild = typeof(WorkspaceModel).Assembly.GetName().Version?.ToString() ?? "dev";
-            var supersedesRunId = await _dbContext.CalculationRuns
-                .Where(item => item.ProjectVersionId == project.Id)
-                .OrderByDescending(item => item.CreatedAt)
-                .Select(item => (Guid?)item.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-            await _calculateHandler.HandleAsync(
-                new CalculateInventoryCommand(Guid.NewGuid(), snapshot, engineBuild, supersedesRunId),
-                cancellationToken);
-            StatusMessage = "不可變 CalculationRun 已建立。";
-            return RedirectToPage(new { section = Section });
-        }
-        catch (InvalidOperationException exception)
-        {
-            ModelState.AddModelError("calculation", exception.Message);
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
+        return new InventoryProjectSnapshot(
+            RequireOrganization(),
+            project.Id,
+            project.ProductVersionId,
+            project.PeriodStart,
+            project.PeriodEnd,
+            project.FunctionalUnit,
+            project.PcrVersion,
+            "rules-p0-v1",
+            "gwp-fixture-p0-v1",
+            "units-p0-v1",
+            stageDeclarations.Select(item => new StageDeclaration(
+                (LifecycleStage)item.LifecycleStage,
+                item.IsApplicable,
+                string.IsNullOrWhiteSpace(item.Reason) ? null : item.Reason)).ToArray(),
+            activities.Select(activity =>
+            {
+                var factor = factorRecords[activity.FactorVersionId];
+                return new ActivityDataSnapshot(
+                    activity.Id,
+                    activity.OrganizationId,
+                    (LifecycleStage)activity.LifecycleStage,
+                    activity.Name,
+                    activity.RawValue,
+                    activity.RawUnitCode,
+                    activity.CanonicalValue,
+                    activity.CanonicalUnitCode,
+                    activity.ConversionRuleVersion,
+                    activity.PeriodStart,
+                    activity.PeriodEnd,
+                    new EmissionFactorVersion(
+                        factor.Id,
+                        factor.FactorId,
+                        factor.VersionNumber,
+                        factor.Name,
+                        factor.Value,
+                        factor.NumeratorUnitCode,
+                        factor.DenominatorUnitCode,
+                        factor.Geography,
+                        factor.ValidFrom,
+                        factor.ValidTo,
+                        Enum.Parse<FactorPublicationStatus>(factor.PublicationStatus),
+                        factor.SourceDatasetVersion,
+                        factor.LicenseCode,
+                        Enum.Parse<FactorReviewStatus>(factor.ReviewStatus),
+                        factor.Applicability),
+                    activity.EvidenceSha256,
+                    Enum.Parse<ActivityDataKind>(activity.ActivityKind),
+                    string.IsNullOrWhiteSpace(activity.SupplierOrScenario) ? null : activity.SupplierOrScenario,
+                    activity.AllocationFactor,
+                    activity.IsEstimated,
+                    string.IsNullOrWhiteSpace(activity.EstimationReason) ? null : activity.EstimationReason,
+                    activity.DataQuality);
+            }).ToArray(),
+            project.DeclaredUnit,
+            project.SystemBoundary,
+            project.AllocationMethod,
+            project.AllocationReason,
+            project.Exclusions,
+            project.Assumptions,
+            project.EstimationReason);
     }
 
     private async Task LoadAsync(CancellationToken cancellationToken)
@@ -1288,42 +1311,66 @@ public sealed class WorkspaceModel : PageModel
         Invitations = await _dbContext.OrganizationInvitations.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         PcrVersions = await _dbContext.PcrVersions.AsNoTracking().OrderBy(item => item.RegistrationNumber).ThenByDescending(item => item.VersionNumber).ToArrayAsync(cancellationToken);
         InventoryProjects = await _dbContext.InventoryProjectVersions.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
+        if (!ProjectVersionId.HasValue || InventoryProjects.All(item => item.Id != ProjectVersionId.Value))
+        {
+            ProjectVersionId = InventoryProjects.FirstOrDefault()?.Id;
+        }
         StageDeclarations = await _dbContext.LifecycleStageDeclarations.AsNoTracking().OrderBy(item => item.LifecycleStage).ToArrayAsync(cancellationToken);
         Factors = await _dbContext.EmissionFactorVersions.AsNoTracking().OrderBy(item => item.Name).ToArrayAsync(cancellationToken);
         Activities = await _dbContext.ActivityData.AsNoTracking().OrderBy(item => item.LifecycleStage).ThenBy(item => item.Name).ToArrayAsync(cancellationToken);
         EvidenceFiles = await _dbContext.EvidenceFiles.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         Runs = await _dbContext.CalculationRuns.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
-        if (Runs.Count > 0)
+        if (Section == "calculation")
+        {
+            var currentRunProjectIds = new HashSet<Guid>();
+            foreach (var project in InventoryProjects)
+            {
+                var latestRun = Runs.FirstOrDefault(item => item.ProjectVersionId == project.Id);
+                if (latestRun is not null && CanonicalManifest.Matches(
+                        await BuildSnapshotAsync(project, cancellationToken),
+                        latestRun.EngineBuild,
+                        latestRun.InputSha256))
+                {
+                    currentRunProjectIds.Add(project.Id);
+                }
+            }
+
+            CurrentRunProjectIds = currentRunProjectIds;
+        }
+        var selectedRuns = ProjectVersionId.HasValue
+            ? Runs.Where(item => item.ProjectVersionId == ProjectVersionId.Value).ToArray()
+            : Array.Empty<CalculationRunRecord>();
+        if (selectedRuns.Length > 0)
         {
             LatestManifestHashValid = CanonicalManifest.HasValidSha256(
-                Runs[0].CanonicalInputManifest,
-                Runs[0].InputSha256);
+                selectedRuns[0].CanonicalInputManifest,
+                selectedRuns[0].InputSha256);
             LatestLines = await _dbContext.CalculationLineItems.AsNoTracking()
-                .Where(item => item.CalculationRunId == Runs[0].Id)
+                .Where(item => item.CalculationRunId == selectedRuns[0].Id)
                 .OrderBy(item => item.LifecycleStage)
                 .ThenBy(item => item.ActivityId)
                 .ToArrayAsync(cancellationToken);
             LatestWarnings = await _dbContext.CalculationWarnings.AsNoTracking()
-                .Where(item => item.CalculationRunId == Runs[0].Id)
+                .Where(item => item.CalculationRunId == selectedRuns[0].Id)
                 .OrderBy(item => item.Code)
                 .ToArrayAsync(cancellationToken);
         }
 
-        if (Runs.Count > 1)
+        if (selectedRuns.Length > 1)
         {
-            var comparedRunIds = new[] { Runs[0].Id, Runs[1].Id };
+            var comparedRunIds = new[] { selectedRuns[0].Id, selectedRuns[1].Id };
             var summaries = await _dbContext.CalculationStageSummaries.AsNoTracking()
                 .Where(item => comparedRunIds.Contains(item.CalculationRunId))
                 .ToArrayAsync(cancellationToken);
             var baseline = new CalculationRunTotals(
-                Runs[1].Id,
-                Runs[1].ProductTotal,
-                summaries.Where(item => item.CalculationRunId == Runs[1].Id)
+                selectedRuns[1].Id,
+                selectedRuns[1].ProductTotal,
+                summaries.Where(item => item.CalculationRunId == selectedRuns[1].Id)
                     .ToDictionary(item => (LifecycleStage)item.LifecycleStage, item => item.Emissions));
             var candidate = new CalculationRunTotals(
-                Runs[0].Id,
-                Runs[0].ProductTotal,
-                summaries.Where(item => item.CalculationRunId == Runs[0].Id)
+                selectedRuns[0].Id,
+                selectedRuns[0].ProductTotal,
+                summaries.Where(item => item.CalculationRunId == selectedRuns[0].Id)
                     .ToDictionary(item => (LifecycleStage)item.LifecycleStage, item => item.Emissions));
             LatestDifference = CalculationRunDiff.Compare(baseline, candidate);
         }

@@ -6,6 +6,7 @@
 @{
     ViewData["Title"] = "盤查工作區";
     var isSetupSection = Model.Section is "setup" or "product" or "pcr" or "inventory";
+    var latestSelectedRun = Model.Runs.FirstOrDefault(item => item.ProjectVersionId == Model.ProjectVersionId);
     var lifecycleSections = new[]
     {
         new { Stage = LifecycleStage.RawMaterial, Number = "01", Slug = "raw-material", Title = "原料取得", Summary = "原物料投入與供應商運輸", ActivityLabel = "原物料名稱／運輸項目", ScenarioLabel = "材質／供應商名稱與地址", ValueLabel = "投入量／運輸量", Kinds = new[] { ActivityDataKind.Material, ActivityDataKind.MaterialTransport } },
@@ -51,9 +52,9 @@ else
     <nav class="workspace-stage-nav" aria-label="盤查作業分頁">
         <a asp-page="/Workspace" asp-route-section="governance" aria-current="@(Model.Section == "governance" ? "page" : null)"><span>01</span>組織與廠場</a>
         <div class="workspace-stage-group" aria-current="@(isSetupSection ? "page" : null)">
-            <a asp-page="/Workspace" asp-route-section="setup" asp-fragment="product"><span>02</span>產品基本資料</a>
-            <a asp-page="/Workspace" asp-route-section="setup" asp-fragment="pcr"><span>03</span>PCR 規範</a>
-            <a asp-page="/Workspace" asp-route-section="setup" asp-fragment="inventory"><span>04</span>盤查範圍</a>
+            <a asp-page="/Workspace" asp-route-section="product" aria-current="@(Model.Section == "product" ? "page" : null)"><span>02</span>產品基本資料</a>
+            <a asp-page="/Workspace" asp-route-section="pcr" aria-current="@(Model.Section == "pcr" ? "page" : null)"><span>03</span>PCR 規範</a>
+            <a asp-page="/Workspace" asp-route-section="inventory" aria-current="@(Model.Section == "inventory" ? "page" : null)"><span>04</span>盤查範圍</a>
         </div>
         <a asp-page="/Workspace" asp-route-section="factors" aria-current="@(Model.Section == "factors" ? "page" : null)"><span>05</span>排放係數</a>
         <a asp-page="/Workspace" asp-route-section="lifecycle" aria-current="@(Model.Section == "lifecycle" ? "page" : null)"><span>06</span>五階段數據</a>
@@ -142,6 +143,8 @@ else
                     </div>
                 </div>
                 <div class="row g-4">
+                @if (Model.Section is "setup" or "product")
+                {
                 <div class="col-12">
             <section class="card h-100 workspace-card" id="product">
                 <div class="card-body">
@@ -177,7 +180,10 @@ else
                 </div>
             </section>
         </div>
+                }
 
+                @if (Model.Section is "setup" or "pcr")
+                {
         <div class="col-12">
             <section class="card h-100 workspace-card" id="pcr">
                 <div class="card-body">
@@ -248,7 +254,10 @@ else
                 </div>
             </section>
         </div>
+                }
 
+                @if (Model.Section is "setup" or "inventory")
+                {
         <div class="col-12">
             <section class="card h-100 workspace-card" id="inventory">
                 <div class="card-body">
@@ -338,6 +347,7 @@ else
                 </div>
             </section>
         </div>
+                }
                 </div>
             </section>
         </div>
@@ -433,6 +443,18 @@ else
                             <p>依舊版盤查表的階段脈絡，逐筆記錄活動量、換算單位、係數與資料品質。</p>
                         </div>
                     </div>
+                    @if (Model.InventoryProjects.Count > 0)
+                    {
+                    <form class="lifecycle-project-selector" method="get" asp-page="/Workspace" asp-route-section="lifecycle">
+                        <label class="form-label" for="projectVersionId">目前盤查版本</label>
+                        <select class="form-select" id="projectVersionId" name="projectVersionId" onchange="this.form.submit()">
+                            @foreach (var inventory in Model.InventoryProjects)
+                            {
+                                <option value="@inventory.Id" selected="@(inventory.Id == Model.ProjectVersionId)">@inventory.FunctionalUnit / @inventory.PeriodStart～@inventory.PeriodEnd</option>
+                            }
+                        </select>
+                        <noscript><button class="btn btn-outline-primary mt-2" type="submit">切換盤查版本</button></noscript>
+                    </form>
                     <nav class="lifecycle-section-nav" aria-label="五階段資料區塊">
                         @foreach (var stageSection in lifecycleSections)
                         {
@@ -443,7 +465,7 @@ else
                     <div class="lifecycle-input-list">
                         @foreach (var stageSection in lifecycleSections)
                         {
-                            var stageActivities = Model.Activities.Where(item => item.LifecycleStage == (int)stageSection.Stage).ToArray();
+                            var stageActivities = Model.Activities.Where(item => item.InventoryProjectVersionId == Model.ProjectVersionId && item.LifecycleStage == (int)stageSection.Stage).ToArray();
                             <section class="lifecycle-input-section" id="@stageSection.Slug">
                                 <header>
                                     <span>@stageSection.Number</span>
@@ -453,18 +475,10 @@ else
                                     </div>
                                     <strong>@stageActivities.Length 筆</strong>
                                 </header>
-                                <form method="post" asp-page-handler="AddActivity" asp-route-section="lifecycle">
+                                <form method="post" asp-page-handler="AddActivity" asp-route-section="lifecycle" asp-route-projectVersionId="@Model.ProjectVersionId">
                                     <input type="hidden" name="lifecycleStage" value="@stageSection.Stage" />
+                                    <input type="hidden" name="inventoryProjectVersionId" value="@Model.ProjectVersionId" />
                                     <div class="lifecycle-form-grid">
-                                        <div class="lifecycle-field lifecycle-field--wide">
-                                            <label class="form-label" for="inventory-@stageSection.Slug">盤查版本</label>
-                                            <select class="form-select" id="inventory-@stageSection.Slug" name="inventoryProjectVersionId" required>
-                                                @foreach (var item in Model.InventoryProjects)
-                                                {
-                                                    <option value="@item.Id">@item.FunctionalUnit / @item.PeriodStart～@item.PeriodEnd</option>
-                                                }
-                                            </select>
-                                        </div>
                                         <div class="lifecycle-field">
                                             <label class="form-label" for="kind-@stageSection.Slug">活動類型</label>
                                             <select class="form-select" id="kind-@stageSection.Slug" name="activityKind" required>
@@ -567,7 +581,7 @@ else
                                                     <span>@activity.ActivityKind／@activity.CanonicalValue @activity.CanonicalUnitCode／分配 @activity.AllocationFactor</span>
                                                     @if (evidence is null)
                                                     {
-                                                        <form method="post" enctype="multipart/form-data" asp-page-handler="UploadEvidence" asp-route-section="lifecycle">
+                                                        <form method="post" enctype="multipart/form-data" asp-page-handler="UploadEvidence" asp-route-section="lifecycle" asp-route-projectVersionId="@Model.ProjectVersionId">
                                                             <input type="hidden" name="activityDataId" value="@activity.Id" />
                                                             <label class="form-label" for="evidence-@activity.Id">佐證檔案</label>
                                                             <input class="form-control" type="file" id="evidence-@activity.Id" name="evidenceFile" required />
@@ -586,6 +600,11 @@ else
                             </section>
                         }
                     </div>
+                    }
+                    else
+                    {
+                        <p class="workspace-empty">尚未建立盤查版本，請先完成 02–04 的分頁設定。</p>
+                    }
                 </div>
             </section>
         </div>
@@ -603,22 +622,33 @@ else
                     <p>五個階段各至少需要一筆活動數據，且 canonical 單位須符合所選係數分母。</p>
                 </div>
             </div>
-            <form method="post" asp-page-handler="Calculate">
-                <label class="form-label" for="calculationInventoryId">盤查版本</label>
-                <select class="form-select" id="calculationInventoryId" name="inventoryProjectVersionId" required>
+            @if (Model.InventoryProjects.Count > 0)
+            {
+            <form class="lifecycle-project-selector" method="get" asp-page="/Workspace" asp-route-section="calculation">
+                <label class="form-label" for="calculationProjectVersionId">目前盤查版本</label>
+                <select class="form-select" id="calculationProjectVersionId" name="projectVersionId" onchange="this.form.submit()">
                     @foreach (var item in Model.InventoryProjects)
                     {
-                        <option value="@item.Id">@item.FunctionalUnit / @item.PcrVersion</option>
+                        <option value="@item.Id" selected="@(item.Id == Model.ProjectVersionId)">@item.FunctionalUnit / @item.PcrVersion</option>
                     }
                 </select>
+                <noscript><button class="btn btn-outline-primary mt-2" type="submit">切換盤查版本</button></noscript>
+            </form>
+            <form method="post" asp-page-handler="Calculate" asp-route-projectVersionId="@Model.ProjectVersionId">
+                <input type="hidden" name="inventoryProjectVersionId" value="@Model.ProjectVersionId" />
                 <button class="btn btn-success mt-3" type="submit">凍結輸入並計算</button>
             </form>
+            }
+            else
+            {
+                <p class="workspace-empty">尚未建立盤查版本，請先完成 02–04 的分頁設定。</p>
+            }
         </div>
     </section>
 
-    @if (Model.Runs.Count > 0)
+    @if (latestSelectedRun is not null)
     {
-        var run = Model.Runs[0];
+        var run = latestSelectedRun;
         <section class="card my-4 workspace-card" id="latest-result">
             <div class="card-body">
                 <div class="workspace-card-heading">
@@ -702,16 +732,17 @@ else
                             .Distinct()
                             .Count();
                         var hasRun = Model.Runs.Any(item => item.ProjectVersionId == inventory.Id);
+                        var hasCurrentRun = Model.CurrentRunProjectIds.Contains(inventory.Id);
                         <li class="workspace-submit-item">
                             <div>
                                 <strong>@inventory.FunctionalUnit／@inventory.PeriodStart～@inventory.PeriodEnd</strong>
-                                <span>已保存 @savedStageCount／5 階段｜計算 Run：@(hasRun ? "已建立" : "尚未建立")｜狀態：@workflowStatus</span>
+                                <span>已保存 @savedStageCount／5 階段｜計算 Run：@(hasCurrentRun ? "目前有效" : hasRun ? "資料已變更，請重算" : "尚未建立")｜狀態：@workflowStatus</span>
                             </div>
                             @if (InventoryWorkflow.AllowsEditing(workflowStatus))
                             {
                                 <form method="post" asp-page-handler="SubmitInventory" asp-route-section="calculation">
                                     <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
-                                    <button class="btn btn-warning" type="submit" disabled="@(!hasRun)">統一提交盤查</button>
+                                    <button class="btn btn-warning" type="submit" disabled="@(!hasCurrentRun)">統一提交盤查</button>
                                 </form>
                             }
                             else

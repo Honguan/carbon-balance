@@ -1428,12 +1428,12 @@ textarea {
   box-shadow: 0 10px 24px rgba(6, 61, 50, 0.13);
 }
 
-.workspace-stage-group[aria-current="page"] a {
+.workspace-stage-group[aria-current="page"] a[aria-current="page"] {
   color: white;
   background: linear-gradient(145deg, var(--carbon-900), var(--carbon-700));
 }
 
-.workspace-stage-group[aria-current="page"] a span {
+.workspace-stage-group[aria-current="page"] a[aria-current="page"] span {
   color: var(--carbon-200);
 }
 
@@ -1564,6 +1564,15 @@ form > .workspace-subheading:first-child {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow-wrap: anywhere;
+}
+
+.lifecycle-project-selector {
+  max-width: 42rem;
+  margin: 0 0 1.25rem;
+  padding: 1rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
 .lifecycle-section-nav {
