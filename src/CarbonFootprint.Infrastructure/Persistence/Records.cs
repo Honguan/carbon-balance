@@ -182,6 +182,8 @@ public sealed class ActivityDataRecord : IOrganizationOwned
     public decimal CanonicalValue { get; set; }
     public required string CanonicalUnitCode { get; set; }
     public required string ConversionRuleVersion { get; set; }
+    public required string AmountFormulaId { get; set; }
+    public required string FormulaInputsJson { get; set; }
     public DateOnly PeriodStart { get; set; }
     public DateOnly PeriodEnd { get; set; }
     public Guid FactorVersionId { get; set; }
@@ -232,6 +234,8 @@ public sealed class CalculationLineRecord : IOrganizationOwned
     public Guid ActivityId { get; set; }
     public int LifecycleStage { get; set; }
     public required string FormulaId { get; set; }
+    public required string ActivityAmountFormulaId { get; set; }
+    public required string FormulaInputsJson { get; set; }
     public decimal CanonicalActivityValue { get; set; }
     public required string ActivityUnitCode { get; set; }
     public Guid FactorVersionId { get; set; }

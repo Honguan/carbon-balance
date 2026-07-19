@@ -64,6 +64,12 @@ public static class CanonicalManifest
                 writer.WriteNumber("canonicalValue", activity.CanonicalValue);
                 writer.WriteString("canonicalUnitCode", activity.CanonicalUnitCode);
                 writer.WriteString("conversionRuleVersion", activity.ConversionRuleVersion);
+                writer.WriteString("amountFormulaId", activity.AmountFormulaId);
+                writer.WritePropertyName("formulaInputs");
+                using (var formulaInputs = JsonDocument.Parse(activity.FormulaInputsJson))
+                {
+                    formulaInputs.RootElement.WriteTo(writer);
+                }
                 writer.WriteString("periodStart", activity.PeriodStart.ToString("yyyy-MM-dd", null));
                 writer.WriteString("periodEnd", activity.PeriodEnd.ToString("yyyy-MM-dd", null));
                 writer.WriteString("factorVersionId", activity.FactorVersion.Id);

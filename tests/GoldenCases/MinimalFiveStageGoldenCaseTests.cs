@@ -27,6 +27,24 @@ public sealed class MinimalFiveStageGoldenCaseTests
         Assert.Equal(7m, run.ProductTotal);
         Assert.Equal(run.ProductTotal, run.LineItems.Sum(line => line.Emissions));
         Assert.Equal(run.ProductTotal, run.StageSummaries.Sum(stage => stage.Emissions));
+        Assert.Equal(
+            [
+                "material-input-times-factor-times-allocation-v1",
+                "manufacturing-consumption-times-factor-times-allocation-v1",
+                "distribution-transport-work-times-factor-times-allocation-v1",
+                "use-energy-consumption-times-factor-times-allocation-v1",
+                "end-of-life-treatment-times-factor-times-allocation-v1"
+            ],
+            run.LineItems.Select(line => line.FormulaId));
+        Assert.Equal(
+            [
+                ActivityAmountFormula.DirectFormulaId,
+                ActivityAmountFormula.DirectFormulaId,
+                ActivityAmountFormula.TransportFormulaId,
+                ActivityAmountFormula.UseScenarioFormulaId,
+                ActivityAmountFormula.DirectFormulaId
+            ],
+            run.LineItems.Select(line => line.ActivityAmountFormulaId));
         Assert.Empty(run.Warnings);
     }
 
@@ -133,6 +151,23 @@ public sealed class MinimalFiveStageGoldenCaseTests
                     LifecycleStage.Use => ActivityDataKind.UseEnergy,
                     LifecycleStage.EndOfLife => ActivityDataKind.EndOfLifeTreatment,
                     _ => throw new ArgumentOutOfRangeException(nameof(stage))
+                },
+                null,
+                1m,
+                false,
+                null,
+                "primary",
+                stage switch
+                {
+                    LifecycleStage.Distribution => ActivityAmountFormula.TransportFormulaId,
+                    LifecycleStage.Use => ActivityAmountFormula.UseScenarioFormulaId,
+                    _ => ActivityAmountFormula.DirectFormulaId
+                },
+                stage switch
+                {
+                    LifecycleStage.Distribution => "{\"distanceKm\":10,\"weightKg\":1000}",
+                    LifecycleStage.Use => "{\"lifetime\":1,\"frequency\":1,\"consumptionPerUse\":4}",
+                    _ => "{}"
                 });
         }
 

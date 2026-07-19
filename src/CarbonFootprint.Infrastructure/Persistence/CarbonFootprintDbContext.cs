@@ -194,6 +194,8 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.RawUnitCode).HasMaxLength(50);
             entity.Property(item => item.CanonicalUnitCode).HasMaxLength(50);
             entity.Property(item => item.ConversionRuleVersion).HasMaxLength(100);
+            entity.Property(item => item.AmountFormulaId).HasMaxLength(150);
+            entity.Property(item => item.FormulaInputsJson).HasColumnType("jsonb");
             entity.Property(item => item.EvidenceSha256).HasMaxLength(64);
             entity.Property(item => item.AllocationFactor).HasPrecision(18, 15);
             entity.Property(item => item.EstimationReason).HasMaxLength(4000);
@@ -238,7 +240,12 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
                 new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000001"), Code = "kg", Symbol = "kg", Dimension = "mass", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v1", AliasesCsv = "kilogram,kilograms" },
                 new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000002"), Code = "g", Symbol = "g", Dimension = "mass", ScaleToCanonical = 0.001m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v1", AliasesCsv = "gram,grams" },
                 new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000003"), Code = "kWh", Symbol = "kWh", Dimension = "energy", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "kWh", CatalogueVersion = "units-p0-v1", AliasesCsv = "kilowatt-hour" },
-                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000004"), Code = "tonne-km", Symbol = "t·km", Dimension = "transport-work", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "tonne-km", CatalogueVersion = "units-p0-v1", AliasesCsv = "t-km,tkm", CompositeExpression = "tonne*km" });
+                new UnitRecord { Id = Guid.Parse("71000000-0000-0000-0000-000000000004"), Code = "tonne-km", Symbol = "t·km", Dimension = "transport-work", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "tonne-km", CatalogueVersion = "units-p0-v1", AliasesCsv = "t-km,tkm", CompositeExpression = "tonne*km" },
+                new UnitRecord { Id = Guid.Parse("72000000-0000-0000-0000-000000000001"), Code = "kg", Symbol = "kg", Dimension = "mass", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v2", AliasesCsv = "kilogram,kilograms" },
+                new UnitRecord { Id = Guid.Parse("72000000-0000-0000-0000-000000000002"), Code = "g", Symbol = "g", Dimension = "mass", ScaleToCanonical = 0.001m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v2", AliasesCsv = "gram,grams" },
+                new UnitRecord { Id = Guid.Parse("72000000-0000-0000-0000-000000000003"), Code = "tonne", Symbol = "t", Dimension = "mass", ScaleToCanonical = 1000m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v2", AliasesCsv = "ton,tons,tonnes" },
+                new UnitRecord { Id = Guid.Parse("72000000-0000-0000-0000-000000000004"), Code = "kWh", Symbol = "kWh", Dimension = "energy", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "kWh", CatalogueVersion = "units-p0-v2", AliasesCsv = "kilowatt-hour" },
+                new UnitRecord { Id = Guid.Parse("72000000-0000-0000-0000-000000000005"), Code = "tonne-km", Symbol = "t·km", Dimension = "transport-work", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "tonne-km", CatalogueVersion = "units-p0-v2", AliasesCsv = "t-km,tkm", CompositeExpression = "tonne*km" });
         });
         builder.Entity<EmissionFactorVersionRecord>(entity =>
         {
@@ -280,6 +287,8 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.FactorValue).HasPrecision(30, 15);
             entity.Property(item => item.AllocationFactor).HasPrecision(18, 15);
             entity.Property(item => item.Emissions).HasPrecision(38, 15);
+            entity.Property(item => item.ActivityAmountFormulaId).HasMaxLength(150);
+            entity.Property(item => item.FormulaInputsJson).HasColumnType("jsonb");
             entity.HasOne<CalculationRunRecord>().WithMany().HasForeignKey(item => item.CalculationRunId).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<CalculationStageSummaryRecord>(entity =>

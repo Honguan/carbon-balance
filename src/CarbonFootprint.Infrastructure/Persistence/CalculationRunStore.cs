@@ -43,6 +43,8 @@ public sealed class CalculationRunStore : ICalculationRunStore
             ActivityId = line.ActivityId,
             LifecycleStage = (int)line.Stage,
             FormulaId = line.FormulaId,
+            ActivityAmountFormulaId = line.ActivityAmountFormulaId,
+            FormulaInputsJson = line.FormulaInputsJson,
             CanonicalActivityValue = line.CanonicalActivityValue,
             ActivityUnitCode = line.ActivityUnitCode,
             FactorVersionId = line.FactorVersionId,

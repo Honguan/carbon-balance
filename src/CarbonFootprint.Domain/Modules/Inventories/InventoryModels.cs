@@ -46,7 +46,9 @@ public sealed record ActivityDataSnapshot(
     decimal AllocationFactor = 1m,
     bool IsEstimated = false,
     string? EstimationReason = null,
-    string DataQuality = "primary");
+    string DataQuality = "primary",
+    string AmountFormulaId = "direct-activity-amount-v1",
+    string FormulaInputsJson = "{}");
 
 public sealed record InventoryProjectSnapshot(
     Guid OrganizationId,

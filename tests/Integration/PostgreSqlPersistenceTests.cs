@@ -18,6 +18,21 @@ public sealed class PostgreSqlPersistenceTests
     }
 
     [Fact]
+    public async Task UnitCatalogueV2_SeedsTransportAndTonneConversions()
+    {
+        await using var dbContext = CreateContext(Guid.NewGuid());
+
+        var units = await dbContext.Units
+            .Where(item => item.CatalogueVersion == "units-p0-v2")
+            .OrderBy(item => item.Code)
+            .ToArrayAsync();
+
+        Assert.Equal(5, units.Length);
+        Assert.Equal(1000m, units.Single(item => item.Code == "tonne").ScaleToCanonical);
+        Assert.Equal("transport-work", units.Single(item => item.Code == "tonne-km").Dimension);
+    }
+
+    [Fact]
     public async Task QueryFilters_KeepOrganizationsIsolated_AndRejectCrossTenantWrite()
     {
         var organizationA = Guid.NewGuid();

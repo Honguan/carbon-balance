@@ -15,18 +15,27 @@ public sealed class CalculationEngine
         var lines = snapshot.Activities
             .OrderBy(activity => activity.Stage)
             .ThenBy(activity => activity.Id)
-            .Select(activity => new CalculationLineItem(
-                activity.Id,
-                activity.Stage,
-                "activity-times-factor-times-allocation-v1",
-                activity.CanonicalValue,
-                activity.CanonicalUnitCode,
-                activity.FactorVersion.Id,
-                activity.FactorVersion.Value,
-                $"{activity.FactorVersion.NumeratorUnitCode}/{activity.FactorVersion.DenominatorUnitCode}",
-                activity.CanonicalValue * activity.FactorVersion.Value * activity.AllocationFactor,
-                activity.FactorVersion.NumeratorUnitCode,
-                activity.AllocationFactor))
+            .Select(activity =>
+            {
+                var formula = ActivityEmissionFormula.Resolve(activity.Kind);
+                return new CalculationLineItem(
+                    activity.Id,
+                    activity.Stage,
+                    formula.Id,
+                    activity.CanonicalValue,
+                    activity.CanonicalUnitCode,
+                    activity.FactorVersion.Id,
+                    activity.FactorVersion.Value,
+                    $"{activity.FactorVersion.NumeratorUnitCode}/{activity.FactorVersion.DenominatorUnitCode}",
+                    ActivityEmissionFormula.Calculate(
+                        activity.CanonicalValue,
+                        activity.FactorVersion.Value,
+                        activity.AllocationFactor),
+                    activity.FactorVersion.NumeratorUnitCode,
+                    activity.AllocationFactor,
+                    activity.AmountFormulaId,
+                    activity.FormulaInputsJson);
+            })
             .ToArray();
 
         var summaries = Enum.GetValues<LifecycleStage>()
@@ -113,6 +122,12 @@ public sealed class CalculationEngine
 
         foreach (var activity in snapshot.Activities)
         {
+            ActivityAmountFormula.ValidateDerived(
+                activity.Kind,
+                activity.AmountFormulaId,
+                activity.FormulaInputsJson,
+                activity.RawValue);
+
             if (activity.OrganizationId != snapshot.OrganizationId)
             {
                 throw new InvalidOperationException("活動數據與盤查快照的組織不一致。");

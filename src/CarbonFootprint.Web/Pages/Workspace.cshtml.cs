@@ -15,12 +15,16 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace CarbonFootprint.Web.Pages;
 
 [Authorize]
 public sealed class WorkspaceModel : PageModel
 {
+    private const string CurrentUnitCatalogueVersion = "units-p0-v2";
+    private const string PendingStageFormulaRuleSetVersion = "legacy-stage-formulas-pending-review-v1";
+
     private readonly CarbonFootprintDbContext _dbContext;
     private readonly IOrganizationScope _organizationScope;
     private readonly OrganizationOnboardingService _onboardingService;
@@ -92,6 +96,8 @@ public sealed class WorkspaceModel : PageModel
 
     public IReadOnlySet<Guid> CurrentRunProjectIds { get; private set; } = new HashSet<Guid>();
 
+    public IReadOnlySet<Guid> PendingFormulaRunProjectIds { get; private set; } = new HashSet<Guid>();
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -101,10 +107,16 @@ public sealed class WorkspaceModel : PageModel
     [BindProperty(SupportsGet = true)]
     public Guid? ProjectVersionId { get; set; }
 
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
+        if (string.Equals(Section?.Trim(), "factors", StringComparison.OrdinalIgnoreCase))
+        {
+            return RedirectToPage(new { section = "lifecycle", projectVersionId = ProjectVersionId });
+        }
+
         Section = NormalizeSection(Section);
         await LoadAsync(cancellationToken);
+        return Page();
     }
 
     public async Task<IActionResult> OnPostCreateOrganizationAsync(string organizationName, CancellationToken cancellationToken)
@@ -622,7 +634,9 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
-        if (!await _dbContext.Units.AnyAsync(item => item.Code == denominatorUnitCode, cancellationToken))
+        if (!await _dbContext.Units.AnyAsync(
+                item => item.CatalogueVersion == CurrentUnitCatalogueVersion && item.Code == denominatorUnitCode,
+                cancellationToken))
         {
             ModelState.AddModelError("factor", "係數分母必須使用受控單位。");
             await LoadAsync(cancellationToken);
@@ -814,6 +828,11 @@ public sealed class WorkspaceModel : PageModel
         string activityName,
         string supplierOrScenario,
         decimal? rawValue,
+        decimal? transportDistanceKm,
+        decimal? transportWeightKg,
+        decimal? useLifetime,
+        decimal? useFrequency,
+        decimal? useConsumptionPerUse,
         string rawUnitCode,
         string canonicalUnitCode,
         Guid factorVersionId,
@@ -880,8 +899,7 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
-        if (rawValue is null or < 0m
-            || string.IsNullOrWhiteSpace(activityName)
+        if (string.IsNullOrWhiteSpace(activityName)
             || !ActivityKindRules.IsAllowed(lifecycleStage, activityKind)
             || allocationFactor is null or <= 0m or > 1m
             || string.IsNullOrWhiteSpace(dataQuality)
@@ -894,11 +912,25 @@ public sealed class WorkspaceModel : PageModel
 
         try
         {
+            var unitCatalogueVersion = await GetProjectUnitCatalogueVersionAsync(project.Id, cancellationToken);
+            var derivedAmount = ActivityAmountFormula.Derive(
+                activityKind,
+                rawValue,
+                rawUnitCode,
+                transportDistanceKm,
+                transportWeightKg,
+                useLifetime,
+                useFrequency,
+                useConsumptionPerUse);
+            var effectiveCanonicalUnitCode = ActivityAmountFormula.IsTransport(activityKind)
+                ? derivedAmount.UnitCode
+                : canonicalUnitCode;
             var unitRecords = await _dbContext.Units
-                .Where(item => item.Code == rawUnitCode || item.Code == canonicalUnitCode)
+                .Where(item => item.CatalogueVersion == unitCatalogueVersion
+                    && (item.Code == derivedAmount.UnitCode || item.Code == effectiveCanonicalUnitCode))
                 .ToArrayAsync(cancellationToken);
             var catalogue = new UnitCatalogue(
-                "units-p0-v1",
+                unitCatalogueVersion,
                 unitRecords.Select(item => new UnitDefinition(
                     item.Id,
                     item.Code,
@@ -909,8 +941,11 @@ public sealed class WorkspaceModel : PageModel
                     item.CatalogueVersion,
                     item.AliasesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
                     string.IsNullOrWhiteSpace(item.CompositeExpression) ? null : item.CompositeExpression)));
-            var canonicalValue = catalogue.Convert(rawValue.Value, rawUnitCode, canonicalUnitCode);
-            if (!string.Equals(canonicalUnitCode, factor.DenominatorUnitCode, StringComparison.OrdinalIgnoreCase))
+            var canonicalValue = catalogue.Convert(
+                derivedAmount.Value,
+                derivedAmount.UnitCode,
+                effectiveCanonicalUnitCode);
+            if (!string.Equals(effectiveCanonicalUnitCode, factor.DenominatorUnitCode, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException("活動 canonical 單位必須等於係數分母單位。");
             }
@@ -924,12 +959,17 @@ public sealed class WorkspaceModel : PageModel
                 LifecycleStage = (int)lifecycleStage,
                 Name = activityName.Trim(),
                 ActivityKind = activityKind.ToString(),
-                SupplierOrScenario = supplierOrScenario?.Trim() ?? string.Empty,
-                RawValue = rawValue.Value,
-                RawUnitCode = rawUnitCode,
+                SupplierOrScenario = string.Join(
+                    "｜",
+                    new[] { supplierOrScenario?.Trim(), $"計算基礎：{derivedAmount.FormulaTrace}" }
+                        .Where(item => !string.IsNullOrWhiteSpace(item))),
+                RawValue = derivedAmount.Value,
+                RawUnitCode = derivedAmount.UnitCode,
                 CanonicalValue = canonicalValue,
-                CanonicalUnitCode = canonicalUnitCode,
-                ConversionRuleVersion = "units-p0-v1",
+                CanonicalUnitCode = effectiveCanonicalUnitCode,
+                ConversionRuleVersion = unitCatalogueVersion,
+                AmountFormulaId = derivedAmount.FormulaId,
+                FormulaInputsJson = JsonSerializer.Serialize(derivedAmount.Inputs),
                 PeriodStart = project.PeriodStart,
                 PeriodEnd = project.PeriodEnd,
                 FactorVersionId = factor.Id,
@@ -1052,6 +1092,13 @@ public sealed class WorkspaceModel : PageModel
         if (latestRun is null)
         {
             ModelState.AddModelError("review", "盤查至少需要一個不可變計算 Run 才能送審。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        if (string.Equals(latestRun.RuleSetVersion, PendingStageFormulaRuleSetVersion, StringComparison.Ordinal))
+        {
+            ModelState.AddModelError("review", "階段計算公式尚待領域審查，目前僅能產生候選計算，不可統一提交。");
             await LoadAsync(cancellationToken);
             return Page();
         }
@@ -1242,9 +1289,9 @@ public sealed class WorkspaceModel : PageModel
             project.PeriodEnd,
             project.FunctionalUnit,
             project.PcrVersion,
-            "rules-p0-v1",
+            PendingStageFormulaRuleSetVersion,
             "gwp-fixture-p0-v1",
-            "units-p0-v1",
+            GetActivityUnitCatalogueVersion(activities),
             stageDeclarations.Select(item => new StageDeclaration(
                 (LifecycleStage)item.LifecycleStage,
                 item.IsApplicable,
@@ -1286,7 +1333,9 @@ public sealed class WorkspaceModel : PageModel
                     activity.AllocationFactor,
                     activity.IsEstimated,
                     string.IsNullOrWhiteSpace(activity.EstimationReason) ? null : activity.EstimationReason,
-                    activity.DataQuality);
+                    activity.DataQuality,
+                    activity.AmountFormulaId,
+                    activity.FormulaInputsJson);
             }).ToArray(),
             project.DeclaredUnit,
             project.SystemBoundary,
@@ -1299,7 +1348,6 @@ public sealed class WorkspaceModel : PageModel
 
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
-        Units = await _dbContext.Units.AsNoTracking().OrderBy(item => item.Code).ToArrayAsync(cancellationToken);
         if (!OrganizationId.HasValue)
         {
             return;
@@ -1318,15 +1366,28 @@ public sealed class WorkspaceModel : PageModel
         StageDeclarations = await _dbContext.LifecycleStageDeclarations.AsNoTracking().OrderBy(item => item.LifecycleStage).ToArrayAsync(cancellationToken);
         Factors = await _dbContext.EmissionFactorVersions.AsNoTracking().OrderBy(item => item.Name).ToArrayAsync(cancellationToken);
         Activities = await _dbContext.ActivityData.AsNoTracking().OrderBy(item => item.LifecycleStage).ThenBy(item => item.Name).ToArrayAsync(cancellationToken);
+        var selectedUnitCatalogueVersion = ProjectVersionId.HasValue
+            ? GetActivityUnitCatalogueVersion(Activities.Where(item => item.InventoryProjectVersionId == ProjectVersionId.Value))
+            : CurrentUnitCatalogueVersion;
+        Units = await _dbContext.Units.AsNoTracking()
+            .Where(item => item.CatalogueVersion == selectedUnitCatalogueVersion)
+            .OrderBy(item => item.Code)
+            .ToArrayAsync(cancellationToken);
         EvidenceFiles = await _dbContext.EvidenceFiles.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         Runs = await _dbContext.CalculationRuns.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
+        PendingFormulaRunProjectIds = Runs
+            .Where(item => string.Equals(item.RuleSetVersion, PendingStageFormulaRuleSetVersion, StringComparison.Ordinal))
+            .Select(item => item.ProjectVersionId)
+            .ToHashSet();
         if (Section == "calculation")
         {
             var currentRunProjectIds = new HashSet<Guid>();
             foreach (var project in InventoryProjects)
             {
                 var latestRun = Runs.FirstOrDefault(item => item.ProjectVersionId == project.Id);
-                if (latestRun is not null && CanonicalManifest.Matches(
+                if (latestRun is not null
+                    && !string.Equals(latestRun.RuleSetVersion, PendingStageFormulaRuleSetVersion, StringComparison.Ordinal)
+                    && CanonicalManifest.Matches(
                         await BuildSnapshotAsync(project, cancellationToken),
                         latestRun.EngineBuild,
                         latestRun.InputSha256))
@@ -1379,6 +1440,30 @@ public sealed class WorkspaceModel : PageModel
     private Guid RequireOrganization() => OrganizationId
         ?? throw new InvalidOperationException("請先建立組織。");
 
+    private async Task<string> GetProjectUnitCatalogueVersionAsync(Guid projectVersionId, CancellationToken cancellationToken)
+    {
+        var versions = await _dbContext.ActivityData
+            .Where(item => item.InventoryProjectVersionId == projectVersionId)
+            .Select(item => item.ConversionRuleVersion)
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+        return GetActivityUnitCatalogueVersion(versions);
+    }
+
+    private static string GetActivityUnitCatalogueVersion(IEnumerable<ActivityDataRecord> activities) =>
+        GetActivityUnitCatalogueVersion(activities.Select(item => item.ConversionRuleVersion));
+
+    private static string GetActivityUnitCatalogueVersion(IEnumerable<string> versions)
+    {
+        var distinctVersions = versions.Distinct(StringComparer.Ordinal).ToArray();
+        return distinctVersions.Length switch
+        {
+            0 => CurrentUnitCatalogueVersion,
+            1 => distinctVersions[0],
+            _ => throw new InvalidOperationException("同一盤查專案不可混用不同單位目錄版本。")
+        };
+    }
+
     private static string NormalizeSection(string? section) => section?.Trim().ToLowerInvariant() switch
     {
         "governance" => "governance",
@@ -1386,7 +1471,7 @@ public sealed class WorkspaceModel : PageModel
         "product" => "product",
         "pcr" => "pcr",
         "inventory" => "inventory",
-        "factors" => "factors",
+        "factors" => "lifecycle",
         "lifecycle" => "lifecycle",
         "calculation" => "calculation",
         _ => "governance"

@@ -36,6 +36,19 @@ public sealed class UnitCatalogueTests
     }
 
     [Fact]
+    public void Convert_KilogramsToTonnes_MatchesLegacyWasteFormula()
+    {
+        var catalogue = new UnitCatalogue(
+            "units-1",
+            [
+                new UnitDefinition(Guid.NewGuid(), "kg", "mass", 1m, 0m, "kg", "units-1"),
+                new UnitDefinition(Guid.NewGuid(), "tonne", "mass", 1000m, 0m, "kg", "units-1")
+            ]);
+
+        Assert.Equal(1.25m, catalogue.Convert(1250m, "kg", "tonne"));
+    }
+
+    [Fact]
     public void Convert_AliasAndCompositeUnit_UsesVersionedDefinition()
     {
         var tonneKilometre = new UnitDefinition(
