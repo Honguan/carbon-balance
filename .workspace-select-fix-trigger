@@ -1,1 +1,1 @@
-trigger workspace select repair
+execute workspace select repair
