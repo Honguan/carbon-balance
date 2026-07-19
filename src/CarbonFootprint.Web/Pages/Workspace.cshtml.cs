@@ -76,7 +76,11 @@ public sealed class WorkspaceModel : PageModel
 
     public IReadOnlyList<EmissionFactorVersionRecord> Factors { get; private set; } = [];
 
+    public IReadOnlyList<EmissionFactorVersionRecord> SelectableFactors { get; private set; } = [];
+
     public IReadOnlyList<PcrVersionRecord> PcrVersions { get; private set; } = [];
+
+    public IReadOnlyList<PcrVersionRecord> SelectablePcrVersions { get; private set; } = [];
 
     public IReadOnlyList<ActivityDataRecord> Activities { get; private set; } = [];
 
@@ -285,9 +289,19 @@ public sealed class WorkspaceModel : PageModel
             await LoadAsync(cancellationToken);
             return Page();
         }
-        if (!await _dbContext.Facilities.AnyAsync(item => item.Id == facilityId, cancellationToken))
+        if (facilityId == Guid.Empty)
         {
-            return NotFound();
+            ModelState.AddModelError("facilityId", "請先建立並選擇所屬廠場。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+        if (!await _dbContext.Facilities.AnyAsync(
+                item => item.Id == facilityId && item.OrganizationId == organizationId,
+                cancellationToken))
+        {
+            ModelState.AddModelError("facilityId", "所選廠場不存在或不屬於目前組織。");
+            await LoadAsync(cancellationToken);
+            return Page();
         }
 
         var productId = Guid.NewGuid();
@@ -349,15 +363,29 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
-        if (!await _dbContext.ProductVersions.AnyAsync(item => item.Id == productVersionId, cancellationToken))
+        if (productVersionId == Guid.Empty || pcrVersionId == Guid.Empty)
         {
-            return NotFound();
+            ModelState.AddModelError("inventory", "請先建立並選擇產品版本與已發布 PCR 版本。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+        if (!await _dbContext.ProductVersions.AnyAsync(
+                item => item.Id == productVersionId && item.OrganizationId == organizationId,
+                cancellationToken))
+        {
+            ModelState.AddModelError("productVersionId", "所選產品版本不存在或不屬於目前組織。");
+            await LoadAsync(cancellationToken);
+            return Page();
         }
 
-        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(item => item.Id == pcrVersionId, cancellationToken);
+        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(
+            item => item.Id == pcrVersionId && item.OrganizationId == organizationId,
+            cancellationToken);
         if (pcr is null)
         {
-            return NotFound();
+            ModelState.AddModelError("pcrVersionId", "所選 PCR 版本不存在或不屬於目前組織。");
+            await LoadAsync(cancellationToken);
+            return Page();
         }
 
         var pcrReference = ToPcrReference(pcr);
@@ -848,15 +876,24 @@ public sealed class WorkspaceModel : PageModel
         }
 
         var organizationId = RequireOrganization();
+        if (inventoryProjectVersionId == Guid.Empty || factorVersionId == Guid.Empty)
+        {
+            ModelState.AddModelError("activity", "請先建立盤查版本並選擇已發布排放係數。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
         var project = await _dbContext.InventoryProjectVersions.SingleOrDefaultAsync(
-            item => item.Id == inventoryProjectVersionId,
+            item => item.Id == inventoryProjectVersionId && item.OrganizationId == organizationId,
             cancellationToken);
         var factor = await _dbContext.EmissionFactorVersions.SingleOrDefaultAsync(
-            item => item.Id == factorVersionId,
+            item => item.Id == factorVersionId && item.OrganizationId == organizationId,
             cancellationToken);
         if (project is null || factor is null)
         {
-            return NotFound();
+            ModelState.AddModelError("activity", "所選盤查版本或排放係數不存在於目前組織。");
+            await LoadAsync(cancellationToken);
+            return Page();
         }
 
         if (!InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus)))
@@ -1358,6 +1395,9 @@ public sealed class WorkspaceModel : PageModel
         Memberships = await _dbContext.OrganizationMemberships.AsNoTracking().OrderBy(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         Invitations = await _dbContext.OrganizationInvitations.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         PcrVersions = await _dbContext.PcrVersions.AsNoTracking().OrderBy(item => item.RegistrationNumber).ThenByDescending(item => item.VersionNumber).ToArrayAsync(cancellationToken);
+        SelectablePcrVersions = PcrVersions
+            .Where(item => item.PublicationStatus == PcrPublicationStatus.Published.ToString())
+            .ToArray();
         InventoryProjects = await _dbContext.InventoryProjectVersions.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         if (!ProjectVersionId.HasValue || InventoryProjects.All(item => item.Id != ProjectVersionId.Value))
         {
@@ -1365,6 +1405,9 @@ public sealed class WorkspaceModel : PageModel
         }
         StageDeclarations = await _dbContext.LifecycleStageDeclarations.AsNoTracking().OrderBy(item => item.LifecycleStage).ToArrayAsync(cancellationToken);
         Factors = await _dbContext.EmissionFactorVersions.AsNoTracking().OrderBy(item => item.Name).ToArrayAsync(cancellationToken);
+        SelectableFactors = Factors
+            .Where(item => item.PublicationStatus == FactorPublicationStatus.Published.ToString())
+            .ToArray();
         Activities = await _dbContext.ActivityData.AsNoTracking().OrderBy(item => item.LifecycleStage).ThenBy(item => item.Name).ToArrayAsync(cancellationToken);
         var selectedUnitCatalogueVersion = ProjectVersionId.HasValue
             ? GetActivityUnitCatalogueVersion(Activities.Where(item => item.InventoryProjectVersionId == ProjectVersionId.Value))

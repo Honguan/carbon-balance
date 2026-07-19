@@ -5,6 +5,7 @@ import path from "node:path";
 const baseUrl = process.env.CARBON_E2E_BASE_URL ?? "http://127.0.0.1:18088";
 const mailpitUrl = process.env.CARBON_E2E_MAILPIT_URL ?? "http://127.0.0.1:8025";
 const artifactsDirectory = process.env.CARBON_E2E_ARTIFACTS ?? "/work/artifacts";
+const postgresUrl = process.env.CARBON_E2E_PG_URL;
 const testEmail = `carbon-e2e-${Date.now()}@example.test`;
 const testPassword = "carbon1";
 
@@ -27,6 +28,58 @@ async function expectVisible(locator, message) {
     assert(box && box.width > 0 && box.height > 0, `${message}: element has no clickable area.`);
     const pointerEvents = await locator.evaluate((element) => getComputedStyle(element).pointerEvents);
     assert(pointerEvents !== "none", `${message}: pointer-events is none.`);
+}
+
+async function withDatabase(callback) {
+    assert(postgresUrl, "CARBON_E2E_PG_URL is required for workspace fixture setup.");
+    const pgModule = await import("pg");
+    const Client = pgModule.Client ?? pgModule.default.Client;
+    const client = new Client({ connectionString: postgresUrl });
+    await client.connect();
+    try {
+        return await callback(client);
+    } finally {
+        await client.end();
+    }
+}
+
+async function publishPcrFixture(registrationNumber) {
+    const rowCount = await withDatabase(async (client) => {
+        const result = await client.query(
+            `UPDATE app.pcr_versions
+             SET review_status = 'Approved',
+                 publication_status = 'Published',
+                 reviewed_at = NOW(),
+                 published_at = NOW()
+             WHERE registration_number = $1`,
+            [registrationNumber]
+        );
+        return result.rowCount;
+    });
+    assert(rowCount === 1, `Expected one PCR fixture to publish, updated ${rowCount}.`);
+}
+
+async function publishFactorFixture(factorName) {
+    const rowCount = await withDatabase(async (client) => {
+        const result = await client.query(
+            `UPDATE app.emission_factor_versions
+             SET review_status = 'Approved',
+                 publication_status = 'Published',
+                 reviewed_at = NOW(),
+                 published_at = NOW()
+             WHERE name = $1`,
+            [factorName]
+        );
+        return result.rowCount;
+    });
+    assert(rowCount === 1, `Expected one factor fixture to publish, updated ${rowCount}.`);
+}
+
+async function expectSelectOptions(select, minimumOptions, message) {
+    await expectVisible(select, message);
+    assert(!(await select.isDisabled()), `${message}: select is disabled.`);
+    const optionCount = await select.locator("option").count();
+    assert(optionCount >= minimumOptions, `${message}: expected at least ${minimumOptions} options, got ${optionCount}.`);
 }
 
 async function waitForLatestConfirmationLink(mailPage) {
@@ -158,7 +211,141 @@ try {
     await page.getByRole("button", { name: "建立組織" }).click();
     await expectUrl(page, "/Workspace", "Organization creation left the workspace");
     await page.getByText("組織已建立。").waitFor({ state: "visible" });
-    await page.getByText("目前組織：").waitFor({ state: "visible" });
+    await page.getByText("目前組織", { exact: true }).waitFor({ state: "visible" });
+
+
+    if (postgresUrl) {
+    // Empty dependent selects must explain the missing prerequisite instead of appearing broken.
+    await page.goto(`${baseUrl}/Workspace/product`, { waitUntil: "networkidle" });
+    const emptyFacilitySelect = page.locator("#facilityId");
+    assert(await emptyFacilitySelect.isDisabled(), "Facility select should be disabled before a facility exists.");
+    assert((await emptyFacilitySelect.locator("option").first().textContent()).includes("尚無可選廠場"), "Empty facility select did not explain its prerequisite.");
+    await page.locator("#facilityId-help a").click();
+    await expectUrl(page, "/Workspace/governance", "Facility prerequisite link did not open governance");
+
+    await page.locator("#facilityCode").fill("TW-E2E");
+    await page.locator("#facilityName").fill("E2E 測試廠場");
+    await page.getByRole("button", { name: "建立廠場" }).click();
+    await page.getByText("廠場已建立。").waitFor({ state: "visible" });
+
+    await page.goto(`${baseUrl}/Workspace/product`, { waitUntil: "networkidle" });
+    const facilitySelect = page.locator("#facilityId");
+    await expectSelectOptions(facilitySelect, 2, "Facility select did not become usable");
+    await facilitySelect.selectOption({ label: "TW-E2E - E2E 測試廠場" });
+    assert(await facilitySelect.inputValue(), "Facility selection did not retain a value.");
+
+    await page.locator("#productName").fill("E2E 產品 A");
+    await page.locator("#categoryCode").fill("E2E-A");
+    await page.getByRole("button", { name: "儲存產品第 1 版" }).click();
+    await page.getByText("產品與第 1 版已建立。").waitFor({ state: "visible" });
+
+    await page.locator("#productName").fill("E2E 產品 B");
+    await page.locator("#categoryCode").fill("E2E-B");
+    await page.locator("#facilityId").selectOption({ label: "TW-E2E - E2E 測試廠場" });
+    await page.getByRole("button", { name: "儲存產品第 1 版" }).click();
+    await page.getByText("產品與第 1 版已建立。").waitFor({ state: "visible" });
+
+    // Product versions are immediately selectable, while draft PCR records are deliberately excluded.
+    await page.goto(`${baseUrl}/Workspace/inventory`, { waitUntil: "networkidle" });
+    await expectSelectOptions(page.locator("#productVersionId"), 3, "Product-version select is unusable");
+    const emptyPcrSelect = page.locator("#pcrVersionId");
+    assert(await emptyPcrSelect.isDisabled(), "PCR select should be disabled without a published PCR.");
+    assert((await emptyPcrSelect.locator("option").first().textContent()).includes("尚無已發布 PCR 版本"), "Empty PCR select did not explain its prerequisite.");
+
+    const pcrRegistration = `PCR-E2E-${Date.now()}`;
+    await page.goto(`${baseUrl}/Workspace/pcr`, { waitUntil: "networkidle" });
+    await page.locator("#registrationNumber").fill(pcrRegistration);
+    await page.locator("#pcrTitle").fill("E2E PCR 規範");
+    await page.locator("#pcrVersionNumber").fill("1");
+    await page.locator("#pcrValidFrom").fill("2025-01-01");
+    await page.locator("#pcrValidTo").fill("2027-12-31");
+    await page.locator("#sourceReference").fill("E2E controlled source");
+    await page.locator("#standardCode").fill("ISO 14067");
+    await page.locator("#cccClassification").fill("E2E-CCC");
+    await page.locator("#pcrApplicability").fill("E2E products");
+    await page.locator("#ruleRequirements").fill("E2E rules");
+    await page.locator("#originalDocumentName").fill("e2e-pcr.pdf");
+    await page.locator("#originalDocumentSha256").fill("a".repeat(64));
+    await page.getByRole("button", { name: "儲存 PCR 草稿" }).click();
+    await page.getByText("PCR 草稿已建立").waitFor({ state: "visible" });
+    await publishPcrFixture(pcrRegistration);
+
+    async function createInventory(productLabel, functionalUnit) {
+        await page.goto(`${baseUrl}/Workspace/inventory`, { waitUntil: "networkidle" });
+        const productSelect = page.locator("#productVersionId");
+        const pcrSelect = page.locator("#pcrVersionId");
+        await expectSelectOptions(productSelect, 3, "Product-version select failed after reload");
+        await expectSelectOptions(pcrSelect, 2, "Published PCR did not become selectable");
+        await productSelect.selectOption({ label: `${productLabel} v1` });
+        await pcrSelect.selectOption({ label: `${pcrRegistration} v1 - E2E PCR 規範` });
+        await page.locator("#functionalUnit").fill(functionalUnit);
+        await page.getByRole("button", { name: "儲存盤查第 1 版" }).click();
+        await page.getByText("盤查專案第 1 版已建立。").waitFor({ state: "visible" });
+    }
+
+    await createInventory("E2E 產品 A", "1 件 E2E 產品 A");
+    await createInventory("E2E 產品 B", "1 件 E2E 產品 B");
+
+    // Draft factors are not offered; once published, every lifecycle factor select becomes usable.
+    await page.goto(`${baseUrl}/Workspace/lifecycle`, { waitUntil: "networkidle" });
+    const emptyFactorSelect = page.locator('select[name="factorVersionId"]').first();
+    assert(await emptyFactorSelect.isDisabled(), "Factor select should be disabled without a published factor.");
+    assert((await emptyFactorSelect.locator("option").first().textContent()).includes("尚無已發布排放係數"), "Empty factor select did not explain its prerequisite.");
+
+    const factorName = `E2E 排放係數 ${Date.now()}`;
+    await page.goto(`${baseUrl}/Workspace/factors`, { waitUntil: "networkidle" });
+    await expectSelectOptions(page.locator("#denominatorUnitCode"), 4, "Denominator-unit select is unusable");
+    await page.locator("#factorName").fill(factorName);
+    await page.locator("#factorValue").fill("1.25");
+    await page.locator("#denominatorUnitCode").selectOption("kg");
+    await page.locator("#sourceDatasetVersion").fill("e2e-dataset-v1");
+    await page.locator("#licenseCode").fill("e2e-license");
+    await page.locator("#factorSourceName").fill("E2E source");
+    await page.locator("#datasetName").fill("E2E dataset");
+    await page.locator("#factorApplicability").fill("E2E inventory period");
+    await page.getByRole("button", { name: "建立係數草稿" }).click();
+    await page.getByText("係數草稿已建立").waitFor({ state: "visible" });
+    await publishFactorFixture(factorName);
+
+    await page.goto(`${baseUrl}/Workspace/lifecycle`, { waitUntil: "networkidle" });
+    const projectSelect = page.locator("#projectVersionId");
+    await expectSelectOptions(projectSelect, 2, "Lifecycle project-version select is unusable");
+    const projectValues = await projectSelect.locator("option").evaluateAll((options) => options.map((option) => option.value));
+    const originalProjectValue = await projectSelect.inputValue();
+    const alternateProjectValue = projectValues.find((value) => value !== originalProjectValue);
+    assert(alternateProjectValue, "A second inventory project option was not available.");
+    await Promise.all([
+        page.waitForURL((url) => url.pathname.includes("/Workspace/lifecycle") && url.searchParams.get("projectVersionId") === alternateProjectValue),
+        projectSelect.selectOption(alternateProjectValue)
+    ]);
+
+    const rawUnitSelect = page.locator('select[name="rawUnitCode"]').first();
+    const canonicalUnitSelect = page.locator('select[name="canonicalUnitCode"]').first();
+    const publishedFactorSelect = page.locator('select[name="factorVersionId"]').first();
+    await expectSelectOptions(rawUnitSelect, 4, "Raw-unit select is unusable");
+    await expectSelectOptions(canonicalUnitSelect, 4, "Canonical-unit select is unusable");
+    await expectSelectOptions(publishedFactorSelect, 2, "Published factor select is unusable");
+    await rawUnitSelect.selectOption("kg");
+    await canonicalUnitSelect.selectOption("kg");
+    await publishedFactorSelect.selectOption({ label: `${factorName} / kgCO2e／kg / e2e-dataset-v1` });
+    await page.locator("#activity-raw-material").fill("E2E 原物料");
+    await page.locator("#value-raw-material").fill("2");
+    await page.getByRole("button", { name: "儲存「原料取得」活動" }).click();
+    await page.getByText("活動數據已保存。").waitFor({ state: "visible" });
+
+    await page.goto(`${baseUrl}/Workspace/calculation`, { waitUntil: "networkidle" });
+    const calculationProjectSelect = page.locator("#calculationProjectVersionId");
+    await expectSelectOptions(calculationProjectSelect, 2, "Calculation project-version select is unusable");
+    const calculationValues = await calculationProjectSelect.locator("option").evaluateAll((options) => options.map((option) => option.value));
+    const calculationCurrent = await calculationProjectSelect.inputValue();
+    const calculationAlternate = calculationValues.find((value) => value !== calculationCurrent);
+    assert(calculationAlternate, "Calculation selector did not expose a second inventory project.");
+    await Promise.all([
+        page.waitForURL((url) => url.pathname.includes("/Workspace/calculation") && url.searchParams.get("projectVersionId") === calculationAlternate),
+        calculationProjectSelect.selectOption(calculationAlternate)
+    ]);
+
+    }
 
     await page.goto(`${baseUrl}/Identity/Account/Login`, { waitUntil: "domcontentloaded" });
     await expectUrl(page, "/Identity/Account/Login", "Explicit login page visit redirected into the app");

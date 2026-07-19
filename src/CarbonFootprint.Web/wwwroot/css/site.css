@@ -1998,3 +1998,42 @@ form > .workspace-subheading:first-child {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Workspace native select controls */
+.workspace-select-field {
+  position: relative;
+  isolation: isolate;
+}
+
+.workspace-card .form-select,
+.lifecycle-project-selector .form-select {
+  position: relative;
+  z-index: 2;
+  min-height: 46px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.workspace-card .form-select:disabled {
+  color: var(--ink-500);
+  background-color: var(--surface-soft);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.workspace-select-help {
+  margin: 0.45rem 0 0;
+  color: var(--ink-500);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.workspace-select-help a {
+  color: var(--carbon-700);
+  font-weight: 750;
+}
+
+.workspace-select-help a:hover,
+.workspace-select-help a:focus-visible {
+  color: var(--carbon-900);
+}
