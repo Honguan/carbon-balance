@@ -5,6 +5,15 @@
 @using CarbonFootprint.Domain.Modules.Standards
 @{
     ViewData["Title"] = "盤查工作區";
+    var isSetupSection = Model.Section is "setup" or "product" or "pcr" or "inventory";
+    var lifecycleSections = new[]
+    {
+        new { Stage = LifecycleStage.RawMaterial, Number = "01", Slug = "raw-material", Title = "原料取得", Summary = "原物料投入與供應商運輸", ActivityLabel = "原物料名稱／運輸項目", ScenarioLabel = "材質／供應商名稱與地址", ValueLabel = "投入量／運輸量", Kinds = new[] { ActivityDataKind.Material, ActivityDataKind.MaterialTransport } },
+        new { Stage = LifecycleStage.Manufacturing, Number = "02", Slug = "manufacturing", Title = "製造", Summary = "能資源、製造廢棄與委外運輸", ActivityLabel = "能資源／廢棄物名稱", ScenarioLabel = "製程／處理廠與運輸說明", ValueLabel = "使用量／廢棄量／運輸量", Kinds = new[] { ActivityDataKind.Energy, ActivityDataKind.ManufacturingWaste, ActivityDataKind.OutsourcedTreatmentTransport } },
+        new { Stage = LifecycleStage.Distribution, Number = "03", Slug = "distribution", Title = "配送銷售", Summary = "配銷據點與銷售運輸", ActivityLabel = "配銷據點／運輸項目", ScenarioLabel = "據點地址／運輸工具", ValueLabel = "重量距離活動量", Kinds = new[] { ActivityDataKind.DistributionTransport } },
+        new { Stage = LifecycleStage.Use, Number = "04", Slug = "use", Title = "使用", Summary = "使用壽命、頻率、能源與耗材", ActivityLabel = "使用情境名稱", ScenarioLabel = "壽命／頻率／能源或耗材說明", ValueLabel = "情境活動量", Kinds = new[] { ActivityDataKind.UseEnergy, ActivityDataKind.UseConsumable } },
+        new { Stage = LifecycleStage.EndOfLife, Number = "05", Slug = "end-of-life", Title = "廢棄處理", Summary = "回收、焚化、掩埋與處理運輸", ActivityLabel = "處理方式／運輸項目", ScenarioLabel = "處理廠／服務與運輸情境", ValueLabel = "廢棄量／運輸量", Kinds = new[] { ActivityDataKind.EndOfLifeTreatment, ActivityDataKind.EndOfLifeTransport } }
+    };
 }
 <header class="workspace-hero">
     <p class="workspace-eyebrow">產品碳足跡盤查流程</p>
@@ -41,9 +50,11 @@ else
 
     <nav class="workspace-stage-nav" aria-label="盤查作業分頁">
         <a asp-page="/Workspace" asp-route-section="governance" aria-current="@(Model.Section == "governance" ? "page" : null)"><span>01</span>組織與廠場</a>
-        <a asp-page="/Workspace" asp-route-section="product" aria-current="@(Model.Section == "product" ? "page" : null)"><span>02</span>產品基本資料</a>
-        <a asp-page="/Workspace" asp-route-section="pcr" aria-current="@(Model.Section == "pcr" ? "page" : null)"><span>03</span>PCR 規範</a>
-        <a asp-page="/Workspace" asp-route-section="inventory" aria-current="@(Model.Section == "inventory" ? "page" : null)"><span>04</span>盤查範圍</a>
+        <div class="workspace-stage-group" aria-current="@(isSetupSection ? "page" : null)">
+            <a asp-page="/Workspace" asp-route-section="setup" asp-fragment="product"><span>02</span>產品基本資料</a>
+            <a asp-page="/Workspace" asp-route-section="setup" asp-fragment="pcr"><span>03</span>PCR 規範</a>
+            <a asp-page="/Workspace" asp-route-section="setup" asp-fragment="inventory"><span>04</span>盤查範圍</a>
+        </div>
         <a asp-page="/Workspace" asp-route-section="factors" aria-current="@(Model.Section == "factors" ? "page" : null)"><span>05</span>排放係數</a>
         <a asp-page="/Workspace" asp-route-section="lifecycle" aria-current="@(Model.Section == "lifecycle" ? "page" : null)"><span>06</span>五階段數據</a>
         <a asp-page="/Workspace" asp-route-section="calculation" aria-current="@(Model.Section == "calculation" ? "page" : null)"><span>07</span>計算與結果</a>
@@ -119,9 +130,19 @@ else
     }
 
     <div class="row g-4">
-        @if (Model.Section == "product")
+        @if (isSetupSection)
         {
         <div class="col-12">
+            <section class="workspace-setup-shell" aria-labelledby="setup-heading">
+                <div class="workspace-group-heading">
+                    <span>02–04</span>
+                    <div>
+                        <h2 id="setup-heading">產品基本資料與盤查設定</h2>
+                        <p>依序建立產品、保存 PCR 規範，再設定盤查範圍；三個區塊各自儲存。</p>
+                    </div>
+                </div>
+                <div class="row g-4">
+                <div class="col-12">
             <section class="card h-100 workspace-card" id="product">
                 <div class="card-body">
                     <div class="workspace-card-heading">
@@ -144,7 +165,7 @@ else
                                 <option value="@facility.Id">@facility.Code - @facility.Name</option>
                             }
                         </select>
-                        <button class="btn btn-primary mt-3" type="submit">建立產品第 1 版</button>
+                        <button class="btn btn-primary mt-3" type="submit">儲存產品第 1 版</button>
                     </form>
                     <h3 class="workspace-subheading mt-4">已建立版本</h3>
                     <ul class="workspace-records">
@@ -156,10 +177,7 @@ else
                 </div>
             </section>
         </div>
-        }
 
-        @if (Model.Section == "pcr")
-        {
         <div class="col-12">
             <section class="card h-100 workspace-card" id="pcr">
                 <div class="card-body">
@@ -198,7 +216,7 @@ else
                         <input class="form-control" id="originalDocumentName" name="originalDocumentName" required />
                         <label class="form-label mt-2" for="originalDocumentSha256">原始文件 SHA-256</label>
                         <input class="form-control" id="originalDocumentSha256" name="originalDocumentSha256" pattern="[0-9a-fA-F]{64}" required />
-                        <button class="btn btn-primary mt-3" type="submit">建立 PCR 草稿</button>
+                        <button class="btn btn-primary mt-3" type="submit">儲存 PCR 草稿</button>
                     </form>
                     <h3 class="workspace-subheading mt-4">審查與發布狀態</h3>
                     <ul class="workspace-records">
@@ -230,10 +248,7 @@ else
                 </div>
             </section>
         </div>
-        }
 
-        @if (Model.Section == "inventory")
-        {
         <div class="col-12">
             <section class="card h-100 workspace-card" id="inventory">
                 <div class="card-body">
@@ -283,9 +298,10 @@ else
                                 <option value="@pcr.Id">@pcr.RegistrationNumber v@pcr.VersionNumber - @pcr.Title</option>
                             }
                         </select>
-                        <button class="btn btn-primary mt-3" type="submit">建立盤查第 1 版</button>
+                        <button class="btn btn-primary mt-3" type="submit">儲存盤查第 1 版</button>
                     </form>
-                    <h3 class="workspace-subheading mt-4">階段適用性與送審</h3>
+                    <h3 class="workspace-subheading mt-4">階段適用性與專案狀態</h3>
+                    <p class="workspace-help">各階段資料與計算完成後，請至「計算與結果」頁統一提交整份盤查。</p>
                     <ul class="workspace-records">
                         @foreach (var inventory in Model.InventoryProjects)
                         {
@@ -305,10 +321,6 @@ else
                                             <button class="btn btn-sm btn-outline-secondary mt-1" type="submit">更新階段</button>
                                         </form>
                                     }
-                                    <form class="d-inline" method="post" asp-page-handler="SubmitInventory">
-                                        <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
-                                        <button class="btn btn-sm btn-warning" type="submit">送審</button>
-                                    </form>
                                 }
                                 else if (workflowStatus == InventoryWorkflowStatus.Submitted)
                                 {
@@ -323,6 +335,9 @@ else
                             </li>
                         }
                     </ul>
+                </div>
+            </section>
+        </div>
                 </div>
             </section>
         </div>
@@ -418,104 +433,159 @@ else
                             <p>依舊版盤查表的階段脈絡，逐筆記錄活動量、換算單位、係數與資料品質。</p>
                         </div>
                     </div>
-                    <ol class="lifecycle-stage-strip" aria-label="產品生命週期五階段">
-                        <li><span>01</span><strong>原料取得</strong><small>原料與原料運輸</small></li>
-                        <li><span>02</span><strong>製造</strong><small>能資源與製造廢棄</small></li>
-                        <li><span>03</span><strong>配送銷售</strong><small>配送與銷售運輸</small></li>
-                        <li><span>04</span><strong>使用</strong><small>能源與耗材情境</small></li>
-                        <li><span>05</span><strong>廢棄處理</strong><small>處理方式與運輸</small></li>
-                    </ol>
-                    <form method="post" asp-page-handler="AddActivity">
-                        <h3 class="workspace-subheading">階段與活動識別</h3>
-                        <label class="form-label" for="inventoryProjectVersionId">盤查版本</label>
-                        <select class="form-select" id="inventoryProjectVersionId" name="inventoryProjectVersionId" required>
-                            @foreach (var item in Model.InventoryProjects)
-                            {
-                                <option value="@item.Id">@item.FunctionalUnit / @item.PeriodStart～@item.PeriodEnd</option>
-                            }
-                        </select>
-                        <label class="form-label mt-2" for="lifecycleStage">生命週期階段</label>
-                        <select class="form-select" id="lifecycleStage" name="lifecycleStage">
-                            @foreach (var stage in Enum.GetValues<LifecycleStage>())
-                            {
-                                <option value="@stage">@stage</option>
-                            }
-                        </select>
-                        <label class="form-label mt-2" for="activityKind">活動類型</label>
-                        <select class="form-select" id="activityKind" name="activityKind">
-                            @foreach (var kind in Enum.GetValues<ActivityDataKind>())
-                            {
-                                <option value="@kind">@kind</option>
-                            }
-                        </select>
-                        <label class="form-label mt-2" for="activityName">活動名稱</label>
-                        <input class="form-control" id="activityName" name="activityName" required />
-                        <label class="form-label mt-2" for="supplierOrScenario">供應商／運輸／處理／使用情境</label>
-                        <input class="form-control" id="supplierOrScenario" name="supplierOrScenario" maxlength="1000" />
-                        <h3 class="workspace-subheading mt-4">活動量、單位與係數</h3>
-                        <label class="form-label mt-2" for="rawValue">原始活動量</label>
-                        <input class="form-control" type="number" step="any" min="0" id="rawValue" name="rawValue" required />
-                        <label class="form-label mt-2" for="rawUnitCode">原始單位</label>
-                        <select class="form-select" id="rawUnitCode" name="rawUnitCode">
-                            @foreach (var unit in Model.Units)
-                            {
-                                <option value="@unit.Code">@unit.Code</option>
-                            }
-                        </select>
-                        <label class="form-label mt-2" for="canonicalUnitCode">Canonical 單位</label>
-                        <select class="form-select" id="canonicalUnitCode" name="canonicalUnitCode">
-                            @foreach (var unit in Model.Units)
-                            {
-                                <option value="@unit.Code">@unit.Code</option>
-                            }
-                        </select>
-                        <label class="form-label mt-2" for="factorVersionId">係數版本</label>
-                        <select class="form-select" id="factorVersionId" name="factorVersionId">
-                            @foreach (var factor in Model.Factors)
-                            {
-                                <option value="@factor.Id">@factor.Name / @factor.DenominatorUnitCode</option>
-                            }
-                        </select>
-                        <label class="form-label mt-2" for="allocationFactor">分配比例（0～1）</label>
-                        <input class="form-control" id="allocationFactor" name="allocationFactor" type="number" min="0.000000000000001" max="1" step="any" value="1" required />
-                        <h3 class="workspace-subheading mt-4">估算註記與資料品質</h3>
-                        <div class="form-check mt-2">
-                            <input class="form-check-input" id="isEstimated" name="isEstimated" type="checkbox" value="true" />
-                            <label class="form-check-label" for="isEstimated">估算或替代資料</label>
-                        </div>
-                        <label class="form-label mt-2" for="activityEstimationReason">估算／替代資料理由</label>
-                        <textarea class="form-control" id="activityEstimationReason" name="activityEstimationReason" maxlength="4000"></textarea>
-                        <label class="form-label mt-2" for="dataQuality">資料品質</label>
-                        <select class="form-select" id="dataQuality" name="dataQuality" required>
-                            <option value="primary">一級數據</option>
-                            <option value="secondary-reviewed">經審查二級數據</option>
-                            <option value="estimated">估算數據</option>
-                        </select>
-                        <button class="btn btn-primary mt-3" type="submit">保存活動數據</button>
-                    </form>
-                    <h3 class="workspace-subheading mt-4">已保存活動與證據</h3>
-                    <ul class="workspace-records">
-                        @foreach (var activity in Model.Activities)
+                    <nav class="lifecycle-section-nav" aria-label="五階段資料區塊">
+                        @foreach (var stageSection in lifecycleSections)
                         {
-                            var evidence = Model.EvidenceFiles.SingleOrDefault(item => item.ActivityDataId == activity.Id);
-                            <li class="mb-3">
-                                @activity.Name（@activity.ActivityKind，@((LifecycleStage)activity.LifecycleStage)，@activity.CanonicalValue @activity.CanonicalUnitCode，分配 @activity.AllocationFactor）
-                                @if (evidence is null)
-                                {
-                                    <form method="post" enctype="multipart/form-data" asp-page-handler="UploadEvidence">
-                                        <input type="hidden" name="activityDataId" value="@activity.Id" />
-                                        <label class="form-label" for="evidence-@activity.Id">Evidence 檔案</label>
-                                        <input class="form-control" type="file" id="evidence-@activity.Id" name="evidenceFile" required />
-                                        <button class="btn btn-sm btn-outline-primary mt-1" type="submit">掃描並上傳</button>
-                                    </form>
-                                }
-                                else
-                                {
-                                    <span>Evidence：@evidence.OriginalFileName／@evidence.ScanStatus／<code>@evidence.Sha256</code></span>
-                                }
-                            </li>
+                            <a href="#@stageSection.Slug"><span>@stageSection.Number</span>@stageSection.Title</a>
                         }
-                    </ul>
+                    </nav>
+
+                    <div class="lifecycle-input-list">
+                        @foreach (var stageSection in lifecycleSections)
+                        {
+                            var stageActivities = Model.Activities.Where(item => item.LifecycleStage == (int)stageSection.Stage).ToArray();
+                            <section class="lifecycle-input-section" id="@stageSection.Slug">
+                                <header>
+                                    <span>@stageSection.Number</span>
+                                    <div>
+                                        <h3>@stageSection.Title</h3>
+                                        <p>@stageSection.Summary</p>
+                                    </div>
+                                    <strong>@stageActivities.Length 筆</strong>
+                                </header>
+                                <form method="post" asp-page-handler="AddActivity" asp-route-section="lifecycle">
+                                    <input type="hidden" name="lifecycleStage" value="@stageSection.Stage" />
+                                    <div class="lifecycle-form-grid">
+                                        <div class="lifecycle-field lifecycle-field--wide">
+                                            <label class="form-label" for="inventory-@stageSection.Slug">盤查版本</label>
+                                            <select class="form-select" id="inventory-@stageSection.Slug" name="inventoryProjectVersionId" required>
+                                                @foreach (var item in Model.InventoryProjects)
+                                                {
+                                                    <option value="@item.Id">@item.FunctionalUnit / @item.PeriodStart～@item.PeriodEnd</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="lifecycle-field">
+                                            <label class="form-label" for="kind-@stageSection.Slug">活動類型</label>
+                                            <select class="form-select" id="kind-@stageSection.Slug" name="activityKind" required>
+                                                @foreach (var kind in stageSection.Kinds)
+                                                {
+                                                    <option value="@kind">@(kind switch
+                                                    {
+                                                        ActivityDataKind.Material => "原物料投入",
+                                                        ActivityDataKind.MaterialTransport => "原物料運輸",
+                                                        ActivityDataKind.Energy => "能資源使用",
+                                                        ActivityDataKind.ManufacturingWaste => "製造廢棄物",
+                                                        ActivityDataKind.OutsourcedTreatmentTransport => "委外處理運輸",
+                                                        ActivityDataKind.DistributionTransport => "配送銷售運輸",
+                                                        ActivityDataKind.UseEnergy => "使用能源",
+                                                        ActivityDataKind.UseConsumable => "使用耗材",
+                                                        ActivityDataKind.EndOfLifeTreatment => "廢棄處理",
+                                                        ActivityDataKind.EndOfLifeTransport => "廢棄處理運輸",
+                                                        _ => kind.ToString()
+                                                    })</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="lifecycle-field">
+                                            <label class="form-label" for="activity-@stageSection.Slug">@stageSection.ActivityLabel</label>
+                                            <input class="form-control" id="activity-@stageSection.Slug" name="activityName" required maxlength="300" />
+                                        </div>
+                                        <div class="lifecycle-field lifecycle-field--wide">
+                                            <label class="form-label" for="scenario-@stageSection.Slug">@stageSection.ScenarioLabel</label>
+                                            <input class="form-control" id="scenario-@stageSection.Slug" name="supplierOrScenario" maxlength="1000" />
+                                        </div>
+                                        <div class="lifecycle-field">
+                                            <label class="form-label" for="value-@stageSection.Slug">@stageSection.ValueLabel</label>
+                                            <input class="form-control" type="number" step="any" min="0" id="value-@stageSection.Slug" name="rawValue" required />
+                                        </div>
+                                        <div class="lifecycle-field">
+                                            <label class="form-label" for="raw-unit-@stageSection.Slug">原始單位</label>
+                                            <select class="form-select" id="raw-unit-@stageSection.Slug" name="rawUnitCode" required>
+                                                @foreach (var unit in Model.Units)
+                                                {
+                                                    <option value="@unit.Code">@unit.Code</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="lifecycle-field">
+                                            <label class="form-label" for="canonical-unit-@stageSection.Slug">計算標準單位</label>
+                                            <select class="form-select" id="canonical-unit-@stageSection.Slug" name="canonicalUnitCode" required>
+                                                @foreach (var unit in Model.Units)
+                                                {
+                                                    <option value="@unit.Code">@unit.Code</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="lifecycle-field lifecycle-field--wide">
+                                            <label class="form-label" for="factor-@stageSection.Slug">排放係數版本</label>
+                                            <select class="form-select" id="factor-@stageSection.Slug" name="factorVersionId" required>
+                                                @foreach (var factor in Model.Factors)
+                                                {
+                                                    <option value="@factor.Id">@factor.Name / kgCO2e／@factor.DenominatorUnitCode / @factor.SourceDatasetVersion</option>
+                                                }
+                                            </select>
+                                        </div>
+                                        <div class="lifecycle-field">
+                                            <label class="form-label" for="allocation-@stageSection.Slug">分配比例（0～1）</label>
+                                            <input class="form-control" id="allocation-@stageSection.Slug" name="allocationFactor" type="number" min="0.000000000000001" max="1" step="any" value="1" required />
+                                        </div>
+                                        <div class="lifecycle-field">
+                                            <label class="form-label" for="quality-@stageSection.Slug">資料品質</label>
+                                            <select class="form-select" id="quality-@stageSection.Slug" name="dataQuality" required>
+                                                <option value="primary">一級數據</option>
+                                                <option value="secondary-reviewed">經審查二級數據</option>
+                                                <option value="estimated">估算數據</option>
+                                            </select>
+                                        </div>
+                                        <div class="lifecycle-field lifecycle-field--wide">
+                                            <div class="form-check">
+                                                <input class="form-check-input" id="estimated-@stageSection.Slug" name="isEstimated" type="checkbox" value="true" />
+                                                <label class="form-check-label" for="estimated-@stageSection.Slug">此筆為估算或替代資料</label>
+                                            </div>
+                                            <label class="form-label mt-2" for="reason-@stageSection.Slug">估算／替代資料理由</label>
+                                            <textarea class="form-control" id="reason-@stageSection.Slug" name="activityEstimationReason" maxlength="4000"></textarea>
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-primary mt-3" type="submit">儲存「@stageSection.Title」活動</button>
+                                </form>
+
+                                <div class="lifecycle-saved-data">
+                                    <h4>已儲存的@stageSection.Title資料</h4>
+                                    @if (stageActivities.Length == 0)
+                                    {
+                                        <p class="workspace-empty">尚未儲存此階段活動。</p>
+                                    }
+                                    else
+                                    {
+                                        <ul class="workspace-records">
+                                            @foreach (var activity in stageActivities)
+                                            {
+                                                var evidence = Model.EvidenceFiles.SingleOrDefault(item => item.ActivityDataId == activity.Id);
+                                                <li>
+                                                    <strong>@activity.Name</strong>
+                                                    <span>@activity.ActivityKind／@activity.CanonicalValue @activity.CanonicalUnitCode／分配 @activity.AllocationFactor</span>
+                                                    @if (evidence is null)
+                                                    {
+                                                        <form method="post" enctype="multipart/form-data" asp-page-handler="UploadEvidence" asp-route-section="lifecycle">
+                                                            <input type="hidden" name="activityDataId" value="@activity.Id" />
+                                                            <label class="form-label" for="evidence-@activity.Id">佐證檔案</label>
+                                                            <input class="form-control" type="file" id="evidence-@activity.Id" name="evidenceFile" required />
+                                                            <button class="btn btn-sm btn-outline-primary mt-1" type="submit">掃描並上傳</button>
+                                                        </form>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span>佐證：@evidence.OriginalFileName／@evidence.ScanStatus／<code>@evidence.Sha256</code></span>
+                                                    }
+                                                </li>
+                                            }
+                                        </ul>
+                                    }
+                                </div>
+                            </section>
+                        }
+                    </div>
                 </div>
             </section>
         </div>
@@ -607,6 +677,53 @@ else
             </div>
         </section>
     }
+    <section class="card my-4 workspace-card workspace-final-submit" id="final-submit">
+        <div class="card-body">
+            <div class="workspace-card-heading">
+                <span class="workspace-step workspace-step--submit">提交</span>
+                <div>
+                    <h2 class="h4">統一提交整份盤查</h2>
+                    <p>各區塊可反覆獨立儲存；確認五階段資料與不可變計算 Run 完成後，再一次提交送審。</p>
+                </div>
+            </div>
+            <ul class="workspace-records">
+                @if (Model.InventoryProjects.Count == 0)
+                {
+                    <li class="workspace-empty">尚未建立盤查版本，請先完成 02–04 基本資料設定。</li>
+                }
+                else
+                {
+                    @foreach (var inventory in Model.InventoryProjects)
+                    {
+                        var workflowStatus = Enum.Parse<InventoryWorkflowStatus>(inventory.WorkflowStatus);
+                        var savedStageCount = Model.Activities
+                            .Where(item => item.InventoryProjectVersionId == inventory.Id)
+                            .Select(item => item.LifecycleStage)
+                            .Distinct()
+                            .Count();
+                        var hasRun = Model.Runs.Any(item => item.ProjectVersionId == inventory.Id);
+                        <li class="workspace-submit-item">
+                            <div>
+                                <strong>@inventory.FunctionalUnit／@inventory.PeriodStart～@inventory.PeriodEnd</strong>
+                                <span>已保存 @savedStageCount／5 階段｜計算 Run：@(hasRun ? "已建立" : "尚未建立")｜狀態：@workflowStatus</span>
+                            </div>
+                            @if (InventoryWorkflow.AllowsEditing(workflowStatus))
+                            {
+                                <form method="post" asp-page-handler="SubmitInventory" asp-route-section="calculation">
+                                    <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
+                                    <button class="btn btn-warning" type="submit" disabled="@(!hasRun)">統一提交盤查</button>
+                                </form>
+                            }
+                            else
+                            {
+                                <span class="workspace-status-badge">@workflowStatus</span>
+                            }
+                        </li>
+                    }
+                }
+            </ul>
+        </div>
+    </section>
     }
 }
 

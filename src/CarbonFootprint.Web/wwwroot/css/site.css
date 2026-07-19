@@ -1403,6 +1403,76 @@ textarea {
   letter-spacing: 0.08em;
 }
 
+.workspace-stage-group {
+  display: grid;
+  padding: 0.35rem;
+  grid-column: span 3;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 5px 16px rgba(6, 61, 50, 0.05);
+}
+
+.workspace-stage-group a {
+  min-height: 66px;
+  border: 0;
+  border-radius: 0.75rem;
+  box-shadow: none;
+}
+
+.workspace-stage-group[aria-current="page"] {
+  background: var(--carbon-50);
+  border-color: var(--carbon-300);
+  box-shadow: 0 10px 24px rgba(6, 61, 50, 0.13);
+}
+
+.workspace-stage-group[aria-current="page"] a {
+  color: white;
+  background: linear-gradient(145deg, var(--carbon-900), var(--carbon-700));
+}
+
+.workspace-stage-group[aria-current="page"] a span {
+  color: var(--carbon-200);
+}
+
+.workspace-setup-shell {
+  padding: clamp(1rem, 2.5vw, 1.75rem);
+  background: linear-gradient(145deg, var(--carbon-50), #eaf7f0);
+  border: 1px solid var(--carbon-200);
+  border-radius: var(--radius-xl);
+}
+
+.workspace-group-heading {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+  gap: 0.9rem;
+}
+
+.workspace-group-heading > span {
+  padding: 0.45rem 0.65rem;
+  flex: 0 0 auto;
+  color: white;
+  background: var(--carbon-900);
+  border-radius: 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.workspace-group-heading h2,
+.workspace-group-heading p {
+  margin-bottom: 0;
+}
+
+.workspace-group-heading p,
+.workspace-help,
+.workspace-empty {
+  color: var(--ink-500);
+  font-size: 0.9rem;
+}
+
 .workspace-card {
   scroll-margin-top: 1.25rem;
   border: 1px solid var(--border);
@@ -1496,57 +1566,158 @@ form > .workspace-subheading:first-child {
   overflow-wrap: anywhere;
 }
 
-.lifecycle-stage-strip {
+.lifecycle-section-nav {
   display: grid;
   margin: 0 0 1.5rem;
-  padding: 0;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.55rem;
-  list-style: none;
 }
 
-.lifecycle-stage-strip li {
-  position: relative;
+.lifecycle-section-nav a {
   display: flex;
-  min-height: 112px;
+  min-height: 78px;
   padding: 0.85rem;
   flex-direction: column;
+  justify-content: center;
+  color: var(--carbon-900);
   background: linear-gradient(145deg, var(--carbon-50), white);
   border: 1px solid var(--carbon-100);
   border-radius: var(--radius-md);
+  font-weight: 750;
+  line-height: 1.25;
+  text-decoration: none;
 }
 
-.lifecycle-stage-strip li::after {
-  position: absolute;
-  top: 50%;
-  right: -0.48rem;
-  z-index: 1;
-  width: 0.4rem;
-  height: 0.4rem;
-  content: "";
-  background: var(--carbon-300);
-  border-radius: 50%;
-  transform: translateY(-50%);
+.lifecycle-section-nav a:hover,
+.lifecycle-section-nav a:focus-visible {
+  background: white;
+  border-color: var(--carbon-300);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
 }
 
-.lifecycle-stage-strip li:last-child::after {
-  display: none;
-}
-
-.lifecycle-stage-strip span {
+.lifecycle-section-nav span {
   color: var(--carbon-500);
   font-size: 0.68rem;
   font-weight: 850;
 }
 
-.lifecycle-stage-strip strong {
-  margin: 0.2rem 0;
-  color: var(--carbon-900);
+.lifecycle-input-list {
+  display: grid;
+  gap: 1.25rem;
 }
 
-.lifecycle-stage-strip small {
+.lifecycle-input-section {
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+  scroll-margin-top: 1rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.lifecycle-input-section > header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  gap: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.lifecycle-input-section > header > span {
+  display: grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex: 0 0 auto;
+  place-items: center;
+  color: white;
+  background: var(--carbon-700);
+  border-radius: 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.lifecycle-input-section > header div {
+  flex: 1 1 auto;
+}
+
+.lifecycle-input-section > header h3,
+.lifecycle-input-section > header p {
+  margin-bottom: 0;
+}
+
+.lifecycle-input-section > header p {
   color: var(--ink-500);
-  line-height: 1.35;
+  font-size: 0.85rem;
+}
+
+.lifecycle-input-section > header > strong {
+  padding: 0.25rem 0.55rem;
+  flex: 0 0 auto;
+  color: var(--carbon-900);
+  background: var(--carbon-100);
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.lifecycle-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1rem;
+}
+
+.lifecycle-field {
+  min-width: 0;
+}
+
+.lifecycle-field--wide {
+  grid-column: 1 / -1;
+}
+
+.lifecycle-saved-data {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--carbon-200);
+}
+
+.lifecycle-saved-data h4 {
+  margin-bottom: 0.75rem;
+  color: var(--carbon-900);
+  font-size: 0.95rem;
+}
+
+.lifecycle-saved-data .workspace-records > li,
+.workspace-submit-item,
+.workspace-submit-item > div {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.workspace-step--submit {
+  width: 3.5rem;
+  background: #ad7614;
+}
+
+.workspace-final-submit {
+  border-color: #ead49f;
+}
+
+.workspace-submit-item {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.workspace-submit-item span {
+  color: var(--ink-500);
+  font-size: 0.86rem;
+}
+
+.workspace-status-badge {
+  padding: 0.3rem 0.65rem;
+  color: var(--carbon-900) !important;
+  background: var(--carbon-100);
+  border-radius: 999px;
+  font-weight: 750;
 }
 
 .workspace-calculation {
@@ -1559,12 +1730,12 @@ form > .workspace-subheading:first-child {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .lifecycle-stage-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .workspace-stage-group {
+    grid-column: span 3;
   }
 
-  .lifecycle-stage-strip li::after {
-    display: none;
+  .lifecycle-section-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1583,6 +1754,10 @@ form > .workspace-subheading:first-child {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .workspace-stage-group {
+    grid-column: 1 / -1;
+  }
+
   .workspace-card-heading {
     align-items: center;
   }
@@ -1591,7 +1766,9 @@ form > .workspace-subheading:first-child {
     display: none;
   }
 
-  .lifecycle-stage-strip {
+  .lifecycle-section-nav,
+  .lifecycle-form-grid,
+  .workspace-submit-item {
     grid-template-columns: 1fr;
   }
 }

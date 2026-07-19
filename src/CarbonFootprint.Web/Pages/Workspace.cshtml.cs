@@ -1335,6 +1335,7 @@ public sealed class WorkspaceModel : PageModel
     private static string NormalizeSection(string? section) => section?.Trim().ToLowerInvariant() switch
     {
         "governance" => "governance",
+        "setup" => "setup",
         "product" => "product",
         "pcr" => "pcr",
         "inventory" => "inventory",
