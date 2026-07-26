@@ -1,8 +1,43 @@
 @page
 @model CarbonFootprint.Web.Pages.ArchiveReportModel
+@using CarbonFootprint.Domain.Modules.Calculations
 @using CarbonFootprint.Domain.Modules.Inventories
 @{
     ViewData["Title"] = "可歸檔產品碳足跡報告";
+    string WorkflowStatusName(string status) => status switch
+    {
+        "Draft" => "草稿",
+        "Submitted" => "已提交",
+        "ChangesRequested" => "退回補正",
+        "Approved" => "已核准",
+        _ => "其他狀態"
+    };
+    string StageName(LifecycleStage stage) => stage switch
+    {
+        LifecycleStage.RawMaterial => "原料取得",
+        LifecycleStage.Manufacturing => "製造",
+        LifecycleStage.Distribution => "配送銷售",
+        LifecycleStage.Use => "使用",
+        LifecycleStage.EndOfLife => "廢棄處理",
+        _ => "其他階段"
+    };
+    string FormulaName(string formulaId) => formulaId switch
+    {
+        ActivityAmountFormula.DirectFormulaId => "直接活動量",
+        ActivityAmountFormula.TransportFormulaId => "距離乘重量換算",
+        ActivityAmountFormula.UseScenarioFormulaId => "使用情境消耗量",
+        "material-input-times-factor-times-allocation-v1" => "原物料投入乘係數與分配",
+        "material-transport-work-times-factor-times-allocation-v1" => "原物料運輸乘係數與分配",
+        "manufacturing-consumption-times-factor-times-allocation-v1" => "製造消耗乘係數與分配",
+        "manufacturing-waste-times-factor-times-allocation-v1" => "製造廢棄物乘係數與分配",
+        "outsourced-transport-work-times-factor-times-allocation-v1" => "委外運輸乘係數與分配",
+        "distribution-transport-work-times-factor-times-allocation-v1" => "配送運輸乘係數與分配",
+        "use-energy-consumption-times-factor-times-allocation-v1" => "使用能源乘係數與分配",
+        "use-consumable-times-factor-times-allocation-v1" => "使用耗材乘係數與分配",
+        "end-of-life-treatment-times-factor-times-allocation-v1" => "廢棄處理乘係數與分配",
+        "end-of-life-transport-work-times-factor-times-allocation-v1" => "廢棄運輸乘係數與分配",
+        _ => "未識別公式"
+    };
 }
 
 <h1>可歸檔產品碳足跡報告</h1>
@@ -11,15 +46,15 @@
 
 <dl class="row">
     <dt class="col-sm-4">輸出時間／時區</dt><dd class="col-sm-8">@Model.GeneratedAt.ToString("O")／UTC</dd>
-    <dt class="col-sm-4">Application version</dt><dd class="col-sm-8">@Model.ApplicationVersion</dd>
-    <dt class="col-sm-4">Engine version</dt><dd class="col-sm-8">@Model.Run.EngineBuild</dd>
-    <dt class="col-sm-4">Dataset versions</dt><dd class="col-sm-8">@Model.DatasetVersions</dd>
-    <dt class="col-sm-4">Rule／Unit／GWP</dt><dd class="col-sm-8">@Model.Run.RuleSetVersion／@Model.Run.UnitCatalogueVersion／@Model.Run.GwpVersion</dd>
-    <dt class="col-sm-4">PCR version</dt><dd class="col-sm-8">@Model.Run.PcrVersion</dd>
-    <dt class="col-sm-4">盤查狀態</dt><dd class="col-sm-8">@Model.Project.WorkflowStatus</dd>
+    <dt class="col-sm-4">應用程式版本</dt><dd class="col-sm-8">@Model.ApplicationVersion</dd>
+    <dt class="col-sm-4">計算引擎版本</dt><dd class="col-sm-8">@Model.Run.EngineBuild</dd>
+    <dt class="col-sm-4">資料集版本</dt><dd class="col-sm-8">@Model.DatasetVersions</dd>
+    <dt class="col-sm-4">規則／單位／GWP 版本</dt><dd class="col-sm-8">@Model.Run.RuleSetVersion／@Model.Run.UnitCatalogueVersion／@Model.Run.GwpVersion</dd>
+    <dt class="col-sm-4">PCR 版本</dt><dd class="col-sm-8">@Model.Run.PcrVersion</dd>
+    <dt class="col-sm-4">盤查狀態</dt><dd class="col-sm-8">@WorkflowStatusName(Model.Project.WorkflowStatus)</dd>
     <dt class="col-sm-4">資料品質摘要</dt><dd class="col-sm-8"><code>@Model.Run.DataQualitySummaryJson</code></dd>
-    <dt class="col-sm-4">Run ID</dt><dd class="col-sm-8"><code>@Model.Run.Id</code></dd>
-    <dt class="col-sm-4">Input SHA-256</dt><dd class="col-sm-8"><code>@Model.Run.InputSha256</code></dd>
+    <dt class="col-sm-4">計算版本 ID</dt><dd class="col-sm-8"><code>@Model.Run.Id</code></dd>
+    <dt class="col-sm-4">輸入資料 SHA-256</dt><dd class="col-sm-8"><code>@Model.Run.InputSha256</code></dd>
     <dt class="col-sm-4">產品總量</dt><dd class="col-sm-8">@Model.Run.ProductTotal kgCO2e</dd>
 </dl>
 
@@ -27,16 +62,16 @@
 <div class="table-responsive">
     <table class="table table-sm">
         <thead>
-            <tr><th>階段</th><th>活動版本</th><th>公式</th><th>活動量</th><th>係數版本</th><th>分配</th><th>排放量</th><th>Evidence SHA-256</th></tr>
+            <tr><th>階段</th><th>活動版本</th><th>公式</th><th>活動量</th><th>係數版本</th><th>分配</th><th>排放量</th><th>佐證檔案 SHA-256</th></tr>
         </thead>
         <tbody>
             @foreach (var line in Model.Lines)
             {
                 var evidenceHash = Model.EvidenceHashes.GetValueOrDefault(line.ActivityId, "未附證據");
                 <tr>
-                    <td>@((LifecycleStage)line.LifecycleStage)</td>
+                    <td>@StageName((LifecycleStage)line.LifecycleStage)</td>
                     <td><code>@line.ActivityId</code></td>
-                    <td>@line.FormulaId</td>
+                    <td>@FormulaName(line.FormulaId)</td>
                     <td>@line.CanonicalActivityValue @line.ActivityUnitCode</td>
                     <td><code>@line.FactorVersionId</code>（@line.FactorValue @line.FactorUnit）</td>
                     <td>@line.AllocationFactor</td>
@@ -54,7 +89,7 @@
     <ul>
         @foreach (var warning in Model.Warnings)
         {
-            <li><strong>@warning.Code</strong>：@warning.Message</li>
+            <li>@warning.Message</li>
         }
     </ul>
 }

@@ -31,6 +31,12 @@ public sealed class WebSecurityTests : IClassFixture<WebSecurityTests.Factory>
             "/Workspace/inventory",
             "/Workspace/factors",
             "/Workspace/lifecycle",
+            "/Workspace/lifecycle/raw-material",
+            "/Workspace/lifecycle/manufacturing",
+            "/Workspace/lifecycle/distribution",
+            "/Workspace/lifecycle/use",
+            "/Workspace/lifecycle/end-of-life",
+            $"/Workspace/calculation?handler=ExportExcel&projectVersionId={Guid.NewGuid()}",
             "/Workspace/calculation"
         }.Select(path => _client.GetAsync(path)));
         var reports = await _client.GetAsync("/Reports");

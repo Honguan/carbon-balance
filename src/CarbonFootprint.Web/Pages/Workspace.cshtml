@@ -1,4 +1,4 @@
-@page "{section?}"
+@page "{section?}/{stage?}"
 @model CarbonFootprint.Web.Pages.WorkspaceModel
 @using CarbonFootprint.Domain.Modules.Calculations
 @using CarbonFootprint.Domain.Modules.Factors
@@ -14,20 +14,93 @@
     var hasSelectablePcrVersions = Model.SelectablePcrVersions.Count > 0;
     var hasSelectableFactors = Model.SelectableFactors.Count > 0;
     var canCreateInventory = hasProductVersions && hasSelectablePcrVersions;
+    string PublicationStatusName(string status) => status switch
+    {
+        "Draft" => "草稿",
+        "Published" => "已發布",
+        "Withdrawn" => "已撤回",
+        _ => "其他狀態"
+    };
+    string WorkflowStatusName(InventoryWorkflowStatus status) => status switch
+    {
+        InventoryWorkflowStatus.Draft => "草稿",
+        InventoryWorkflowStatus.Submitted => "已提交",
+        InventoryWorkflowStatus.ChangesRequested => "退回補正",
+        InventoryWorkflowStatus.Approved => "已核准",
+        _ => "其他狀態"
+    };
+    string StageName(LifecycleStage stage) => stage switch
+    {
+        LifecycleStage.RawMaterial => "原料取得",
+        LifecycleStage.Manufacturing => "製造",
+        LifecycleStage.Distribution => "配送銷售",
+        LifecycleStage.Use => "使用",
+        LifecycleStage.EndOfLife => "廢棄處理",
+        _ => "其他階段"
+    };
+    string ActivityKindName(ActivityDataKind kind) => kind switch
+    {
+        ActivityDataKind.Material => "原物料投入",
+        ActivityDataKind.MaterialTransport => "原物料運輸",
+        ActivityDataKind.Energy => "能資源使用",
+        ActivityDataKind.ManufacturingWaste => "製造廢棄物",
+        ActivityDataKind.OutsourcedTreatmentTransport => "委外處理運輸",
+        ActivityDataKind.DistributionTransport => "配送銷售運輸",
+        ActivityDataKind.UseEnergy => "使用能源",
+        ActivityDataKind.UseConsumable => "使用耗材",
+        ActivityDataKind.EndOfLifeTreatment => "廢棄處理",
+        ActivityDataKind.EndOfLifeTransport => "廢棄處理運輸",
+        _ => "其他活動"
+    };
+    string ScanStatusName(string status) => status switch
+    {
+        "Pending" => "掃描中",
+        "Clean" => "掃描通過",
+        "Rejected" => "已拒絕",
+        "Failed" => "掃描失敗",
+        _ => "其他狀態"
+    };
+    string RoleName(string role) => role switch
+    {
+        "Owner" => "擁有者",
+        "Administrator" => "管理者",
+        "Contributor" => "編輯者",
+        "Reviewer" => "審查者",
+        "Viewer" => "檢視者",
+        _ => "其他角色"
+    };
+    string FormulaName(string formulaId) => formulaId switch
+    {
+        ActivityAmountFormula.DirectFormulaId => "直接活動量",
+        ActivityAmountFormula.TransportFormulaId => "距離乘重量換算",
+        ActivityAmountFormula.UseScenarioFormulaId => "使用情境消耗量",
+        "material-input-times-factor-times-allocation-v1" => "原物料投入乘係數與分配",
+        "material-transport-work-times-factor-times-allocation-v1" => "原物料運輸乘係數與分配",
+        "manufacturing-consumption-times-factor-times-allocation-v1" => "製造消耗乘係數與分配",
+        "manufacturing-waste-times-factor-times-allocation-v1" => "製造廢棄物乘係數與分配",
+        "outsourced-transport-work-times-factor-times-allocation-v1" => "委外運輸乘係數與分配",
+        "distribution-transport-work-times-factor-times-allocation-v1" => "配送運輸乘係數與分配",
+        "use-energy-consumption-times-factor-times-allocation-v1" => "使用能源乘係數與分配",
+        "use-consumable-times-factor-times-allocation-v1" => "使用耗材乘係數與分配",
+        "end-of-life-treatment-times-factor-times-allocation-v1" => "廢棄處理乘係數與分配",
+        "end-of-life-transport-work-times-factor-times-allocation-v1" => "廢棄運輸乘係數與分配",
+        _ => "未識別公式"
+    };
     var lifecycleSections = new[]
     {
         new { Stage = LifecycleStage.RawMaterial, Number = "01", Slug = "raw-material", Title = "原料取得", Summary = "原物料投入與供應商運輸", Formula = "原料投入量 × 對應係數；原料運輸以重量 × 距離換算重量距離後 × 運輸係數。", ActivityLabel = "原物料名稱／運輸項目", ScenarioLabel = "材質／供應商名稱與地址", ValueLabel = "投入量／重量距離活動量", Kinds = new[] { ActivityDataKind.Material, ActivityDataKind.MaterialTransport } },
         new { Stage = LifecycleStage.Manufacturing, Number = "02", Slug = "manufacturing", Title = "製造", Summary = "能資源、製造廢棄與委外運輸", Formula = "每一種能資源消耗分筆乘係數；廢棄量先換算係數分母單位，委外運輸以重量距離乘係數。", ActivityLabel = "能資源／廢棄物名稱", ScenarioLabel = "製程／處理廠與運輸說明", ValueLabel = "消耗量／廢棄量／重量距離", Kinds = new[] { ActivityDataKind.Energy, ActivityDataKind.ManufacturingWaste, ActivityDataKind.OutsourcedTreatmentTransport } },
         new { Stage = LifecycleStage.Distribution, Number = "03", Slug = "distribution", Title = "配送銷售", Summary = "配銷據點與銷售運輸", Formula = "單趟距離 × 單位產品重量 ÷ 1000 得到 tkm，再乘該運具排放係數。", ActivityLabel = "配銷據點／運輸項目", ScenarioLabel = "據點地址／運輸工具與重量距離來源", ValueLabel = "重量距離活動量（建議 tkm）", Kinds = new[] { ActivityDataKind.DistributionTransport } },
         new { Stage = LifecycleStage.Use, Number = "04", Slug = "use", Title = "使用", Summary = "使用壽命、頻率、能源與耗材", Formula = "每個能源或耗材的情境消耗量分別乘對應係數；多個消耗項目逐筆加總。", ActivityLabel = "使用情境／消耗項目", ScenarioLabel = "壽命、頻率與消耗量公式說明", ValueLabel = "該消耗項目的公式結果", Kinds = new[] { ActivityDataKind.UseEnergy, ActivityDataKind.UseConsumable } },
-        new { Stage = LifecycleStage.EndOfLife, Number = "05", Slug = "end-of-life", Title = "廢棄處理", Summary = "回收、焚化、掩埋與處理運輸", Formula = "廢棄量依單位目錄換算（舊版 kg ÷ 1000 → tonne）後乘處理係數；運輸另以 tkm 乘係數。", ActivityLabel = "處理方式／運輸項目", ScenarioLabel = "處理廠／服務與運輸情境", ValueLabel = "廢棄量／重量距離活動量", Kinds = new[] { ActivityDataKind.EndOfLifeTreatment, ActivityDataKind.EndOfLifeTransport } }
+        new { Stage = LifecycleStage.EndOfLife, Number = "05", Slug = "end-of-life", Title = "廢棄處理", Summary = "回收、焚化、掩埋與處理運輸", Formula = "廢棄量依單位目錄換算（kg ÷ 1000 → tonne）後乘處理係數；運輸另以 tkm 乘係數。", ActivityLabel = "處理方式／運輸項目", ScenarioLabel = "處理廠／服務與運輸情境", ValueLabel = "廢棄量／重量距離活動量", Kinds = new[] { ActivityDataKind.EndOfLifeTreatment, ActivityDataKind.EndOfLifeTransport } }
     };
+    var activeLifecycleSections = lifecycleSections.Where(item => item.Slug == Model.Stage).ToArray();
 }
 <header class="workspace-hero">
     <p class="workspace-eyebrow">產品碳足跡盤查流程</p>
     <h1>盤查工作區</h1>
-    <p>依序完成組織與產品資料、盤查邊界、係數、五階段活動數據，再建立可重現的計算結果。</p>
-    <p class="workspace-disclaimer">Golden Vertical Slice：所有資料均為開發測試資料，不代表 PCR、係數或結果已獲領域核准、查驗或主管機關核定。</p>
+    <p>依序完成組織與產品資料、盤查邊界、係數資料庫、五階段活動數據，再建立可重現的計算結果。</p>
+    <p class="workspace-disclaimer">計算結果仍須依適用 PCR、組織程序與查驗要求完成確認。</p>
 </header>
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
@@ -63,8 +136,9 @@ else
             <a asp-page="/Workspace" asp-route-section="pcr" aria-current="@(Model.Section == "pcr" ? "page" : null)"><span>03</span>PCR 規範</a>
             <a asp-page="/Workspace" asp-route-section="inventory" aria-current="@(Model.Section == "inventory" ? "page" : null)"><span>04</span>盤查範圍</a>
         </div>
-        <a asp-page="/Workspace" asp-route-section="lifecycle" aria-current="@(Model.Section == "lifecycle" ? "page" : null)"><span>05</span>五階段數據與係數</a>
-        <a asp-page="/Workspace" asp-route-section="calculation" aria-current="@(Model.Section == "calculation" ? "page" : null)"><span>06</span>計算與結果</a>
+        <a asp-page="/Workspace" asp-route-section="factors" aria-current="@(Model.Section == "factors" ? "page" : null)"><span>05</span>係數資料庫</a>
+        <a asp-page="/Workspace" asp-route-section="lifecycle" asp-route-stage="raw-material" aria-current="@(Model.Section == "lifecycle" ? "page" : null)"><span>06</span>五階段活動數據</a>
+        <a asp-page="/Workspace" asp-route-section="calculation" aria-current="@(Model.Section == "calculation" ? "page" : null)"><span>07</span>計算與結果</a>
     </nav>
 
     @if (Model.Section == "governance")
@@ -89,13 +163,13 @@ else
                 </form>
                 <form class="col-lg-4 workspace-subpanel" method="post" asp-page-handler="InviteMember">
                     <h3 class="h6">新增協作成員</h3>
-                    <label class="form-label" for="invitationEmail">受邀 Email</label>
+                    <label class="form-label" for="invitationEmail">受邀電子郵件</label>
                     <input class="form-control" id="invitationEmail" name="invitationEmail" type="email" required maxlength="320" />
                     <label class="form-label mt-2" for="invitationRole">角色</label>
                     <select class="form-select" id="invitationRole" name="invitationRole">
                         @foreach (var role in Enum.GetValues<CarbonFootprint.Domain.Modules.Organizations.OrganizationRole>().Where(role => role != CarbonFootprint.Domain.Modules.Organizations.OrganizationRole.Owner))
                         {
-                            <option value="@role">@role</option>
+                            <option value="@role">@RoleName(role.ToString())</option>
                         }
                     </select>
                     <button class="btn btn-primary mt-2" type="submit">寄送邀請</button>
@@ -106,7 +180,7 @@ else
                         @foreach (var membership in Model.Memberships)
                         {
                             <li>
-                                @membership.UserId：@membership.Role
+                                @membership.UserId：@RoleName(membership.Role)
                                 @if (membership.RevokedAt is null && membership.Role != CarbonFootprint.Domain.Modules.Organizations.OrganizationRole.Owner.ToString())
                                 {
                                     <form class="d-inline" method="post" asp-page-handler="RevokeMember">
@@ -124,7 +198,7 @@ else
                 @foreach (var invitation in Model.Invitations.Where(item => item.AcceptedAt is null && item.RevokedAt is null))
                 {
                     <li>
-                        @invitation.Email：@invitation.Role（到期 @invitation.ExpiresAt.ToString("u")）
+                        @invitation.Email：@RoleName(invitation.Role)（到期 @invitation.ExpiresAt.ToString("u")）
                         <form class="d-inline" method="post" asp-page-handler="RevokeInvitation">
                             <input type="hidden" name="invitationId" value="@invitation.Id" />
                             <button class="btn btn-sm btn-outline-danger" type="submit">撤銷邀請</button>
@@ -193,7 +267,7 @@ else
                     <ul class="workspace-records">
                         @foreach (var item in Model.ProductVersions)
                         {
-                            <li>@item.NameZhTw（v@(item.VersionNumber)）</li>
+                            <li>@item.NameZhTw（第 @(item.VersionNumber) 版）</li>
                         }
                     </ul>
                 </div>
@@ -248,7 +322,7 @@ else
                         @foreach (var pcr in Model.PcrVersions)
                         {
                             <li class="mb-2">
-                                @pcr.RegistrationNumber v@(pcr.VersionNumber)：@pcr.Title（@pcr.PublicationStatus）
+                                @pcr.RegistrationNumber 第 @(pcr.VersionNumber) 版：@pcr.Title（@PublicationStatusName(pcr.PublicationStatus)）
                                 @if (pcr.PublicationStatus == PcrPublicationStatus.Draft.ToString())
                                 {
                                     <form class="d-inline" method="post" asp-page-handler="ReviewPcr">
@@ -295,7 +369,7 @@ else
                                 <option value="">@(hasProductVersions ? "請選擇產品版本" : "尚無可選產品版本")</option>
                                 @foreach (var item in Model.ProductVersions)
                                 {
-                                    <option value="@item.Id">@item.NameZhTw v@(item.VersionNumber)</option>
+                                    <option value="@item.Id">@item.NameZhTw 第 @(item.VersionNumber) 版</option>
                                 }
                             </select>
                             <p class="workspace-select-help" id="productVersionId-help">
@@ -338,7 +412,7 @@ else
                                 <option value="">@(hasSelectablePcrVersions ? "請選擇已發布 PCR 版本" : "尚無已發布 PCR 版本")</option>
                                 @foreach (var pcr in Model.SelectablePcrVersions)
                                 {
-                                    <option value="@pcr.Id">@pcr.RegistrationNumber v@(pcr.VersionNumber) - @pcr.Title</option>
+                                    <option value="@pcr.Id">@pcr.RegistrationNumber 第 @(pcr.VersionNumber) 版－@pcr.Title</option>
                                 }
                             </select>
                             <p class="workspace-select-help" id="pcrVersionId-help">
@@ -361,14 +435,14 @@ else
                         {
                             var workflowStatus = Enum.Parse<InventoryWorkflowStatus>(inventory.WorkflowStatus);
                             <li class="mb-3">
-                                @inventory.FunctionalUnit／@inventory.PcrVersion／@workflowStatus
+                                @inventory.FunctionalUnit／@inventory.PcrVersion／@WorkflowStatusName(workflowStatus)
                                 @if (InventoryWorkflow.AllowsEditing(workflowStatus))
                                 {
                                     @foreach (var declaration in Model.StageDeclarations.Where(item => item.InventoryProjectVersionId == inventory.Id))
                                     {
                                         <form class="mt-1 border rounded p-2" method="post" asp-page-handler="SetStageApplicability">
                                             <input type="hidden" name="stageDeclarationId" value="@declaration.Id" />
-                                            <label class="form-check-label" for="stage-applicable-@declaration.Id">@((LifecycleStage)declaration.LifecycleStage) 適用</label>
+                                            <label class="form-check-label" for="stage-applicable-@declaration.Id">@StageName((LifecycleStage)declaration.LifecycleStage)適用</label>
                                             <input class="form-check-input" id="stage-applicable-@declaration.Id" name="isApplicable" type="checkbox" value="true" checked="@declaration.IsApplicable" />
                                             <label class="form-label" for="stage-reason-@declaration.Id">不適用原因</label>
                                             <input class="form-control" id="stage-reason-@declaration.Id" name="reason" value="@declaration.Reason" maxlength="2000" />
@@ -398,22 +472,29 @@ else
         </div>
         }
 
+        @if (Model.Section == "factors")
+        {
+        <div class="col-12">
+            <partial name="_FactorDatabase" model="Model" />
+        </div>
+        }
+
         @if (Model.Section == "lifecycle")
         {
         <div class="col-12">
             <section class="card h-100 workspace-card" id="lifecycle">
                 <div class="card-body">
                     <div class="workspace-card-heading">
-                        <span class="workspace-step">05</span>
+                        <span class="workspace-step">06</span>
                         <div>
                             <h2 class="h4">五階段活動數據</h2>
-                            <p>依舊版盤查表的階段脈絡，逐筆記錄活動量、換算單位、係數與資料品質。</p>
+                            <p>每個生命週期階段使用獨立頁面，逐筆記錄活動量、換算單位、係數與資料品質。</p>
                         </div>
                     </div>
-                    <p class="alert alert-warning">舊版階段公式目前標記為 pending-domain-review，僅供盤查候選計算，不代表已由 PCR 或領域審核者核准。</p>
+                    <p class="alert alert-warning">階段計算公式尚待適用 PCR 與領域審核者確認；完成確認前不可正式提交。</p>
                     @if (Model.InventoryProjects.Count > 0)
                     {
-                    <form class="lifecycle-project-selector" method="get" asp-page="/Workspace" asp-route-section="lifecycle">
+                    <form class="lifecycle-project-selector" method="get" asp-page="/Workspace" asp-route-section="lifecycle" asp-route-stage="@Model.Stage">
                         <label class="form-label" for="projectVersionId">目前盤查版本</label>
                         <select class="form-select" id="projectVersionId" name="projectVersionId" data-auto-submit-select aria-describedby="projectVersionId-help">
                             @foreach (var inventory in Model.InventoryProjects)
@@ -424,131 +505,21 @@ else
                         <p class="workspace-select-help" id="projectVersionId-help">變更選項後會自動切換；也可使用下方按鈕。</p>
                         <button class="btn btn-outline-primary mt-2" type="submit">切換盤查版本</button>
                     </form>
-                    <details class="lifecycle-factor-registry">
-                        <summary>階段係數目錄管理</summary>
-                        <p>係數目錄整合在五階段流程內；各消耗項目仍須逐筆選擇已發布版本。</p>
-                        <form method="post" asp-page-handler="CreateFactor" asp-route-section="lifecycle" asp-route-projectVersionId="@Model.ProjectVersionId">
-                            <div class="lifecycle-form-grid">
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="factorName">係數名稱</label>
-                                    <input class="form-control" id="factorName" name="factorName" required />
-                                </div>
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="factorValue">係數值</label>
-                                    <input class="form-control" type="number" step="any" min="0" id="factorValue" name="factorValue" required />
-                                </div>
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="denominatorUnitCode">係數分母單位</label>
-                                    <select class="form-select" id="denominatorUnitCode" name="denominatorUnitCode" required>
-                                        @foreach (var unit in Model.Units)
-                                        {
-                                            <option value="@unit.Code">kgCO2e／@unit.Code</option>
-                                        }
-                                    </select>
-                                </div>
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="factorSourceType">來源類型</label>
-                                    <select class="form-select" id="factorSourceType" name="factorSourceType" required data-controlled-other data-other-target="#factorSourceTypeOther">
-                                        <option value="government-database">主管機關／政府資料庫</option>
-                                        <option value="lca-database">國際 LCA 資料庫</option>
-                                        <option value="academic-paper">學術文獻／論文</option>
-                                        <option value="test-report">檢測／查驗報告</option>
-                                        <option value="supplier-data">供應商一級資料</option>
-                                        <option value="self-calculated">自廠計算係數</option>
-                                        <option value="__other__">其他（自行輸入）</option>
-                                    </select>
-                                    <input class="form-control mt-2" id="factorSourceTypeOther" name="factorSourceTypeOther" placeholder="請輸入其他來源類型" hidden />
-                                </div>
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="factorGeography">適用地域</label>
-                                    <select class="form-select" id="factorGeography" name="factorGeography" required data-controlled-other data-other-target="#factorGeographyOther">
-                                        <option value="TW">台灣</option>
-                                        <option value="Global">全球</option>
-                                        <option value="East Asia">東亞</option>
-                                        <option value="EU">歐盟</option>
-                                        <option value="US">美國</option>
-                                        <option value="CN">中國</option>
-                                        <option value="JP">日本</option>
-                                        <option value="__other__">其他（自行輸入）</option>
-                                    </select>
-                                    <input class="form-control mt-2" id="factorGeographyOther" name="factorGeographyOther" placeholder="請輸入其他地域" hidden />
-                                </div>
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="factorValidFrom">有效起日</label>
-                                    <input class="form-control" type="date" id="factorValidFrom" name="factorValidFrom" required />
-                                </div>
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="factorValidTo">有效迄日</label>
-                                    <input class="form-control" type="date" id="factorValidTo" name="factorValidTo" required />
-                                </div>
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="sourceDatasetVersion">來源資料集版本</label>
-                                    <input class="form-control" id="sourceDatasetVersion" name="sourceDatasetVersion" required />
-                                </div>
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="licenseCode">授權識別</label>
-                                    <input class="form-control" id="licenseCode" name="licenseCode" required />
-                                </div>
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="factorSourceName">來源機構／文件</label>
-                                    <input class="form-control" id="factorSourceName" name="factorSourceName" required />
-                                </div>
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="factorSourceReference">來源 URL／文件編號</label>
-                                    <input class="form-control" id="factorSourceReference" name="factorSourceReference" required />
-                                </div>
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="datasetName">資料集名稱</label>
-                                    <input class="form-control" id="datasetName" name="datasetName" required />
-                                </div>
-                                <div class="lifecycle-field">
-                                    <label class="form-label" for="factorOriginalDocumentName">原始文件名稱</label>
-                                    <input class="form-control" id="factorOriginalDocumentName" name="factorOriginalDocumentName" required />
-                                </div>
-                                <div class="lifecycle-field lifecycle-field--wide">
-                                    <label class="form-label" for="factorOriginalDocumentSha256">原始文件 SHA-256</label>
-                                    <input class="form-control" id="factorOriginalDocumentSha256" name="factorOriginalDocumentSha256" pattern="[0-9a-fA-F]{64}" autocomplete="off" required />
-                                    <p class="workspace-select-help">請填原始下載或匯入檔案的 64 位 SHA-256；不可用網址或檔名代替。</p>
-                                </div>
-                                <div class="lifecycle-field lifecycle-field--wide">
-                                    <label class="form-label" for="factorApplicability">適用性</label>
-                                    <textarea class="form-control" id="factorApplicability" name="factorApplicability" required></textarea>
-                                </div>
-                            </div>
-                            <button class="btn btn-outline-primary mt-2" type="submit">建立係數草稿</button>
-                        </form>
-                        <ul class="workspace-records mt-3">
-                            @foreach (var factor in Model.Factors)
-                            {
-                                <li>
-                                    <strong>@factor.Name</strong>
-                                    <span>@factor.Value kgCO2e／@factor.DenominatorUnitCode／@factor.SourceDatasetVersion／@factor.PublicationStatus</span>
-                                    <span>來源：@factor.SourceType／@factor.Geography／@factor.SourceReference</span>
-                                    <span>原始文件：@factor.OriginalDocumentName／<code>@factor.OriginalDocumentSha256</code></span>
-                                    @if (factor.PublicationStatus == FactorPublicationStatus.Draft.ToString())
-                                    {
-                                        <form class="d-inline" method="post" asp-page-handler="ReviewFactor" asp-route-section="lifecycle" asp-route-projectVersionId="@Model.ProjectVersionId">
-                                            <input type="hidden" name="factorVersionId" value="@factor.Id" />
-                                            <button class="btn btn-sm btn-outline-primary" type="submit">核准審查</button>
-                                        </form>
-                                        <form class="d-inline" method="post" asp-page-handler="PublishFactor" asp-route-section="lifecycle" asp-route-projectVersionId="@Model.ProjectVersionId">
-                                            <input type="hidden" name="factorVersionId" value="@factor.Id" />
-                                            <button class="btn btn-sm btn-success" type="submit">發布</button>
-                                        </form>
-                                    }
-                                </li>
-                            }
-                        </ul>
-                    </details>
-                    <nav class="lifecycle-section-nav" aria-label="五階段資料區塊">
+                    <nav class="lifecycle-section-nav" aria-label="五階段分頁">
                         @foreach (var stageSection in lifecycleSections)
                         {
-                            <a href="#@stageSection.Slug"><span>@stageSection.Number</span>@stageSection.Title</a>
+                            <a asp-page="/Workspace"
+                               asp-route-section="lifecycle"
+                               asp-route-stage="@stageSection.Slug"
+                               asp-route-projectVersionId="@Model.ProjectVersionId"
+                               aria-current="@(Model.Stage == stageSection.Slug ? "page" : null)">
+                                <span>@stageSection.Number</span>@stageSection.Title
+                            </a>
                         }
                     </nav>
 
                     <div class="lifecycle-input-list">
-                        @foreach (var stageSection in lifecycleSections)
+                        @foreach (var stageSection in activeLifecycleSections)
                         {
                             var stageActivities = Model.Activities.Where(item => item.InventoryProjectVersionId == Model.ProjectVersionId && item.LifecycleStage == (int)stageSection.Stage).ToArray();
                             var stageHasMissingFactor = stageActivities.Any(activity => !factorsById.ContainsKey(activity.FactorVersionId));
@@ -568,11 +539,11 @@ else
                                     <strong>@stageActivities.Length 筆／@(stageEmissions.HasValue ? $"{stageEmissions.Value} kgCO2e" : "係數版本遺失")</strong>
                                 </header>
                                 <div class="lifecycle-formula-note">
-                                    <strong>舊版階段計算方式</strong>
+                                    <strong>階段計算方式</strong>
                                     <span>@stageSection.Formula</span>
-                                    <span>新版先依受控單位目錄換算，再逐筆執行「活動量 × 係數 × 分配比例」。</span>
+                                    <span>系統先依受控單位目錄換算，再逐筆執行「活動量 × 係數 × 分配比例」。</span>
                                 </div>
-                                <form method="post" asp-page-handler="AddActivity" asp-route-section="lifecycle" asp-route-projectVersionId="@Model.ProjectVersionId" data-emission-form>
+                                <form method="post" asp-page-handler="AddActivity" asp-route-section="lifecycle" asp-route-stage="@stageSection.Slug" asp-route-projectVersionId="@Model.ProjectVersionId" data-emission-form>
                                     <input type="hidden" name="lifecycleStage" value="@stageSection.Stage" />
                                     <input type="hidden" name="inventoryProjectVersionId" value="@Model.ProjectVersionId" />
                                     <div class="lifecycle-form-grid">
@@ -584,20 +555,7 @@ else
                                                     var formulaKind = ActivityAmountFormula.IsTransport(kind)
                                                         ? "transport"
                                                         : ActivityAmountFormula.IsUseScenario(kind) ? "use" : "direct";
-                                                    <option value="@kind" data-formula-kind="@formulaKind">@(kind switch
-                                                    {
-                                                        ActivityDataKind.Material => "原物料投入",
-                                                        ActivityDataKind.MaterialTransport => "原物料運輸",
-                                                        ActivityDataKind.Energy => "能資源使用",
-                                                        ActivityDataKind.ManufacturingWaste => "製造廢棄物",
-                                                        ActivityDataKind.OutsourcedTreatmentTransport => "委外處理運輸",
-                                                        ActivityDataKind.DistributionTransport => "配送銷售運輸",
-                                                        ActivityDataKind.UseEnergy => "使用能源",
-                                                        ActivityDataKind.UseConsumable => "使用耗材",
-                                                        ActivityDataKind.EndOfLifeTreatment => "廢棄處理",
-                                                        ActivityDataKind.EndOfLifeTransport => "廢棄處理運輸",
-                                                        _ => kind.ToString()
-                                                    })</option>
+                                                    <option value="@kind" data-formula-kind="@formulaKind">@ActivityKindName(kind)</option>
                                                 }
                                             </select>
                                         </div>
@@ -755,11 +713,21 @@ else
                                         </div>
                                         <div class="lifecycle-field lifecycle-field--wide">
                                             <label class="form-label" for="factor-@stageSection.Slug">排放係數版本</label>
-                                            <select class="form-select" id="factor-@stageSection.Slug" name="factorVersionId" required disabled="@(!hasSelectableFactors)" aria-describedby="factor-@stageSection.Slug-help">
+                                            <input class="form-control mb-2"
+                                                   id="factor-search-@stageSection.Slug"
+                                                   type="search"
+                                                   placeholder="先輸入係數名稱、單位或來源查詢"
+                                                   data-factor-filter />
+                                            <select class="form-select" id="factor-@stageSection.Slug" name="factorVersionId" required disabled="@(!hasSelectableFactors)" aria-describedby="factor-@stageSection.Slug-help" data-factor-select>
                                                 <option value="">@(hasSelectableFactors ? "請選擇已發布排放係數" : "尚無已發布排放係數")</option>
                                                 @foreach (var factor in Model.SelectableFactors)
                                                 {
-                                                    <option value="@factor.Id" data-factor-value="@factor.Value" data-factor-unit="@factor.DenominatorUnitCode">@factor.Name：@factor.Value kgCO2e／@factor.DenominatorUnitCode（@factor.SourceDatasetVersion）</option>
+                                                    <option value="@factor.Id"
+                                                            data-factor-value="@factor.Value"
+                                                            data-factor-unit="@factor.DenominatorUnitCode"
+                                                            data-factor-search="@factor.Name @factor.DenominatorUnitCode @factor.SourceName @factor.SourceDatasetVersion">
+                                                        @factor.Name：@factor.Value kgCO2e／@factor.DenominatorUnitCode（@factor.SourceDatasetVersion）
+                                                    </option>
                                                 }
                                             </select>
                                             <p class="workspace-select-help" id="factor-@stageSection.Slug-help">
@@ -816,7 +784,7 @@ else
                                                 factorsById.TryGetValue(activity.FactorVersionId, out var activityFactor);
                                                 <li>
                                                     <strong>@activity.Name</strong>
-                                                    <span>@activity.ActivityKind／@activity.CanonicalValue @activity.CanonicalUnitCode／分配 @activity.AllocationFactor</span>
+                                                    <span>@ActivityKindName(Enum.Parse<ActivityDataKind>(activity.ActivityKind))／@activity.CanonicalValue @activity.CanonicalUnitCode／分配 @activity.AllocationFactor</span>
                                                     @if (activityFactor is not null)
                                                     {
                                                         var emissions = ActivityEmissionFormula.Calculate(activity.CanonicalValue, activityFactor.Value, activity.AllocationFactor);
@@ -829,7 +797,7 @@ else
                                                     }
                                                     @if (evidence is null)
                                                     {
-                                                        <form method="post" enctype="multipart/form-data" asp-page-handler="UploadEvidence" asp-route-section="lifecycle" asp-route-projectVersionId="@Model.ProjectVersionId">
+                                                        <form method="post" enctype="multipart/form-data" asp-page-handler="UploadEvidence" asp-route-section="lifecycle" asp-route-stage="@stageSection.Slug" asp-route-projectVersionId="@Model.ProjectVersionId">
                                                             <input type="hidden" name="activityDataId" value="@activity.Id" />
                                                             <label class="form-label" for="evidence-@activity.Id">佐證檔案</label>
                                                             <input class="form-control" type="file" id="evidence-@activity.Id" name="evidenceFile" required />
@@ -838,7 +806,7 @@ else
                                                     }
                                                     else
                                                     {
-                                                        <span>佐證：@evidence.OriginalFileName／@evidence.ScanStatus／<code>@evidence.Sha256</code></span>
+                                                        <span>佐證：@evidence.OriginalFileName／@ScanStatusName(evidence.ScanStatus)／<code>@evidence.Sha256</code></span>
                                                     }
                                                 </li>
                                             }
@@ -864,10 +832,10 @@ else
     <section class="card my-4 workspace-card workspace-calculation" id="calculation">
         <div class="card-body">
             <div class="workspace-card-heading">
-                <span class="workspace-step">06</span>
+                <span class="workspace-step">07</span>
                 <div>
-                    <h2 class="h4">凍結盤查輸入並建立計算 Run</h2>
-                    <p>五個階段各至少需要一筆活動數據，且 canonical 單位須符合所選係數分母。</p>
+                    <h2 class="h4">凍結盤查輸入並建立計算版本</h2>
+                    <p>五個階段各至少需要一筆活動數據，且標準單位須符合所選係數分母。</p>
                 </div>
             </div>
             @if (Model.InventoryProjects.Count > 0)
@@ -887,6 +855,11 @@ else
                 <input type="hidden" name="inventoryProjectVersionId" value="@Model.ProjectVersionId" />
                 <button class="btn btn-success mt-3" type="submit">凍結輸入並計算</button>
             </form>
+            <a class="btn btn-outline-success mt-3"
+               asp-page="/Workspace"
+               asp-page-handler="ExportExcel"
+               asp-route-section="calculation"
+               asp-route-projectVersionId="@Model.ProjectVersionId">匯出 Excel</a>
             }
             else
             {
@@ -908,10 +881,10 @@ else
                     </div>
                 </div>
                 <dl class="row">
-                    <dt class="col-sm-3">Run ID</dt><dd class="col-sm-9"><code>@run.Id</code></dd>
-                    <dt class="col-sm-3">Input SHA-256</dt><dd class="col-sm-9"><code>@run.InputSha256</code></dd>
+                    <dt class="col-sm-3">計算版本 ID</dt><dd class="col-sm-9"><code>@run.Id</code></dd>
+                    <dt class="col-sm-3">輸入資料 SHA-256</dt><dd class="col-sm-9"><code>@run.InputSha256</code></dd>
                     <dt class="col-sm-3">產品總量</dt><dd class="col-sm-9">@run.ProductTotal kgCO2e</dd>
-                    <dt class="col-sm-3">Engine／Rules／Units</dt><dd class="col-sm-9">@run.EngineBuild / @run.RuleSetVersion / @run.UnitCatalogueVersion</dd>
+                    <dt class="col-sm-3">引擎／規則／單位版本</dt><dd class="col-sm-9">@run.EngineBuild / @run.RuleSetVersion / @run.UnitCatalogueVersion</dd>
                     <dt class="col-sm-3">快照完整性</dt>
                     <dd class="col-sm-9">@(Model.LatestManifestHashValid == true ? "SHA-256 驗證通過" : "SHA-256 驗證失敗")</dd>
                 </dl>
@@ -921,18 +894,18 @@ else
                     <ul>
                         @foreach (var warning in Model.LatestWarnings)
                         {
-                            <li><code>@warning.Code</code>：@warning.Message</li>
+                            <li>@warning.Message</li>
                         }
                     </ul>
                 }
                 @if (Model.LatestDifference is { } difference)
                 {
-                    <h3 class="h5">與前次 Run 比較</h3>
+                    <h3 class="h5">與前次計算版本比較</h3>
                     <p>產品總量差異：@difference.ProductDelta kgCO2e</p>
                     <ul>
                         @foreach (var stage in difference.Stages)
                         {
-                            <li>@stage.Stage：@stage.Baseline → @stage.Candidate（差異 @stage.Delta）</li>
+                            <li>@StageName(stage.Stage)：@stage.Baseline → @stage.Candidate（差異 @stage.Delta）</li>
                         }
                     </ul>
                 }
@@ -943,10 +916,10 @@ else
                         @foreach (var line in Model.LatestLines)
                         {
                             <tr>
-                                <td>@((LifecycleStage)line.LifecycleStage)</td>
+                                <td>@StageName((LifecycleStage)line.LifecycleStage)</td>
                                 <td>@line.CanonicalActivityValue @line.ActivityUnitCode</td>
                                 <td>@line.FactorValue @line.FactorUnit</td>
-                                <td><code>@line.ActivityAmountFormulaId</code><br /><code>@line.FormulaId</code></td>
+                                <td>@FormulaName(line.ActivityAmountFormulaId)<br />@FormulaName(line.FormulaId)</td>
                                 <td>@line.Emissions @line.EmissionsUnitCode</td>
                             </tr>
                         }
@@ -963,7 +936,7 @@ else
                 <span class="workspace-step workspace-step--submit">提交</span>
                 <div>
                     <h2 class="h4">統一提交整份盤查</h2>
-                    <p>各區塊可反覆獨立儲存；確認五階段資料與不可變計算 Run 完成後，再一次提交送審。</p>
+                    <p>各分頁可反覆獨立儲存；確認五階段資料與不可變計算版本完成後，再一次提交送審。</p>
                 </div>
             </div>
             <ul class="workspace-records">
@@ -987,7 +960,7 @@ else
                         <li class="workspace-submit-item">
                             <div>
                                 <strong>@inventory.FunctionalUnit／@inventory.PeriodStart～@inventory.PeriodEnd</strong>
-                                <span>已保存 @savedStageCount／5 階段｜計算 Run：@(hasCurrentRun ? "目前有效" : hasPendingFormulaRun ? "公式待審，僅候選結果" : hasRun ? "資料已變更，請重算" : "尚未建立")｜狀態：@workflowStatus</span>
+                                <span>已保存 @savedStageCount／5 階段｜計算版本：@(hasCurrentRun ? "目前有效" : hasPendingFormulaRun ? "公式尚待確認，暫不可提交" : hasRun ? "資料已變更，請重算" : "尚未建立")｜狀態：@WorkflowStatusName(workflowStatus)</span>
                             </div>
                             @if (InventoryWorkflow.AllowsEditing(workflowStatus))
                             {
@@ -998,7 +971,7 @@ else
                             }
                             else
                             {
-                                <span class="workspace-status-badge">@workflowStatus</span>
+                                <span class="workspace-status-badge">@WorkflowStatusName(workflowStatus)</span>
                             }
                         </li>
                     }

@@ -5,18 +5,18 @@
 }
 
 <h1>稽核匯出</h1>
-<p>所有匯出都以不可變 CalculationRun 為基準，並寫入 audit event。</p>
+<p>所有匯出都以不可變計算版本為基準，並寫入稽核事件。</p>
 
 @if (Model.Runs.Count == 0)
 {
-    <p>目前沒有可匯出的 CalculationRun。</p>
+    <p>目前沒有可匯出的計算版本。</p>
 }
 else
 {
     <div class="table-responsive">
         <table class="table">
             <thead>
-                <tr><th>Run</th><th>建立時間</th><th>總量</th><th>Input SHA-256</th><th>匯出</th></tr>
+                <tr><th>計算版本</th><th>建立時間</th><th>總量</th><th>輸入資料 SHA-256</th><th>匯出</th></tr>
             </thead>
             <tbody>
                 @foreach (var run in Model.Runs)
@@ -33,13 +33,13 @@ else
                             </form>
                             <form class="d-inline" method="post" asp-page-handler="EvidenceIndexCsv">
                                 <input type="hidden" name="runId" value="@run.Id" />
-                                <button class="btn btn-sm btn-outline-primary" type="submit">Evidence 索引 CSV</button>
+                                <button class="btn btn-sm btn-outline-primary" type="submit">佐證索引 CSV</button>
                             </form>
                             <form class="d-inline" method="post" asp-page-handler="Manifest">
                                 <input type="hidden" name="runId" value="@run.Id" />
-                                <button class="btn btn-sm btn-outline-secondary" type="submit">Canonical manifest</button>
+                                <button class="btn btn-sm btn-outline-secondary" type="submit">標準輸入清單</button>
                             </form>
-                            <a class="btn btn-sm btn-outline-dark" asp-page="/ArchiveReport" asp-route-runId="@run.Id">可歸檔 HTML</a>
+                            <a class="btn btn-sm btn-outline-dark" asp-page="/ArchiveReport" asp-route-runId="@run.Id">可歸檔網頁報告</a>
                         </td>
                     </tr>
                 }

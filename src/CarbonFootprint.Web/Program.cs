@@ -5,6 +5,7 @@ using CarbonFootprint.Infrastructure;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Web.Security;
+using CarbonFootprint.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -20,6 +21,10 @@ builder.Services.AddScoped<IOrganizationScope, HttpOrganizationScope>();
 builder.Services.AddCarbonFootprintInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<CalculationEngine>();
 builder.Services.AddScoped<CalculateInventoryHandler>();
+builder.Services.Configure<MoenvFactorSourceOptions>(
+    builder.Configuration.GetSection(MoenvFactorSourceOptions.SectionName));
+builder.Services.AddHttpClient<MoenvFactorClient>(client =>
+    client.Timeout = TimeSpan.FromSeconds(60));
 builder.Services.AddScoped<IAuthorizationHandler, OrganizationPermissionHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, MfaEnabledHandler>();
 builder.Services.AddRazorPages();
