@@ -59,6 +59,11 @@ public static class CanonicalManifest
                 writer.WriteString("name", activity.Name);
                 writer.WriteString("kind", activity.Kind.ToString());
                 writer.WriteString("supplierOrScenario", activity.SupplierOrScenario);
+                writer.WriteString("equipmentCategory", activity.EquipmentCategory);
+                writer.WriteString("dataSourceType", activity.DataSourceType);
+                writer.WriteString("dataProvider", activity.DataProvider);
+                writer.WriteString("collectionMethod", activity.CollectionMethod);
+                writer.WriteString("sourceReference", activity.SourceReference);
                 writer.WriteNumber("rawValue", activity.RawValue);
                 writer.WriteString("rawUnitCode", activity.RawUnitCode);
                 writer.WriteNumber("canonicalValue", activity.CanonicalValue);

@@ -3,6 +3,7 @@ using System;
 using CarbonFootprint.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CarbonFootprint.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(CarbonFootprintDbContext))]
-    partial class CarbonFootprintDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260719104422_AddFactorSourceDocumentIntegrity")]
+    partial class AddFactorSourceDocumentIntegrity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -144,41 +147,17 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(30,12)")
                         .HasColumnName("canonical_value");
 
-                    b.Property<string>("CollectionMethod")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
-                        .HasColumnName("collection_method");
-
                     b.Property<string>("ConversionRuleVersion")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("conversion_rule_version");
 
-                    b.Property<string>("DataProvider")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)")
-                        .HasColumnName("data_provider");
-
                     b.Property<string>("DataQuality")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("data_quality");
-
-                    b.Property<string>("DataSourceType")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("data_source_type");
-
-                    b.Property<string>("EquipmentCategory")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("equipment_category");
 
                     b.Property<string>("EstimationReason")
                         .IsRequired()
@@ -240,12 +219,6 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasPrecision(30, 12)
                         .HasColumnType("numeric(30,12)")
                         .HasColumnName("raw_value");
-
-                    b.Property<string>("SourceReference")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("source_reference");
 
                     b.Property<string>("SupplierOrScenario")
                         .IsRequired()
