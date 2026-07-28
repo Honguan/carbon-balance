@@ -166,6 +166,12 @@ docker compose logs migrate --tail=200
 
 使用完整網址：`http://127.0.0.1:8088`，不要使用 `https://`。
 
+### 設定組織 SMTP
+
+登入後開啟工作區的「郵件服務設定」分頁，輸入 SMTP 主機、連接埠、TLS、帳號及寄件人資訊，再寄送測試信驗證。每個組織可使用不同 SMTP；密碼以 ASP.NET Core Data Protection 加密保存，未設定組織值時才使用環境設定的 `Mail` 區段。
+
+工作區各分頁會以局部內容切換，瀏覽器停用 JavaScript 時仍會退回一般完整導覽。
+
 ## 技術架構
 
 - .NET 10 / ASP.NET Core Razor Pages

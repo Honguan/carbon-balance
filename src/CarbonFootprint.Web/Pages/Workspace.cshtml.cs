@@ -13,6 +13,7 @@ using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Web.Security;
 using CarbonFootprint.Web.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -38,6 +39,7 @@ public sealed class WorkspaceModel : PageModel
     private readonly IAuthorizationService _authorizationService;
     private readonly EvidenceStorageService _evidenceStorageService;
     private readonly MoenvFactorSynchronizationService _moenvFactorSynchronizationService;
+    private readonly IDataProtector _mailPasswordProtector;
 
     public WorkspaceModel(
         CarbonFootprintDbContext dbContext,
@@ -50,7 +52,8 @@ public sealed class WorkspaceModel : PageModel
         CalculateInventoryHandler calculateHandler,
         IAuthorizationService authorizationService,
         EvidenceStorageService evidenceStorageService,
-        MoenvFactorSynchronizationService moenvFactorSynchronizationService)
+        MoenvFactorSynchronizationService moenvFactorSynchronizationService,
+        IDataProtectionProvider dataProtectionProvider)
     {
         _dbContext = dbContext;
         _organizationScope = organizationScope;
@@ -63,6 +66,7 @@ public sealed class WorkspaceModel : PageModel
         _authorizationService = authorizationService;
         _evidenceStorageService = evidenceStorageService;
         _moenvFactorSynchronizationService = moenvFactorSynchronizationService;
+        _mailPasswordProtector = dataProtectionProvider.CreateProtector("CarbonFootprint.OrganizationMailSettings.v1");
     }
 
     public Guid? OrganizationId => _organizationScope.OrganizationId;
@@ -70,6 +74,24 @@ public sealed class WorkspaceModel : PageModel
     public IReadOnlyList<ProductVersionRecord> ProductVersions { get; private set; } = [];
 
     public IReadOnlyList<FacilityRecord> Facilities { get; private set; } = [];
+
+    public OrganizationMailSettingsRecord? MailSettings { get; private set; }
+
+    public string MailHost => MailSettings?.Host ?? "localhost";
+
+    public int MailPort => MailSettings?.Port ?? 1025;
+
+    public bool MailEnableSsl => MailSettings?.EnableSsl ?? false;
+
+    public string MailUsername => MailSettings?.Username ?? string.Empty;
+
+    public string MailFromAddress => MailSettings?.FromAddress ?? "no-reply@carbon-footprint.local";
+
+    public string MailFromName => MailSettings?.FromName ?? "碳足跡系統";
+
+    public bool MailPasswordConfigured => !string.IsNullOrWhiteSpace(MailSettings?.EncryptedPassword);
+
+    public bool CanManageOrganization { get; private set; }
 
     public IReadOnlyList<OrganizationMembershipRecord> Memberships { get; private set; } = [];
 
@@ -137,6 +159,10 @@ public sealed class WorkspaceModel : PageModel
 
             Stage = normalizedStage;
         }
+        else if (Section == "settings")
+        {
+            Stage = "mail";
+        }
         else
         {
             Stage = null;
@@ -163,6 +189,117 @@ public sealed class WorkspaceModel : PageModel
             await LoadAsync(cancellationToken);
             return Page();
         }
+    }
+
+    public async Task<IActionResult> OnPostSaveMailSettingsAsync(
+        string host,
+        int port,
+        bool enableSsl,
+        string? username,
+        string? password,
+        string fromAddress,
+        string fromName,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization))
+        {
+            return Forbid();
+        }
+        var normalizedFromAddress = fromAddress?.Trim() ?? string.Empty;
+        var validFromAddress = false;
+        try
+        {
+            validFromAddress = new System.Net.Mail.MailAddress(normalizedFromAddress).Address.Equals(normalizedFromAddress, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (FormatException)
+        {
+            validFromAddress = false;
+        }
+        if (string.IsNullOrWhiteSpace(host)
+            || port is < 1 or > 65535
+            || !validFromAddress
+            || string.IsNullOrWhiteSpace(fromName))
+        {
+            ModelState.AddModelError("mail", "請填寫有效的 SMTP 主機、連接埠、寄件地址與寄件人名稱。");
+            Section = "settings";
+            Stage = "mail";
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var organizationId = RequireOrganization();
+        var settings = await _dbContext.OrganizationMailSettings.SingleOrDefaultAsync(cancellationToken);
+        var userId = Guid.TryParse(_userManager.GetUserId(User), out var parsedUserId) ? parsedUserId : (Guid?)null;
+        if (settings is null)
+        {
+            settings = new OrganizationMailSettingsRecord
+            {
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationId,
+                Host = host.Trim(),
+                Port = port,
+                EnableSsl = enableSsl,
+                Username = username?.Trim() ?? string.Empty,
+                EncryptedPassword = string.IsNullOrWhiteSpace(password) ? string.Empty : _mailPasswordProtector.Protect(password),
+                FromAddress = normalizedFromAddress,
+                FromName = fromName.Trim(),
+                UpdatedAt = DateTimeOffset.UtcNow,
+                UpdatedBy = userId
+            };
+            _dbContext.OrganizationMailSettings.Add(settings);
+        }
+        else
+        {
+            settings.Host = host.Trim();
+            settings.Port = port;
+            settings.EnableSsl = enableSsl;
+            settings.Username = username?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(password))
+            {
+                settings.EncryptedPassword = _mailPasswordProtector.Protect(password);
+            }
+            settings.FromAddress = normalizedFromAddress;
+            settings.FromName = fromName.Trim();
+            settings.UpdatedAt = DateTimeOffset.UtcNow;
+            settings.UpdatedBy = userId;
+        }
+
+        AddAudit("organization.mail_settings.updated", "OrganizationMailSettings", settings.Id);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        StatusMessage = "SMTP 設定已儲存。密碼以資料保護機制加密保存。";
+        return RedirectToPage(new { section = "settings", stage = "mail" });
+    }
+
+    public async Task<IActionResult> OnPostTestMailAsync(string recipient, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization))
+        {
+            return Forbid();
+        }
+        if (string.IsNullOrWhiteSpace(recipient))
+        {
+            ModelState.AddModelError("recipient", "請輸入測試收件地址。");
+            Section = "settings";
+            Stage = "mail";
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        try
+        {
+            await _emailSender.SendTestMessageAsync(recipient.Trim());
+            StatusMessage = "測試信已送出，請確認收件匣或 SMTP 服務紀錄。";
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.Net.Mail.SmtpException or ArgumentException or System.Security.Cryptography.CryptographicException)
+        {
+            ModelState.AddModelError("mail", $"SMTP 測試失敗：{exception.Message}");
+            Section = "settings";
+            Stage = "mail";
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        return RedirectToPage(new { section = "settings", stage = "mail" });
     }
 
     public async Task<IActionResult> OnPostCreateFacilityAsync(
@@ -1668,6 +1805,8 @@ public sealed class WorkspaceModel : PageModel
             return;
         }
 
+        CanManageOrganization = await IsAllowedAsync(OrganizationPermission.ManageOrganization);
+
         ProductVersions = await _dbContext.ProductVersions.AsNoTracking().OrderBy(item => item.NameZhTw).ToArrayAsync(cancellationToken);
         Facilities = await _dbContext.Facilities.AsNoTracking().OrderBy(item => item.Code).ToArrayAsync(cancellationToken);
         Memberships = await _dbContext.OrganizationMemberships.AsNoTracking().OrderBy(item => item.CreatedAt).ToArrayAsync(cancellationToken);
@@ -1695,6 +1834,7 @@ public sealed class WorkspaceModel : PageModel
             .OrderBy(item => item.Code)
             .ToArrayAsync(cancellationToken);
         EvidenceFiles = await _dbContext.EvidenceFiles.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
+        MailSettings = await _dbContext.OrganizationMailSettings.AsNoTracking().SingleOrDefaultAsync(cancellationToken);
         Runs = await _dbContext.CalculationRuns.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         PendingFormulaRunProjectIds = Runs
             .Where(item => string.Equals(item.RuleSetVersion, PendingStageFormulaRuleSetVersion, StringComparison.Ordinal))
@@ -1773,12 +1913,12 @@ public sealed class WorkspaceModel : PageModel
 
     private static string LifecycleStageDisplayName(LifecycleStage stage) => stage switch
     {
-        LifecycleStage.RawMaterial => "原料取得",
-        LifecycleStage.Manufacturing => "製造",
-        LifecycleStage.Distribution => "配送銷售",
-        LifecycleStage.Use => "使用",
-        LifecycleStage.EndOfLife => "廢棄處理",
-        _ => "其他階段"
+        LifecycleStage.RawMaterial => "原料取得階段",
+        LifecycleStage.Manufacturing => "製造階段",
+        LifecycleStage.Distribution => "配送與銷售階段",
+        LifecycleStage.Use => "使用階段",
+        LifecycleStage.EndOfLife => "廢棄處理階段",
+        _ => "未定義階段"
     };
 
     private static string ActivityKindDisplayName(ActivityDataKind kind) => kind switch
@@ -1863,6 +2003,7 @@ public sealed class WorkspaceModel : PageModel
         "factors" => "factors",
         "lifecycle" => "lifecycle",
         "calculation" => "calculation",
+        "settings" => "settings",
         _ => "governance"
     };
 

@@ -1,0 +1,67 @@
+@model CarbonFootprint.Web.Pages.WorkspaceModel
+
+<section class="card workspace-card" id="mail-settings">
+    <div class="card-body">
+        <div class="workspace-card-heading">
+            <span class="workspace-step">設定</span>
+            <div>
+                <h2 class="h4">SMTP 郵件服務</h2>
+                <p>設定本組織寄送邀請、Email 確認與密碼重設信件的 SMTP 服務。密碼不會回填或顯示。</p>
+            </div>
+        </div>
+
+        <div asp-validation-summary="All" class="text-danger" role="alert"></div>
+
+        @if (!Model.CanManageOrganization)
+        {
+            <p class="alert alert-info">只有組織擁有者或管理員可以修改 SMTP 設定。</p>
+        }
+        else
+        {
+            <form method="post" asp-page-handler="SaveMailSettings" asp-route-section="settings" asp-route-stage="mail" class="workspace-subpanel">
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label" for="mailHost">SMTP 主機</label>
+                        <input class="form-control" id="mailHost" name="host" value="@Model.MailHost" required maxlength="300" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="mailPort">連接埠</label>
+                        <input class="form-control" id="mailPort" name="port" type="number" min="1" max="65535" value="@Model.MailPort" required />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="mailUsername">帳號（選填）</label>
+                        <input class="form-control" id="mailUsername" name="username" value="@Model.MailUsername" maxlength="320" autocomplete="username" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="mailPassword">密碼（留白代表維持原密碼）</label>
+                        <input class="form-control" id="mailPassword" name="password" type="password" maxlength="1000" autocomplete="new-password" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="mailFromAddress">寄件地址</label>
+                        <input class="form-control" id="mailFromAddress" name="fromAddress" type="email" value="@Model.MailFromAddress" required maxlength="320" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="mailFromName">寄件人名稱</label>
+                        <input class="form-control" id="mailFromName" name="fromName" value="@Model.MailFromName" required maxlength="200" />
+                    </div>
+                    <div class="col-12 form-check ms-2">
+                        <input class="form-check-input" id="mailEnableSsl" name="enableSsl" type="checkbox" value="true" @(Model.MailEnableSsl ? "checked" : null) />
+                        <label class="form-check-label" for="mailEnableSsl">使用 TLS／SSL</label>
+                    </div>
+                </div>
+                <button class="btn btn-primary mt-3" type="submit">儲存 SMTP 設定</button>
+                @if (Model.MailPasswordConfigured)
+                {
+                    <span class="text-success ms-2">密碼已加密保存</span>
+                }
+            </form>
+
+            <form method="post" asp-page-handler="TestMail" asp-route-section="settings" asp-route-stage="mail" class="workspace-subpanel mt-3">
+                <h3 class="h6">寄送測試信</h3>
+                <label class="form-label" for="mailTestRecipient">測試收件地址</label>
+                <input class="form-control" id="mailTestRecipient" name="recipient" type="email" required maxlength="320" />
+                <button class="btn btn-outline-primary mt-2" type="submit">寄送測試信</button>
+            </form>
+        }
+    </div>
+</section>

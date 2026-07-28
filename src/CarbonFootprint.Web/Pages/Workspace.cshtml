@@ -29,14 +29,14 @@
         InventoryWorkflowStatus.Approved => "已核准",
         _ => "其他狀態"
     };
-    string StageName(LifecycleStage stage) => stage switch
+    string FormalStageName(LifecycleStage stage) => stage switch
     {
-        LifecycleStage.RawMaterial => "原料取得",
-        LifecycleStage.Manufacturing => "製造",
-        LifecycleStage.Distribution => "配送銷售",
-        LifecycleStage.Use => "使用",
-        LifecycleStage.EndOfLife => "廢棄處理",
-        _ => "其他階段"
+        LifecycleStage.RawMaterial => "原料取得階段",
+        LifecycleStage.Manufacturing => "製造階段",
+        LifecycleStage.Distribution => "配送與銷售階段",
+        LifecycleStage.Use => "使用階段",
+        LifecycleStage.EndOfLife => "廢棄處理階段",
+        _ => "未定義階段"
     };
     string ActivityKindName(ActivityDataKind kind) => kind switch
     {
@@ -130,17 +130,26 @@ else
     </div>
 
     <nav class="workspace-stage-nav" aria-label="盤查作業分頁">
-        <a asp-page="/Workspace" asp-route-section="governance" aria-current="@(Model.Section == "governance" ? "page" : null)"><span>01</span>組織與廠場</a>
+        <a data-workspace-nav asp-page="/Workspace" asp-route-section="governance" aria-current="@(Model.Section == "governance" ? "page" : null)"><span>01</span>組織與廠場</a>
         <div class="workspace-stage-group" aria-current="@(isSetupSection ? "page" : null)">
-            <a asp-page="/Workspace" asp-route-section="product" aria-current="@(Model.Section == "product" ? "page" : null)"><span>02</span>產品基本資料</a>
-            <a asp-page="/Workspace" asp-route-section="pcr" aria-current="@(Model.Section == "pcr" ? "page" : null)"><span>03</span>PCR 規範</a>
-            <a asp-page="/Workspace" asp-route-section="inventory" aria-current="@(Model.Section == "inventory" ? "page" : null)"><span>04</span>盤查範圍</a>
+            <a data-workspace-nav asp-page="/Workspace" asp-route-section="product" aria-current="@(Model.Section == "product" ? "page" : null)"><span>02</span>產品基本資料</a>
+            <a data-workspace-nav asp-page="/Workspace" asp-route-section="pcr" aria-current="@(Model.Section == "pcr" ? "page" : null)"><span>03</span>PCR 規範</a>
+            <a data-workspace-nav asp-page="/Workspace" asp-route-section="inventory" aria-current="@(Model.Section == "inventory" ? "page" : null)"><span>04</span>盤查範圍</a>
         </div>
-        <a asp-page="/Workspace" asp-route-section="factors" aria-current="@(Model.Section == "factors" ? "page" : null)"><span>05</span>係數資料庫</a>
-        <a asp-page="/Workspace" asp-route-section="lifecycle" asp-route-stage="raw-material" aria-current="@(Model.Section == "lifecycle" ? "page" : null)"><span>06</span>五階段活動數據</a>
-        <a asp-page="/Workspace" asp-route-section="calculation" aria-current="@(Model.Section == "calculation" ? "page" : null)"><span>07</span>計算與結果</a>
+        <a data-workspace-nav asp-page="/Workspace" asp-route-section="factors" aria-current="@(Model.Section == "factors" ? "page" : null)"><span>05</span>係數資料庫</a>
+        <a data-workspace-nav asp-page="/Workspace" asp-route-section="lifecycle" asp-route-stage="raw-material" aria-current="@(Model.Section == "lifecycle" ? "page" : null)"><span>06</span>五階段活動數據</a>
+        <a data-workspace-nav asp-page="/Workspace" asp-route-section="calculation" aria-current="@(Model.Section == "calculation" ? "page" : null)"><span>07</span>計算與結果</a>
     </nav>
 
+    <div class="workspace-settings-link">
+        <a data-workspace-nav asp-page="/Workspace" asp-route-section="settings" asp-route-stage="mail">郵件服務設定</a>
+    </div>
+
+    <div id="workspace-content" data-workspace-content>
+    @if (Model.Section == "settings" && Model.Stage == "mail")
+    {
+        <partial name="_MailSettings" model="Model" />
+    }
     @if (Model.Section == "governance")
     {
     <section class="card mb-4 workspace-card" id="governance">
@@ -442,7 +451,7 @@ else
                                     {
                                         <form class="mt-1 border rounded p-2" method="post" asp-page-handler="SetStageApplicability">
                                             <input type="hidden" name="stageDeclarationId" value="@declaration.Id" />
-                                            <label class="form-check-label" for="stage-applicable-@declaration.Id">@StageName((LifecycleStage)declaration.LifecycleStage)適用</label>
+                                            <label class="form-check-label" for="stage-applicable-@declaration.Id">@FormalStageName((LifecycleStage)declaration.LifecycleStage)適用</label>
                                             <input class="form-check-input" id="stage-applicable-@declaration.Id" name="isApplicable" type="checkbox" value="true" checked="@declaration.IsApplicable" />
                                             <label class="form-label" for="stage-reason-@declaration.Id">不適用原因</label>
                                             <input class="form-control" id="stage-reason-@declaration.Id" name="reason" value="@declaration.Reason" maxlength="2000" />
@@ -508,12 +517,12 @@ else
                     <nav class="lifecycle-section-nav" aria-label="五階段分頁">
                         @foreach (var stageSection in lifecycleSections)
                         {
-                            <a asp-page="/Workspace"
+                            <a data-workspace-nav asp-page="/Workspace"
                                asp-route-section="lifecycle"
                                asp-route-stage="@stageSection.Slug"
                                asp-route-projectVersionId="@Model.ProjectVersionId"
                                aria-current="@(Model.Stage == stageSection.Slug ? "page" : null)">
-                                <span>@stageSection.Number</span>@stageSection.Title
+                                <span>@stageSection.Number</span>@FormalStageName(stageSection.Stage)
                             </a>
                         }
                     </nav>
@@ -533,7 +542,7 @@ else
                                 <header>
                                     <span>@stageSection.Number</span>
                                     <div>
-                                        <h3>@stageSection.Title</h3>
+                                        <h3>@FormalStageName(stageSection.Stage)</h3>
                                         <p>@stageSection.Summary</p>
                                     </div>
                                     <strong>@stageActivities.Length 筆／@(stageEmissions.HasValue ? $"{stageEmissions.Value} kgCO2e" : "係數版本遺失")</strong>
@@ -766,11 +775,11 @@ else
                                             <output data-emission-preview>輸入活動量並選擇係數後顯示計算式。</output>
                                         </div>
                                     </div>
-                                    <button class="btn btn-primary mt-3" type="submit" disabled="@(!hasSelectableFactors)">儲存「@stageSection.Title」活動</button>
+                                    <button class="btn btn-primary mt-3" type="submit" disabled="@(!hasSelectableFactors)">儲存「@FormalStageName(stageSection.Stage)」活動</button>
                                 </form>
 
                                 <div class="lifecycle-saved-data">
-                                    <h4>已儲存的@stageSection.Title資料</h4>
+                                    <h4>已儲存的@FormalStageName(stageSection.Stage)資料</h4>
                                     @if (stageActivities.Length == 0)
                                     {
                                         <p class="workspace-empty">尚未儲存此階段活動。</p>
@@ -905,7 +914,7 @@ else
                     <ul>
                         @foreach (var stage in difference.Stages)
                         {
-                            <li>@StageName(stage.Stage)：@stage.Baseline → @stage.Candidate（差異 @stage.Delta）</li>
+                            <li>@FormalStageName(stage.Stage)：@stage.Baseline → @stage.Candidate（差異 @stage.Delta）</li>
                         }
                     </ul>
                 }
@@ -916,7 +925,7 @@ else
                         @foreach (var line in Model.LatestLines)
                         {
                             <tr>
-                                <td>@StageName((LifecycleStage)line.LifecycleStage)</td>
+                                <td>@FormalStageName((LifecycleStage)line.LifecycleStage)</td>
                                 <td>@line.CanonicalActivityValue @line.ActivityUnitCode</td>
                                 <td>@line.FactorValue @line.FactorUnit</td>
                                 <td>@FormulaName(line.ActivityAmountFormulaId)<br />@FormulaName(line.FormulaId)</td>
@@ -930,6 +939,8 @@ else
             </div>
         </section>
     }
+    @if (Model.Section is not "settings")
+    {
     <section class="card my-4 workspace-card workspace-final-submit" id="final-submit">
         <div class="card-body">
             <div class="workspace-card-heading">
@@ -980,6 +991,8 @@ else
         </div>
     </section>
     }
+    }
+    </div>
 }
 
 @section Scripts {

@@ -13,6 +13,21 @@ public sealed class OrganizationRecord : IOrganizationOwned
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+public sealed class OrganizationMailSettingsRecord : IOrganizationOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public required string Host { get; set; }
+    public int Port { get; set; }
+    public bool EnableSsl { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string EncryptedPassword { get; set; } = string.Empty;
+    public required string FromAddress { get; set; }
+    public required string FromName { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public Guid? UpdatedBy { get; set; }
+}
+
 public sealed class OrganizationMembershipRecord : IOrganizationOwned
 {
     public Guid Id { get; set; }

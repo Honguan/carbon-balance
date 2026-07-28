@@ -136,8 +136,12 @@
                     };
                     <li data-factor-list-item>
                         <strong>@factor.Name</strong>
-                        <span>@factor.Value kgCO2e／@factor.DenominatorUnitCode／@factor.SourceDatasetVersion／@publicationStatus</span>
-                        <span>來源：@factor.SourceName／@geography／@factor.SourceReference</span>
+                        <span>@factor.Value kgCO2e／@factor.DenominatorUnitCode／@publicationStatus</span>
+                        <details class="mt-1">
+                            <summary>來源與適用範圍</summary>
+                            <span>資料集版本：@factor.SourceDatasetVersion・來源：@factor.SourceName・地理範圍：@geography・來源參照：@factor.SourceReference</span>
+                            <span>適用範圍：@factor.Applicability</span>
+                        </details>
                         @if (factor.PublicationStatus == FactorPublicationStatus.Draft.ToString())
                         {
                             <form class="d-inline" method="post" asp-page="/Workspace" asp-page-handler="ReviewFactor" asp-route-section="factors">
