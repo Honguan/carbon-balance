@@ -7,8 +7,11 @@
 1. 確認映像 digest、SBOM、測試與 Critical/High 掃描均通過。
 2. 執行 `scripts/migration-preflight.ps1`，確認 EF 模型與遷移一致。
 3. 執行 `scripts/backup.ps1` 並將 SHA-256 記入變更單。
-4. 先執行單次 `migrate` 工作，成功後才更新 `web`。
-5. 驗證 `/health/live`、`/health/ready`、登入、Golden Case 與報表總額。
+4. 先執行單次 `migrate` 工作；migration 後會為既有組織同步一次環境部係數草稿，外部來源或寫入失敗時不得更新 `web`。
+5. 從 `migrate` 結構化日誌確認同步的組織、新增、未變更與略過筆數；全新空資料庫顯示零組織屬預期結果。
+6. 驗證 `/health/live`、`/health/ready`、登入、Golden Case、係數草稿與報表總額。
+
+若部署環境暫時無法連線公開來源，經變更核准後設定 `MOENV_IMPORT_ON_DEPLOYMENT=false` 完成部署，並建立待辦在連線恢復後由係數資料庫手動同步。停用自動同步不會刪除既有草稿；回滾應保留已產生的係數版本與稽核事件，不執行破壞性刪除。
 
 ## 回滾
 

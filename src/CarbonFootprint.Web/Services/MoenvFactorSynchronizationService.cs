@@ -1,6 +1,7 @@
 using CarbonFootprint.Domain.Modules.Factors;
 using CarbonFootprint.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace CarbonFootprint.Web.Services;
 
@@ -169,6 +170,26 @@ public sealed class MoenvFactorSynchronizationService
             createdCount++;
         }
 
+        dbContext.AuditEvents.Add(new AuditEventRecord
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = DateTimeOffset.UtcNow,
+            ActorId = actorId,
+            OrganizationId = organizationId,
+            Action = "factor.synchronization.completed",
+            ResourceType = "Organization",
+            ResourceId = organizationId,
+            BeforeHash = null,
+            AfterHash = null,
+            CorrelationId = correlationId,
+            MetadataJson = JsonSerializer.Serialize(new
+            {
+                SourceReference = MoenvFactorClient.DatasetReference,
+                CreatedCount = createdCount,
+                UnchangedCount = unchangedCount,
+                SkippedCount = download.SkippedCount
+            })
+        });
         await dbContext.SaveChangesAsync(cancellationToken);
         return new MoenvFactorSynchronizationResult(
             createdCount,

@@ -223,6 +223,19 @@ public sealed class PostgreSqlPersistenceTests
             item => item.Action == "factor.version.synced" && item.ResourceId == factor.Id);
         Assert.Null(audit.ActorId);
         Assert.Equal("deployment-test", audit.CorrelationId);
+        var synchronizationAudits = await verification.AuditEvents
+            .Where(item =>
+                item.Action == "factor.synchronization.completed"
+                && item.ResourceId == organizationId)
+            .OrderBy(item => item.Timestamp)
+            .ToArrayAsync();
+        Assert.Equal(2, synchronizationAudits.Length);
+        Assert.All(synchronizationAudits, item =>
+        {
+            Assert.Null(item.ActorId);
+            Assert.Equal("deployment-test", item.CorrelationId);
+            Assert.Contains(MoenvFactorClient.DatasetReference, item.MetadataJson, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
