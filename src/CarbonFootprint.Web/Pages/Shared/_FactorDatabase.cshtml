@@ -13,9 +13,9 @@
 
         <section class="workspace-subpanel mb-3">
             <h3 class="h6">同步環境部公開係數</h3>
-            <p>資料來源：環境部「碳足跡排放係數」資料集 CFP_P_02。重新整理頁面不會匯入資料；請按下方按鈕執行同步。同步只建立草稿，不會覆寫已發布版本或歷史計算。</p>
+            <p>資料來源：環境部「碳足跡排放係數」資料集 CFP_P_02。重新整理頁面不會匯入資料；請按下方按鈕執行同步。官方資料會直接寫入並發布，不需人工審查；既有版本與歷史計算不會被覆寫。</p>
             <form method="post" asp-page="/Workspace" asp-page-handler="SyncMoenvFactors" asp-route-section="factors">
-                <button class="btn btn-primary" type="submit">同步並匯入係數草稿</button>
+                <button class="btn btn-primary" type="submit">同步並導入可用係數</button>
             </form>
             <p class="workspace-select-help mt-2 mb-0">未設定自有金鑰時，系統會從政府資料開放平臺取得目前的官方 JSON 公開下載網址。</p>
         </section>
@@ -101,11 +101,6 @@
                         <input class="form-control" id="factorOriginalDocumentName" name="factorOriginalDocumentName" required />
                     </div>
                     <div class="lifecycle-field lifecycle-field--wide">
-                        <label class="form-label" for="factorOriginalDocumentSha256">原始文件 SHA-256</label>
-                        <input class="form-control" id="factorOriginalDocumentSha256" name="factorOriginalDocumentSha256" pattern="[0-9a-fA-F]{64}" autocomplete="off" required />
-                        <p class="workspace-select-help">請填原始下載或匯入檔案的 64 位 SHA-256。</p>
-                    </div>
-                    <div class="lifecycle-field lifecycle-field--wide">
                         <label class="form-label" for="factorApplicability">適用性</label>
                         <textarea class="form-control" id="factorApplicability" name="factorApplicability" required></textarea>
                     </div>
@@ -166,13 +161,6 @@
                                 <input class="form-control" id="new-source-reference-@factor.Id" name="newFactorSourceReference" value="@factor.SourceReference" required />
                                 <label class="form-label mt-2" for="new-document-name-@factor.Id">新原始文件名稱</label>
                                 <input class="form-control" id="new-document-name-@factor.Id" name="newOriginalDocumentName" required />
-                                <label class="form-label mt-2" for="new-document-sha-@factor.Id">新原始文件 SHA-256</label>
-                                <input class="form-control"
-                                       id="new-document-sha-@factor.Id"
-                                       name="newOriginalDocumentSha256"
-                                       pattern="[0-9a-fA-F]{64}"
-                                       autocomplete="off"
-                                       required />
                                 <label class="form-label mt-2" for="new-applicability-@factor.Id">新版本適用性</label>
                                 <textarea class="form-control" id="new-applicability-@factor.Id" name="newApplicability" required>@factor.Applicability</textarea>
                                 <button class="btn btn-sm btn-outline-primary mt-2" type="submit">建立更新草稿</button>

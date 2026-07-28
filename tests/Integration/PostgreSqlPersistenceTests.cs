@@ -181,6 +181,31 @@ public sealed class PostgreSqlPersistenceTests
                 Name = "部署係數匯入測試組織",
                 CreatedAt = DateTimeOffset.UtcNow
             });
+            context.EmissionFactorVersions.Add(new EmissionFactorVersionRecord
+            {
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationId,
+                FactorId = Guid.NewGuid(),
+                VersionNumber = 1,
+                Name = "測試天然氣",
+                Value = 2.5m,
+                NumeratorUnitCode = "kgCO2e",
+                DenominatorUnitCode = "kg",
+                Geography = "TW",
+                ValidFrom = new DateOnly(2026, 1, 1),
+                ValidTo = null,
+                PublicationStatus = FactorPublicationStatus.Draft.ToString(),
+                SourceDatasetVersion = "CFP_P_02-2026",
+                LicenseCode = "政府資料開放授權條款第1版",
+                SourceType = "government-database",
+                SourceName = "環境部",
+                SourceReference = MoenvFactorClient.DatasetReference,
+                DatasetName = "環境部碳足跡排放係數",
+                OriginalDocumentName = "CFP_P_02-record-draft.json",
+                OriginalDocumentSha256 = new string('a', 64),
+                Applicability = "測試適用性",
+                ReviewStatus = FactorReviewStatus.Pending.ToString()
+            });
             await context.SaveChangesAsync();
         }
 
@@ -190,6 +215,13 @@ public sealed class PostgreSqlPersistenceTests
                     "測試電力",
                     0.5m,
                     "kWh",
+                    "環境部",
+                    2026,
+                    new string('a', 64)),
+                new MoenvFactorRecord(
+                    "測試天然氣",
+                    2.5m,
+                    "kg",
                     "環境部",
                     2026,
                     new string('a', 64))
@@ -210,19 +242,33 @@ public sealed class PostgreSqlPersistenceTests
 
         Assert.Equal(1, first.CreatedCount);
         Assert.Equal(0, first.UnchangedCount);
+        Assert.Equal(1, first.PublishedExistingCount);
         Assert.Equal(2, first.SkippedCount);
         Assert.Equal(0, second.CreatedCount);
-        Assert.Equal(1, second.UnchangedCount);
+        Assert.Equal(2, second.UnchangedCount);
+        Assert.Equal(0, second.PublishedExistingCount);
 
         await using var verification = CreateContext(organizationId);
-        var factor = await verification.EmissionFactorVersions.SingleAsync(
-            item => item.SourceReference == MoenvFactorClient.DatasetReference);
-        Assert.Equal(FactorPublicationStatus.Draft.ToString(), factor.PublicationStatus);
-        Assert.Equal(FactorReviewStatus.Pending.ToString(), factor.ReviewStatus);
+        var factors = await verification.EmissionFactorVersions
+            .Where(item => item.SourceReference == MoenvFactorClient.DatasetReference)
+            .OrderBy(item => item.Name)
+            .ToArrayAsync();
+        Assert.Equal(2, factors.Length);
+        Assert.All(factors, factor =>
+        {
+            Assert.Equal(FactorPublicationStatus.Published.ToString(), factor.PublicationStatus);
+            Assert.Equal(FactorReviewStatus.NotRequired.ToString(), factor.ReviewStatus);
+            Assert.Null(factor.ReviewedAt);
+            Assert.NotNull(factor.PublishedAt);
+        });
+        var factor = factors.Single(item => item.Name == "測試電力");
         var audit = await verification.AuditEvents.SingleAsync(
             item => item.Action == "factor.version.synced" && item.ResourceId == factor.Id);
         Assert.Null(audit.ActorId);
         Assert.Equal("deployment-test", audit.CorrelationId);
+        Assert.Single(await verification.AuditEvents
+            .Where(item => item.Action == "factor.version.auto-published")
+            .ToArrayAsync());
         var synchronizationAudits = await verification.AuditEvents
             .Where(item =>
                 item.Action == "factor.synchronization.completed"

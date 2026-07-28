@@ -673,7 +673,6 @@ public sealed class WorkspaceModel : PageModel
         string factorSourceReference,
         string datasetName,
         string factorOriginalDocumentName,
-        string factorOriginalDocumentSha256,
         string factorApplicability,
         CancellationToken cancellationToken)
     {
@@ -685,7 +684,6 @@ public sealed class WorkspaceModel : PageModel
         var organizationId = RequireOrganization();
         var hasSourceType = TryResolveControlledValue(factorSourceType, factorSourceTypeOther, out var sourceType);
         var hasGeography = TryResolveControlledValue(factorGeography, factorGeographyOther, out var geography);
-        var validSha = SourceDocumentIntegrity.TryNormalizeSha256(factorOriginalDocumentSha256, out var sourceSha);
         if (string.IsNullOrWhiteSpace(factorName)
             || factorValue is null or < 0m
             || !hasSourceType
@@ -697,10 +695,9 @@ public sealed class WorkspaceModel : PageModel
             || string.IsNullOrWhiteSpace(factorSourceReference)
             || string.IsNullOrWhiteSpace(datasetName)
             || string.IsNullOrWhiteSpace(factorOriginalDocumentName)
-            || !validSha
             || string.IsNullOrWhiteSpace(factorApplicability))
         {
-            ModelState.AddModelError("factor", "來源類型、地域、有效期間、原始文件與 SHA-256 皆為必填。");
+            ModelState.AddModelError("factor", "來源類型、地域、有效期間與原始文件皆為必填。");
             await LoadAsync(cancellationToken);
             return Page();
         }
@@ -736,7 +733,7 @@ public sealed class WorkspaceModel : PageModel
             SourceReference = factorSourceReference.Trim(),
             DatasetName = datasetName.Trim(),
             OriginalDocumentName = factorOriginalDocumentName.Trim(),
-            OriginalDocumentSha256 = sourceSha,
+            OriginalDocumentSha256 = string.Empty,
             Applicability = factorApplicability.Trim(),
             ReviewStatus = FactorReviewStatus.Pending.ToString()
         });
@@ -762,7 +759,7 @@ public sealed class WorkspaceModel : PageModel
                 actorId,
                 HttpContext.TraceIdentifier,
                 cancellationToken);
-            StatusMessage = $"環境部係數同步完成：新增 {result.CreatedCount} 筆草稿、未變更 {result.UnchangedCount} 筆、略過 {result.SkippedCount} 筆無法對應的資料。";
+            StatusMessage = $"環境部係數同步完成：新增並發布 {result.CreatedCount} 筆、啟用舊草稿 {result.PublishedExistingCount} 筆、未變更 {result.UnchangedCount} 筆、略過 {result.SkippedCount} 筆無法對應的資料。";
             return RedirectToPage(new { section = "factors" });
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
@@ -886,7 +883,6 @@ public sealed class WorkspaceModel : PageModel
         string newSourceDatasetVersion,
         string newFactorSourceReference,
         string newOriginalDocumentName,
-        string newOriginalDocumentSha256,
         string newApplicability,
         CancellationToken cancellationToken)
     {
@@ -901,18 +897,14 @@ public sealed class WorkspaceModel : PageModel
         {
             return NotFound();
         }
-        var validSourceSha = SourceDocumentIntegrity.TryNormalizeSha256(
-            newOriginalDocumentSha256,
-            out var normalizedSourceSha);
         if (current.PublicationStatus != FactorPublicationStatus.Published.ToString()
             || newFactorValue is null or < 0m
             || string.IsNullOrWhiteSpace(newSourceDatasetVersion)
             || string.IsNullOrWhiteSpace(newFactorSourceReference)
             || string.IsNullOrWhiteSpace(newOriginalDocumentName)
-            || string.IsNullOrWhiteSpace(newApplicability)
-            || !validSourceSha)
+            || string.IsNullOrWhiteSpace(newApplicability))
         {
-            ModelState.AddModelError("factor", "更新已發布係數時，數值、來源版本、來源網址、原始文件、SHA-256 與適用性皆須有效。");
+            ModelState.AddModelError("factor", "更新已發布係數時，數值、來源版本、來源網址、原始文件與適用性皆須有效。");
             await LoadAsync(cancellationToken);
             return Page();
         }
@@ -939,7 +931,7 @@ public sealed class WorkspaceModel : PageModel
             SourceReference = newFactorSourceReference.Trim(),
             DatasetName = current.DatasetName,
             OriginalDocumentName = newOriginalDocumentName.Trim(),
-            OriginalDocumentSha256 = normalizedSourceSha,
+            OriginalDocumentSha256 = string.Empty,
             Applicability = newApplicability.Trim(),
             ReviewStatus = FactorReviewStatus.Pending.ToString(),
             SupersedesVersionId = current.Id

@@ -104,9 +104,10 @@ if (args.Contains("--migrate", StringComparer.Ordinal))
             $"deployment-{Guid.NewGuid():N}",
             CancellationToken.None);
         app.Logger.LogInformation(
-            "Deployment MOENV factor import completed for {OrganizationCount} organizations: {CreatedCount} created, {UnchangedCount} unchanged, {SkippedCount} skipped.",
+            "Deployment MOENV factor import completed for {OrganizationCount} organizations: {CreatedCount} created and published, {PublishedExistingCount} existing drafts published, {UnchangedCount} unchanged, {SkippedCount} skipped.",
             result.OrganizationCount,
             result.CreatedCount,
+            result.PublishedExistingCount,
             result.UnchangedCount,
             result.SkippedCount);
     }

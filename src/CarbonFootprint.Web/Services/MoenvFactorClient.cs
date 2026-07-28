@@ -76,7 +76,7 @@ public sealed class MoenvFactorClient : IMoenvFactorSource
 
         if (!downloadCompleted)
         {
-            throw new InvalidOperationException("環境部係數資料超過單次同步上限，未建立任何草稿；請由系統管理者確認資料範圍。");
+            throw new InvalidOperationException("環境部係數資料超過單次同步上限，未導入任何係數；請由系統管理者確認資料範圍。");
         }
 
         var latestRecords = records

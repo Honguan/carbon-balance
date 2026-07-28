@@ -14,6 +14,8 @@ public sealed class GovernanceSelectionTests
         Assert.False(factor.IsSelectableOn(new DateOnly(2026, 1, 1)));
         Assert.True(CreateFactor(FactorReviewStatus.Approved, "Taiwan electricity")
             .IsSelectableOn(new DateOnly(2026, 1, 1)));
+        Assert.True(CreateFactor(FactorReviewStatus.NotRequired, "Official synchronized factor")
+            .IsSelectableOn(new DateOnly(2026, 1, 1)));
         Assert.False(CreateFactor(FactorReviewStatus.Approved, string.Empty)
             .IsSelectableOn(new DateOnly(2026, 1, 1)));
     }

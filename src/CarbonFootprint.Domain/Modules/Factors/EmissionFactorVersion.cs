@@ -11,7 +11,8 @@ public enum FactorReviewStatus
 {
     Pending,
     Approved,
-    Rejected
+    Rejected,
+    NotRequired
 }
 
 public sealed record EmissionFactorVersion(
@@ -33,7 +34,7 @@ public sealed record EmissionFactorVersion(
 {
     public bool IsSelectableOn(DateOnly date) =>
         Status == FactorPublicationStatus.Published
-        && ReviewStatus == FactorReviewStatus.Approved
+        && ReviewStatus is FactorReviewStatus.Approved or FactorReviewStatus.NotRequired
         && !string.IsNullOrWhiteSpace(Applicability)
         && (ValidFrom is null || ValidFrom <= date)
         && (ValidTo is null || ValidTo >= date);
