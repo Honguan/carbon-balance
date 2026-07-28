@@ -170,7 +170,7 @@ public sealed class PostgreSqlPersistenceTests
     }
 
     [Fact]
-    public async Task MoenvFactorSynchronization_IsIdempotentAndKeepsImportedFactorAsDraft()
+    public async Task MoenvFactorSynchronization_PublishesOfficialFactorsWithoutReview()
     {
         var organizationId = Guid.NewGuid();
         await using (var context = CreateContext(organizationId))
@@ -201,7 +201,7 @@ public sealed class PostgreSqlPersistenceTests
                 SourceName = "環境部",
                 SourceReference = MoenvFactorClient.DatasetReference,
                 DatasetName = "環境部碳足跡排放係數",
-                OriginalDocumentName = "CFP_P_02-record-draft.json",
+                OriginalDocumentName = "CFP_P_02-record-aaaaaaaaaaaa.json",
                 OriginalDocumentSha256 = new string('a', 64),
                 Applicability = "測試適用性",
                 ReviewStatus = FactorReviewStatus.Pending.ToString()
@@ -282,6 +282,163 @@ public sealed class PostgreSqlPersistenceTests
             Assert.Equal("deployment-test", item.CorrelationId);
             Assert.Contains(MoenvFactorClient.DatasetReference, item.MetadataJson, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public async Task MoenvFactorSynchronization_DoesNotAutoPublishManualOrWithdrawnVersions()
+    {
+        var organizationId = Guid.NewGuid();
+        var manualFactorId = Guid.NewGuid();
+        var withdrawnFactorId = Guid.NewGuid();
+        await using (var context = CreateContext(organizationId))
+        {
+            context.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationId,
+                Name = "同步來源辨識測試組織",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            context.EmissionFactorVersions.AddRange(
+                CreateFactorVersion(
+                    organizationId,
+                    manualFactorId,
+                    "手動來源係數",
+                    1.5m,
+                    FactorPublicationStatus.Draft,
+                    FactorReviewStatus.Pending,
+                    MoenvFactorClient.DatasetReference,
+                    "manual-source.pdf",
+                    new string('c', 64)),
+                CreateFactorVersion(
+                    organizationId,
+                    withdrawnFactorId,
+                    "已撤回官方係數",
+                    3.5m,
+                    FactorPublicationStatus.Withdrawn,
+                    FactorReviewStatus.NotRequired,
+                    MoenvFactorClient.DatasetReference,
+                    "CFP_P_02-record-dddddddddddd.json",
+                    new string('d', 64)));
+            await context.SaveChangesAsync();
+        }
+
+        var service = new MoenvFactorSynchronizationService(
+            CreateOptions(),
+            new StubMoenvFactorSource(new MoenvFactorDownload(
+                [
+                    new MoenvFactorRecord(
+                        "手動來源係數",
+                        1.5m,
+                        "kg",
+                        "環境部",
+                        2026,
+                        new string('c', 64)),
+                    new MoenvFactorRecord(
+                        "已撤回官方係數",
+                        3.5m,
+                        "kg",
+                        "環境部",
+                        2026,
+                        new string('d', 64))
+                ],
+                0)));
+
+        var result = await service.SynchronizeOrganizationAsync(
+            organizationId,
+            actorId: null,
+            correlationId: "source-classification-test",
+            CancellationToken.None);
+
+        Assert.Equal(1, result.CreatedCount);
+        Assert.Equal(1, result.UnchangedCount);
+        Assert.Equal(0, result.PublishedExistingCount);
+        await using var verification = CreateContext(organizationId);
+        var manual = await verification.EmissionFactorVersions.SingleAsync(item => item.FactorId == manualFactorId);
+        Assert.Equal(FactorPublicationStatus.Draft.ToString(), manual.PublicationStatus);
+        Assert.Equal(FactorReviewStatus.Pending.ToString(), manual.ReviewStatus);
+        var synchronized = await verification.EmissionFactorVersions.SingleAsync(item =>
+            item.Name == "手動來源係數" && item.FactorId != manualFactorId);
+        Assert.Equal(FactorPublicationStatus.Published.ToString(), synchronized.PublicationStatus);
+        Assert.Equal(FactorReviewStatus.NotRequired.ToString(), synchronized.ReviewStatus);
+        var withdrawn = await verification.EmissionFactorVersions.SingleAsync(item => item.FactorId == withdrawnFactorId);
+        Assert.Equal(FactorPublicationStatus.Withdrawn.ToString(), withdrawn.PublicationStatus);
+    }
+
+    [Fact]
+    public async Task MoenvFactorSynchronization_UsesNextVersionAcrossManualAndSynchronizedSources()
+    {
+        var organizationId = Guid.NewGuid();
+        var factorId = Guid.NewGuid();
+        var synchronizedVersionId = Guid.NewGuid();
+        var manualVersionId = Guid.NewGuid();
+        await using (var context = CreateContext(organizationId))
+        {
+            context.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationId,
+                Name = "同步跨來源版號測試組織",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            var synchronizedVersion = CreateFactorVersion(
+                organizationId,
+                factorId,
+                "跨來源版號係數",
+                1m,
+                FactorPublicationStatus.Withdrawn,
+                FactorReviewStatus.NotRequired,
+                MoenvFactorClient.DatasetReference,
+                "CFP_P_02-record-eeeeeeeeeeee.json",
+                new string('e', 64));
+            synchronizedVersion.Id = synchronizedVersionId;
+            synchronizedVersion.SourceDatasetVersion = "CFP_P_02-2025";
+            var manualVersion = CreateFactorVersion(
+                organizationId,
+                factorId,
+                "跨來源版號係數",
+                1.1m,
+                FactorPublicationStatus.Published,
+                FactorReviewStatus.Approved,
+                "manual-reference",
+                "manual-update.pdf",
+                string.Empty);
+            manualVersion.Id = manualVersionId;
+            manualVersion.VersionNumber = 2;
+            manualVersion.SupersedesVersionId = synchronizedVersionId;
+            context.EmissionFactorVersions.AddRange(synchronizedVersion, manualVersion);
+            await context.SaveChangesAsync();
+        }
+
+        var service = new MoenvFactorSynchronizationService(
+            CreateOptions(),
+            new StubMoenvFactorSource(new MoenvFactorDownload(
+                [
+                    new MoenvFactorRecord(
+                        "跨來源版號係數",
+                        1.2m,
+                        "kg",
+                        "環境部",
+                        2026,
+                        new string('f', 64))
+                ],
+                0)));
+
+        var result = await service.SynchronizeOrganizationAsync(
+            organizationId,
+            actorId: null,
+            correlationId: "cross-source-version-test",
+            CancellationToken.None);
+
+        Assert.Equal(1, result.CreatedCount);
+        await using var verification = CreateContext(organizationId);
+        var versions = await verification.EmissionFactorVersions
+            .Where(item => item.FactorId == factorId)
+            .OrderBy(item => item.VersionNumber)
+            .ToArrayAsync();
+        Assert.Equal([1, 2, 3], versions.Select(item => item.VersionNumber));
+        Assert.Equal(FactorPublicationStatus.Withdrawn.ToString(), versions[1].PublicationStatus);
+        Assert.Equal(FactorPublicationStatus.Published.ToString(), versions[2].PublicationStatus);
+        Assert.Equal(FactorReviewStatus.NotRequired.ToString(), versions[2].ReviewStatus);
+        Assert.Equal(manualVersionId, versions[2].SupersedesVersionId);
     }
 
     [Fact]
@@ -382,4 +539,40 @@ public sealed class PostgreSqlPersistenceTests
         public Task<MoenvFactorDownload> DownloadAsync(CancellationToken cancellationToken)
             => Task.FromResult(download);
     }
+
+    private static EmissionFactorVersionRecord CreateFactorVersion(
+        Guid organizationId,
+        Guid factorId,
+        string name,
+        decimal value,
+        FactorPublicationStatus publicationStatus,
+        FactorReviewStatus reviewStatus,
+        string sourceReference,
+        string originalDocumentName,
+        string originalDocumentSha256) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            FactorId = factorId,
+            VersionNumber = 1,
+            Name = name,
+            Value = value,
+            NumeratorUnitCode = "kgCO2e",
+            DenominatorUnitCode = "kg",
+            Geography = "TW",
+            ValidFrom = new DateOnly(2026, 1, 1),
+            ValidTo = null,
+            PublicationStatus = publicationStatus.ToString(),
+            SourceDatasetVersion = "CFP_P_02-2026",
+            LicenseCode = "政府資料開放授權條款第1版",
+            SourceType = "government-database",
+            SourceName = "環境部",
+            SourceReference = sourceReference,
+            DatasetName = "環境部碳足跡排放係數",
+            OriginalDocumentName = originalDocumentName,
+            OriginalDocumentSha256 = originalDocumentSha256,
+            Applicability = "測試適用性",
+            ReviewStatus = reviewStatus.ToString()
+        };
 }

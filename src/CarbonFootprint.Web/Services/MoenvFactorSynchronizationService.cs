@@ -98,10 +98,11 @@ public sealed class MoenvFactorSynchronizationService
         await using var dbContext = new CarbonFootprintDbContext(
             _dbContextOptions,
             new ExplicitOrganizationScope(organizationId));
-        var existingFactors = await dbContext.EmissionFactorVersions
-            .Where(item => item.SourceReference == MoenvFactorClient.DatasetReference)
-            .ToArrayAsync(cancellationToken);
-        var groupedFactors = existingFactors
+        var allFactors = await dbContext.EmissionFactorVersions.ToArrayAsync(cancellationToken);
+        var synchronizedFactors = allFactors
+            .Where(IsSynchronizedFactorVersion)
+            .ToArray();
+        var groupedFactors = synchronizedFactors
             .GroupBy(
                 item => BuildExternalFactorKey(item.Name, item.DenominatorUnitCode, item.SourceName),
                 StringComparer.Ordinal)
@@ -120,22 +121,18 @@ public sealed class MoenvFactorSynchronizationService
             var key = BuildExternalFactorKey(source.Name, source.DenominatorUnitCode, sourceName);
             groupedFactors.TryGetValue(key, out var current);
             var datasetVersion = $"CFP_P_02-{source.AnnouncementYear?.ToString() ?? "未標示年份"}";
-            if (current is not null
+            var matchesCurrentSource = current is not null
                 && current.Value == source.Value
                 && string.Equals(current.SourceDatasetVersion, datasetVersion, StringComparison.Ordinal)
-                && string.Equals(current.OriginalDocumentSha256, source.SourceRecordSha256, StringComparison.Ordinal))
+                && string.Equals(current.OriginalDocumentSha256, source.SourceRecordSha256, StringComparison.Ordinal);
+            if (matchesCurrentSource)
             {
-                if (current.PublicationStatus == FactorPublicationStatus.Published.ToString()
-                    && current.ReviewStatus == FactorReviewStatus.NotRequired.ToString())
-                {
-                    unchangedCount++;
-                }
-                else
+                if (current!.PublicationStatus == FactorPublicationStatus.Draft.ToString())
                 {
                     var existingPublishedAt = DateTimeOffset.UtcNow;
                     WithdrawPublishedVersions(
                         dbContext,
-                        existingFactors,
+                        allFactors,
                         current.FactorId,
                         current.Id,
                         actorId,
@@ -155,18 +152,29 @@ public sealed class MoenvFactorSynchronizationService
                         existingPublishedAt));
                     publishedExistingCount++;
                 }
+                else
+                {
+                    unchangedCount++;
+                }
 
                 continue;
             }
 
             var factorVersionId = Guid.NewGuid();
             var publishedAt = DateTimeOffset.UtcNow;
+            var factorId = current?.FactorId ?? Guid.NewGuid();
+            var latestVersion = current is null
+                ? null
+                : allFactors
+                    .Where(item => item.FactorId == factorId)
+                    .OrderByDescending(item => item.VersionNumber)
+                    .First();
             if (current is not null)
             {
                 WithdrawPublishedVersions(
                     dbContext,
-                    existingFactors,
-                    current.FactorId,
+                    allFactors,
+                    factorId,
                     excludedVersionId: null,
                     actorId,
                     correlationId,
@@ -177,8 +185,8 @@ public sealed class MoenvFactorSynchronizationService
             {
                 Id = factorVersionId,
                 OrganizationId = organizationId,
-                FactorId = current?.FactorId ?? Guid.NewGuid(),
-                VersionNumber = (current?.VersionNumber ?? 0) + 1,
+                FactorId = factorId,
+                VersionNumber = (latestVersion?.VersionNumber ?? 0) + 1,
                 Name = source.Name,
                 Value = source.Value,
                 NumeratorUnitCode = "kgCO2e",
@@ -202,7 +210,7 @@ public sealed class MoenvFactorSynchronizationService
                 ReviewedBy = null,
                 ReviewedAt = null,
                 PublishedAt = publishedAt,
-                SupersedesVersionId = current?.Id
+                SupersedesVersionId = latestVersion?.Id
             };
             dbContext.EmissionFactorVersions.Add(factor);
             dbContext.AuditEvents.Add(CreateAudit(
@@ -295,6 +303,28 @@ public sealed class MoenvFactorSynchronizationService
 
     private static string BuildExternalFactorKey(string name, string unitCode, string sourceName) =>
         $"{name.Trim()}\u001f{unitCode.Trim()}\u001f{sourceName.Trim()}";
+
+    private static bool IsSynchronizedFactorVersion(EmissionFactorVersionRecord factor)
+    {
+        if (!string.Equals(
+                factor.SourceReference,
+                MoenvFactorClient.DatasetReference,
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (factor.ReviewStatus == FactorReviewStatus.NotRequired.ToString())
+        {
+            return true;
+        }
+
+        return factor.ReviewStatus is nameof(FactorReviewStatus.Pending) or nameof(FactorReviewStatus.Approved)
+            && factor.SourceType == "government-database"
+            && factor.DatasetName == "環境部碳足跡排放係數"
+            && factor.OriginalDocumentSha256.Length == 64
+            && factor.OriginalDocumentName == $"CFP_P_02-record-{factor.OriginalDocumentSha256[..12]}.json";
+    }
 
     private sealed record ExplicitOrganizationScope(Guid Value) : IOrganizationScope
     {
