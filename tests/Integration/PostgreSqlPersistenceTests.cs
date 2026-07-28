@@ -97,6 +97,90 @@ public sealed class PostgreSqlPersistenceTests
     }
 
     [Fact]
+    public async Task OrganizationMailSettings_AreTenantScoped()
+    {
+        var organizationA = Guid.NewGuid();
+        var organizationB = Guid.NewGuid();
+
+        var settingsAId = Guid.NewGuid();
+        var settingsBId = Guid.NewGuid();
+        await using (var context = CreateContext(organizationA))
+        {
+            context.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationA,
+                Name = "SMTP 測試組織 A",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = CreateContext(organizationB))
+        {
+            context.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationB,
+                Name = "SMTP 測試組織 B",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = CreateContext(organizationA))
+        {
+            context.OrganizationMailSettings.Add(new OrganizationMailSettingsRecord
+            {
+                Id = settingsAId,
+                OrganizationId = organizationA,
+                Host = "smtp-a.example.test",
+                Port = 587,
+                EnableSsl = true,
+                FromAddress = "a@example.test",
+                FromName = "組織 A",
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = CreateContext(organizationB))
+        {
+            context.OrganizationMailSettings.Add(new OrganizationMailSettingsRecord
+            {
+                Id = settingsBId,
+                OrganizationId = organizationB,
+                Host = "smtp-b.example.test",
+                Port = 465,
+                EnableSsl = true,
+                FromAddress = "b@example.test",
+                FromName = "組織 B",
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = CreateContext(organizationA))
+        {
+            var settings = await context.OrganizationMailSettings.SingleAsync();
+            Assert.Equal("smtp-a.example.test", settings.Host);
+            Assert.Empty(settings.EncryptedPassword);
+            Assert.Null(await context.OrganizationMailSettings
+                .SingleOrDefaultAsync(item => item.Id == settingsBId));
+
+            context.OrganizationMailSettings.Add(new OrganizationMailSettingsRecord
+            {
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationB,
+                Host = "smtp-id-or.example.test",
+                Port = 25,
+                FromAddress = "id-or@example.test",
+                FromName = "越權"
+            });
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+            Assert.Contains("不符合目前組織範圍", exception.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public async Task QueryFilters_ResolveOrganizationWhenRequestScopeBecomesAvailable()
     {
         var organizationId = Guid.NewGuid();

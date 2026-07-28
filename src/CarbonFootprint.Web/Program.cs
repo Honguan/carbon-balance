@@ -35,6 +35,11 @@ if (!string.IsNullOrWhiteSpace(dataProtectionPath))
 {
     builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath));
 }
+else if (!builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException(
+        "正式環境必須設定 DataProtection:KeyPath，才能持久化組織 SMTP 密碼的加密金鑰。");
+}
 builder.Services.AddHealthChecks().AddDbContextCheck<CarbonFootprintDbContext>("postgresql");
 builder.Services.AddRateLimiter(options =>
 {

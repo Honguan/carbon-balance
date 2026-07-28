@@ -1,5 +1,5 @@
-document.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll("[data-history-back]").forEach((link) => {
+const initializeSite = (root = document) => {
+    root.querySelectorAll("[data-history-back]").forEach((link) => {
         link.addEventListener("click", (event) => {
             if (!document.referrer || window.history.length <= 1) {
                 return;
@@ -19,8 +19,8 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    document.querySelectorAll("select[data-controlled-other]").forEach((select) => {
-        const target = document.querySelector(select.dataset.otherTarget ?? "");
+    root.querySelectorAll("select[data-controlled-other]").forEach((select) => {
+        const target = root.querySelector(select.dataset.otherTarget ?? "");
         if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) {
             return;
         }
@@ -34,7 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
         sync();
     });
 
-    document.querySelectorAll("select[data-auto-submit-select]").forEach((select) => {
+    root.querySelectorAll("select[data-auto-submit-select]").forEach((select) => {
         select.addEventListener("change", () => {
             if (!select.value || !(select.form instanceof HTMLFormElement)) {
                 return;
@@ -49,8 +49,8 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    document.querySelectorAll("[data-factor-list-filter]").forEach((input) => {
-        const list = document.querySelector("[data-factor-list]");
+    root.querySelectorAll("[data-factor-list-filter]").forEach((input) => {
+        const list = root.querySelector("[data-factor-list]");
         if (!(input instanceof HTMLInputElement) || !list) {
             return;
         }
@@ -63,7 +63,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    document.querySelectorAll("[data-emission-form]").forEach((form) => {
+    root.querySelectorAll("[data-emission-form]").forEach((form) => {
         const kindSelect = form.querySelector("[name='activityKind']");
         const valueInput = form.querySelector("[name='rawValue']");
         const distanceInput = form.querySelector("[name='transportDistanceKm']");
@@ -158,5 +158,97 @@ document.addEventListener("DOMContentLoaded", () => {
         form.addEventListener("input", updatePreview);
         form.addEventListener("change", updatePreview);
         updatePreview();
+    });
+};
+
+let workspaceNavigationSequence = 0;
+let workspaceNavigationController;
+
+const loadWorkspaceContent = async (link, replaceHistory) => {
+    const url = new URL(link.href, window.location.origin);
+    const workspacePath = url.pathname.toLowerCase();
+    if (url.origin !== window.location.origin || (workspacePath !== "/workspace" && !workspacePath.startsWith("/workspace/"))) {
+        return false;
+    }
+
+    const sequence = ++workspaceNavigationSequence;
+    workspaceNavigationController?.abort();
+    const controller = new AbortController();
+    workspaceNavigationController = controller;
+    let response;
+    try {
+        response = await fetch(url, {
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+            credentials: "same-origin",
+            signal: controller.signal
+        });
+    } catch (error) {
+        if (error?.name === "AbortError") {
+            return true;
+        }
+        throw error;
+    }
+    if (sequence !== workspaceNavigationSequence) {
+        return true;
+    }
+    if (!response.ok) {
+        return false;
+    }
+
+    const html = await response.text();
+    if (sequence !== workspaceNavigationSequence) {
+        return true;
+    }
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const nextContent = parsed.querySelector("[data-workspace-content]");
+    const currentContent = document.querySelector("[data-workspace-content]");
+    if (!nextContent || !currentContent) {
+        return false;
+    }
+
+    currentContent.replaceWith(nextContent);
+    document.querySelectorAll("[data-workspace-nav]").forEach((navLink) => {
+        const navUrl = new URL(navLink.href, window.location.origin);
+        navLink.setAttribute("aria-current", navUrl.href === url.href ? "page" : "");
+    });
+    if (replaceHistory) {
+        window.history.pushState({ workspace: true }, "", url.href);
+    }
+    document.title = parsed.title;
+    initializeSite(nextContent);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return true;
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+    initializeSite();
+    document.addEventListener("click", async (event) => {
+        const link = event.target instanceof Element
+            ? event.target.closest("a[data-workspace-nav]")
+            : null;
+        if (!(link instanceof HTMLAnchorElement) || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+            return;
+        }
+
+        event.preventDefault();
+        try {
+            if (!await loadWorkspaceContent(link, true)) {
+                window.location.assign(link.href);
+            }
+        } catch {
+            window.location.assign(link.href);
+        }
+    });
+
+    window.addEventListener("popstate", async () => {
+        const link = document.createElement("a");
+        link.href = window.location.href;
+        try {
+            if (!await loadWorkspaceContent(link, false)) {
+                window.location.reload();
+            }
+        } catch {
+            window.location.reload();
+        }
     });
 });

@@ -18,6 +18,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
     }
 
     public DbSet<OrganizationRecord> Organizations => Set<OrganizationRecord>();
+    public DbSet<OrganizationMailSettingsRecord> OrganizationMailSettings => Set<OrganizationMailSettingsRecord>();
     public DbSet<OrganizationMembershipRecord> OrganizationMemberships => Set<OrganizationMembershipRecord>();
     public DbSet<OrganizationInvitationRecord> OrganizationInvitations => Set<OrganizationInvitationRecord>();
     public DbSet<FacilityRecord> Facilities => Set<FacilityRecord>();
@@ -88,6 +89,19 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.ToTable("organizations");
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Name).HasMaxLength(200);
+        });
+        builder.Entity<OrganizationMailSettingsRecord>(entity =>
+        {
+            entity.ToTable("organization_mail_settings");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Host).HasMaxLength(300);
+            entity.Property(item => item.Username).HasMaxLength(320);
+            entity.Property(item => item.EncryptedPassword).HasMaxLength(4000);
+            entity.Property(item => item.FromAddress).HasMaxLength(320);
+            entity.Property(item => item.FromName).HasMaxLength(200);
+            entity.HasIndex(item => item.OrganizationId).IsUnique();
+            entity.HasOne<OrganizationRecord>().WithMany().HasForeignKey(item => item.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(item => item.UpdatedBy).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<OrganizationMembershipRecord>(entity =>
         {
@@ -365,6 +379,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
     private void ConfigureTenantFilters(ModelBuilder builder)
     {
         builder.Entity<OrganizationRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.Id == _organizationScope.OrganizationId);
+        builder.Entity<OrganizationMailSettingsRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<OrganizationMembershipRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<OrganizationInvitationRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<FacilityRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
