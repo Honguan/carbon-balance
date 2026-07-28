@@ -23,7 +23,9 @@ public static class MoenvFactorDatasetParser
     public static MoenvFactorDataset Parse(string json)
     {
         using var document = JsonDocument.Parse(json);
-        var recordsElement = FindProperty(document.RootElement, "records");
+        var recordsElement = document.RootElement.ValueKind == JsonValueKind.Array
+            ? document.RootElement
+            : FindProperty(document.RootElement, "records");
         if (recordsElement is null || recordsElement.Value.ValueKind != JsonValueKind.Array)
         {
             throw new InvalidOperationException("環境部係數資料缺少 records 陣列。");
@@ -65,6 +67,11 @@ public static class MoenvFactorDatasetParser
 
     private static JsonElement? FindProperty(JsonElement element, string name)
     {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
         foreach (var property in element.EnumerateObject())
         {
             if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
@@ -89,14 +96,19 @@ public static class MoenvFactorDatasetParser
 
     private static string? NormalizeUnit(string unit)
     {
-        var normalized = unit.Trim().Replace(" ", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+        var normalized = unit
+            .Trim()
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace('（', '(')
+            .Replace('）', ')')
+            .ToLowerInvariant();
         return normalized switch
         {
-            "kg" or "公斤" or "千克" => "kg",
-            "g" or "公克" or "克" => "g",
-            "tonne" or "ton" or "t" or "公噸" => "tonne",
-            "kwh" or "度" or "千瓦小時" => "kWh",
-            "tonne-km" or "t-km" or "tkm" or "公噸公里" => "tonne-km",
+            "kg" or "公斤" or "千克" or "公斤(kg)" => "kg",
+            "g" or "公克" or "克" or "公克(g)" => "g",
+            "tonne" or "ton" or "t" or "mt" or "公噸" or "公噸(mt)" => "tonne",
+            "kwh" or "度" or "千瓦小時" or "度(kwh)" => "kWh",
+            "tonne-km" or "t-km" or "tkm" or "公噸公里" or "延噸公里(tkm)" => "tonne-km",
             _ => null
         };
     }

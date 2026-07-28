@@ -39,4 +39,44 @@ public sealed class MoenvFactorDatasetParserTests
         Assert.Empty(result.Records);
         Assert.Equal(1, result.SkippedCount);
     }
+
+    [Fact]
+    public void Parse_CurrentOfficialArrayResponse_ImportsCompoundDeclaredUnit()
+    {
+        const string json =
+            """
+            [
+              {
+                "name": "合金鋼鋼胚（機械五金用）",
+                "coe": "0.5661",
+                "unit": "公斤(kg)",
+                "departmentname": "環境部氣候變遷署",
+                "announcementyear": "2025"
+              }
+            ]
+            """;
+
+        var result = MoenvFactorDatasetParser.Parse(json);
+
+        var factor = Assert.Single(result.Records);
+        Assert.Equal("kg", factor.DenominatorUnitCode);
+        Assert.Equal(0.5661m, factor.Value);
+    }
+
+    [Theory]
+    [InlineData("公斤(kg)", "kg")]
+    [InlineData("公克(g)", "g")]
+    [InlineData("公噸(mt)", "tonne")]
+    [InlineData("度(kwh)", "kWh")]
+    [InlineData("延噸公里(tkm)", "tonne-km")]
+    public void Parse_CurrentOfficialCompoundUnits_MapsToControlledUnit(
+        string sourceUnit,
+        string expectedUnit)
+    {
+        var json = $$"""[{"name":"係數","coe":"1","unit":"{{sourceUnit}}"}]""";
+
+        var result = MoenvFactorDatasetParser.Parse(json);
+
+        Assert.Equal(expectedUnit, Assert.Single(result.Records).DenominatorUnitCode);
+    }
 }

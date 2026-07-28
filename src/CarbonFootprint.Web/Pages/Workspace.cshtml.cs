@@ -107,8 +107,6 @@ public sealed class WorkspaceModel : PageModel
 
     public IReadOnlySet<Guid> PendingFormulaRunProjectIds { get; private set; } = new HashSet<Guid>();
 
-    public bool IsMoenvFactorSyncConfigured => _moenvFactorClient.IsConfigured;
-
     [TempData]
     public string? StatusMessage { get; set; }
 

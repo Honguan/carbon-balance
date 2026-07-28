@@ -13,14 +13,11 @@
 
         <section class="workspace-subpanel mb-3">
             <h3 class="h6">同步環境部公開係數</h3>
-            <p>資料來源：環境部「碳足跡排放係數」資料集 CFP_P_02。同步只建立草稿，不會覆寫已發布版本或歷史計算。</p>
+            <p>資料來源：環境部「碳足跡排放係數」資料集 CFP_P_02。重新整理頁面不會匯入資料；請按下方按鈕執行同步。同步只建立草稿，不會覆寫已發布版本或歷史計算。</p>
             <form method="post" asp-page="/Workspace" asp-page-handler="SyncMoenvFactors" asp-route-section="factors">
-                <button class="btn btn-primary" type="submit" disabled="@(!Model.IsMoenvFactorSyncConfigured)">立即同步更新</button>
+                <button class="btn btn-primary" type="submit">同步並匯入係數草稿</button>
             </form>
-            @if (!Model.IsMoenvFactorSyncConfigured)
-            {
-                <p class="workspace-select-help mt-2">請先由系統管理者設定環境部介接金鑰，再重新啟動服務。</p>
-            }
+            <p class="workspace-select-help mt-2 mb-0">未設定自有金鑰時，系統會從政府資料開放平臺取得目前的官方 JSON 公開下載網址。</p>
         </section>
 
         <details class="lifecycle-factor-registry" open>
