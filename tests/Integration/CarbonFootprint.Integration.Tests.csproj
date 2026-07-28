@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CarbonFootprint.Infrastructure\CarbonFootprint.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\CarbonFootprint.Web\CarbonFootprint.Web.csproj" />
   </ItemGroup>
 
 </Project>

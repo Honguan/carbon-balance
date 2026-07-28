@@ -1,8 +1,11 @@
+using CarbonFootprint.Application.Factors;
+using CarbonFootprint.Domain.Modules.Factors;
 using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Infrastructure.LegacyImport;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Organizations;
 using CarbonFootprint.Domain.Modules.Organizations;
+using CarbonFootprint.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace CarbonFootprint.Integration.Tests;
@@ -167,6 +170,62 @@ public sealed class PostgreSqlPersistenceTests
     }
 
     [Fact]
+    public async Task MoenvFactorSynchronization_IsIdempotentAndKeepsImportedFactorAsDraft()
+    {
+        var organizationId = Guid.NewGuid();
+        await using (var context = CreateContext(organizationId))
+        {
+            context.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationId,
+                Name = "部署係數匯入測試組織",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var source = new StubMoenvFactorSource(new MoenvFactorDownload(
+            [
+                new MoenvFactorRecord(
+                    "測試電力",
+                    0.5m,
+                    "kWh",
+                    "環境部",
+                    2026,
+                    new string('a', 64))
+            ],
+            2));
+        var service = new MoenvFactorSynchronizationService(CreateOptions(), source);
+
+        var first = await service.SynchronizeOrganizationAsync(
+            organizationId,
+            actorId: null,
+            correlationId: "deployment-test",
+            CancellationToken.None);
+        var second = await service.SynchronizeOrganizationAsync(
+            organizationId,
+            actorId: null,
+            correlationId: "deployment-test",
+            CancellationToken.None);
+
+        Assert.Equal(1, first.CreatedCount);
+        Assert.Equal(0, first.UnchangedCount);
+        Assert.Equal(2, first.SkippedCount);
+        Assert.Equal(0, second.CreatedCount);
+        Assert.Equal(1, second.UnchangedCount);
+
+        await using var verification = CreateContext(organizationId);
+        var factor = await verification.EmissionFactorVersions.SingleAsync(
+            item => item.SourceReference == MoenvFactorClient.DatasetReference);
+        Assert.Equal(FactorPublicationStatus.Draft.ToString(), factor.PublicationStatus);
+        Assert.Equal(FactorReviewStatus.Pending.ToString(), factor.ReviewStatus);
+        var audit = await verification.AuditEvents.SingleAsync(
+            item => item.Action == "factor.version.synced" && item.ResourceId == factor.Id);
+        Assert.Null(audit.ActorId);
+        Assert.Equal("deployment-test", audit.CorrelationId);
+    }
+
+    [Fact]
     public async Task OrganizationInvitation_RequiresMatchingEmail_AndCreatesScopedMembership()
     {
         var organizationId = Guid.NewGuid();
@@ -257,5 +316,11 @@ public sealed class PostgreSqlPersistenceTests
     private sealed class MutableOrganizationScope : IOrganizationScope
     {
         public Guid? OrganizationId { get; set; }
+    }
+
+    private sealed class StubMoenvFactorSource(MoenvFactorDownload download) : IMoenvFactorSource
+    {
+        public Task<MoenvFactorDownload> DownloadAsync(CancellationToken cancellationToken)
+            => Task.FromResult(download);
     }
 }

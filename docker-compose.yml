@@ -65,6 +65,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Database: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-carbon_footprint};Username=${POSTGRES_USER:-carbon_app};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required; run the local setup script or create .env}"
+      EXTERNALFACTORSOURCES__MOENV__APIKEY: ${MOENV_API_KEY:-}
+      EXTERNALFACTORSOURCES__MOENV__IMPORTONDEPLOYMENT: ${MOENV_IMPORT_ON_DEPLOYMENT:-true}
     depends_on:
       postgres:
         condition: service_healthy

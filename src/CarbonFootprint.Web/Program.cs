@@ -23,8 +23,9 @@ builder.Services.AddSingleton<CalculationEngine>();
 builder.Services.AddScoped<CalculateInventoryHandler>();
 builder.Services.Configure<MoenvFactorSourceOptions>(
     builder.Configuration.GetSection(MoenvFactorSourceOptions.SectionName));
-builder.Services.AddHttpClient<MoenvFactorClient>(client =>
+builder.Services.AddHttpClient<IMoenvFactorSource, MoenvFactorClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(60));
+builder.Services.AddScoped<MoenvFactorSynchronizationService>();
 builder.Services.AddScoped<IAuthorizationHandler, OrganizationPermissionHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, MfaEnabledHandler>();
 builder.Services.AddRazorPages();
@@ -90,6 +91,24 @@ if (args.Contains("--migrate", StringComparer.Ordinal))
                 throw new InvalidOperationException($"無法建立系統角色 {roleName}: {errors}");
             }
         }
+    }
+
+    var moenvOptions = builder.Configuration
+        .GetSection(MoenvFactorSourceOptions.SectionName)
+        .Get<MoenvFactorSourceOptions>() ?? new MoenvFactorSourceOptions();
+    if (moenvOptions.ImportOnDeployment)
+    {
+        var synchronizationService = scope.ServiceProvider
+            .GetRequiredService<MoenvFactorSynchronizationService>();
+        var result = await synchronizationService.SynchronizeExistingOrganizationsAsync(
+            $"deployment-{Guid.NewGuid():N}",
+            CancellationToken.None);
+        app.Logger.LogInformation(
+            "Deployment MOENV factor import completed for {OrganizationCount} organizations: {CreatedCount} created, {UnchangedCount} unchanged, {SkippedCount} skipped.",
+            result.OrganizationCount,
+            result.CreatedCount,
+            result.UnchangedCount,
+            result.SkippedCount);
     }
 
     return;

@@ -10,13 +10,20 @@ public sealed class MoenvFactorSourceOptions
     public const string SectionName = "ExternalFactorSources:Moenv";
 
     public string ApiKey { get; set; } = string.Empty;
+
+    public bool ImportOnDeployment { get; set; } = true;
 }
 
 public sealed record MoenvFactorDownload(
     IReadOnlyList<MoenvFactorRecord> Records,
     int SkippedCount);
 
-public sealed class MoenvFactorClient
+public interface IMoenvFactorSource
+{
+    Task<MoenvFactorDownload> DownloadAsync(CancellationToken cancellationToken);
+}
+
+public sealed class MoenvFactorClient : IMoenvFactorSource
 {
     public const string DatasetReference = "https://data.moenv.gov.tw/dataset/detail/CFP_P_02";
 

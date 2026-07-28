@@ -37,7 +37,7 @@ public sealed class WorkspaceModel : PageModel
     private readonly CalculateInventoryHandler _calculateHandler;
     private readonly IAuthorizationService _authorizationService;
     private readonly EvidenceStorageService _evidenceStorageService;
-    private readonly MoenvFactorClient _moenvFactorClient;
+    private readonly MoenvFactorSynchronizationService _moenvFactorSynchronizationService;
 
     public WorkspaceModel(
         CarbonFootprintDbContext dbContext,
@@ -50,7 +50,7 @@ public sealed class WorkspaceModel : PageModel
         CalculateInventoryHandler calculateHandler,
         IAuthorizationService authorizationService,
         EvidenceStorageService evidenceStorageService,
-        MoenvFactorClient moenvFactorClient)
+        MoenvFactorSynchronizationService moenvFactorSynchronizationService)
     {
         _dbContext = dbContext;
         _organizationScope = organizationScope;
@@ -62,7 +62,7 @@ public sealed class WorkspaceModel : PageModel
         _calculateHandler = calculateHandler;
         _authorizationService = authorizationService;
         _evidenceStorageService = evidenceStorageService;
-        _moenvFactorClient = moenvFactorClient;
+        _moenvFactorSynchronizationService = moenvFactorSynchronizationService;
     }
 
     public Guid? OrganizationId => _organizationScope.OrganizationId;
@@ -755,76 +755,14 @@ public sealed class WorkspaceModel : PageModel
 
         try
         {
-            var download = await _moenvFactorClient.DownloadAsync(cancellationToken);
             var organizationId = RequireOrganization();
-            var existingFactors = await _dbContext.EmissionFactorVersions
-                .Where(item =>
-                    item.OrganizationId == organizationId
-                    && item.SourceReference == MoenvFactorClient.DatasetReference)
-                .ToArrayAsync(cancellationToken);
-            var groupedFactors = existingFactors
-                .GroupBy(
-                    item => BuildExternalFactorKey(item.Name, item.DenominatorUnitCode, item.SourceName),
-                    StringComparer.Ordinal)
-                .ToDictionary(
-                    group => group.Key,
-                    group => group.OrderByDescending(item => item.VersionNumber).First(),
-                    StringComparer.Ordinal);
-            var createdCount = 0;
-            var unchangedCount = 0;
-            foreach (var source in download.Records)
-            {
-                var sourceName = string.IsNullOrWhiteSpace(source.DepartmentName)
-                    ? "環境部氣候變遷署"
-                    : source.DepartmentName;
-                var key = BuildExternalFactorKey(source.Name, source.DenominatorUnitCode, sourceName);
-                groupedFactors.TryGetValue(key, out var current);
-                var datasetVersion = $"CFP_P_02-{source.AnnouncementYear?.ToString() ?? "未標示年份"}";
-                if (current is not null
-                    && current.Value == source.Value
-                    && string.Equals(current.SourceDatasetVersion, datasetVersion, StringComparison.Ordinal))
-                {
-                    unchangedCount++;
-                    continue;
-                }
-
-                var factorVersionId = Guid.NewGuid();
-                var factor = new EmissionFactorVersionRecord
-                {
-                    Id = factorVersionId,
-                    OrganizationId = organizationId,
-                    FactorId = current?.FactorId ?? Guid.NewGuid(),
-                    VersionNumber = (current?.VersionNumber ?? 0) + 1,
-                    Name = source.Name,
-                    Value = source.Value,
-                    NumeratorUnitCode = "kgCO2e",
-                    DenominatorUnitCode = source.DenominatorUnitCode,
-                    Geography = "TW",
-                    ValidFrom = source.AnnouncementYear.HasValue
-                        ? new DateOnly(source.AnnouncementYear.Value, 1, 1)
-                        : null,
-                    ValidTo = null,
-                    PublicationStatus = FactorPublicationStatus.Draft.ToString(),
-                    SourceDatasetVersion = datasetVersion,
-                    LicenseCode = "政府資料開放授權條款第1版",
-                    SourceType = "government-database",
-                    SourceName = sourceName,
-                    SourceReference = MoenvFactorClient.DatasetReference,
-                    DatasetName = "環境部碳足跡排放係數",
-                    OriginalDocumentName = $"CFP_P_02-record-{source.SourceRecordSha256[..12]}.json",
-                    OriginalDocumentSha256 = source.SourceRecordSha256,
-                    Applicability = "來源資料的宣告單位已對應受控單位；發布前仍須確認盤查邊界與適用性。",
-                    ReviewStatus = FactorReviewStatus.Pending.ToString(),
-                    SupersedesVersionId = current?.Id
-                };
-                _dbContext.EmissionFactorVersions.Add(factor);
-                groupedFactors[key] = factor;
-                AddAudit("factor.version.synced", "EmissionFactorVersion", factorVersionId);
-                createdCount++;
-            }
-
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            StatusMessage = $"環境部係數同步完成：新增 {createdCount} 筆草稿、未變更 {unchangedCount} 筆、略過 {download.SkippedCount} 筆無法對應的資料。";
+            Guid? actorId = Guid.TryParse(_userManager.GetUserId(User), out var userId) ? userId : null;
+            var result = await _moenvFactorSynchronizationService.SynchronizeOrganizationAsync(
+                organizationId,
+                actorId,
+                HttpContext.TraceIdentifier,
+                cancellationToken);
+            StatusMessage = $"環境部係數同步完成：新增 {result.CreatedCount} 筆草稿、未變更 {result.UnchangedCount} 筆、略過 {result.SkippedCount} 筆無法對應的資料。";
             return RedirectToPage(new { section = "factors" });
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
@@ -1830,9 +1768,6 @@ public sealed class WorkspaceModel : PageModel
 
     private Guid RequireOrganization() => OrganizationId
         ?? throw new InvalidOperationException("請先建立組織。");
-
-    private static string BuildExternalFactorKey(string name, string unitCode, string sourceName) =>
-        $"{name.Trim()}\u001f{unitCode.Trim()}\u001f{sourceName.Trim()}";
 
     private static string NormalizeStageSlug(string? stage) => stage?.Trim().ToLowerInvariant() switch
     {
