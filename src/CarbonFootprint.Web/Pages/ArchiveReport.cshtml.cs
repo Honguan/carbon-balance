@@ -24,6 +24,8 @@ public sealed class ArchiveReportModel : PageModel
 
     public InventoryProjectVersionRecord Project { get; private set; } = null!;
 
+    public PcrVersionRecord? PcrRule { get; private set; }
+
     public IReadOnlyList<CalculationLineRecord> Lines { get; private set; } = [];
 
     public IReadOnlyList<CalculationWarningRecord> Warnings { get; private set; } = [];
@@ -56,6 +58,11 @@ public sealed class ArchiveReportModel : PageModel
         Run = run;
         Project = await _dbContext.InventoryProjectVersions.AsNoTracking()
             .SingleAsync(item => item.Id == run.ProjectVersionId, cancellationToken);
+        PcrRule = Project.PcrVersionId.HasValue
+            ? await _dbContext.PcrVersions.AsNoTracking().SingleOrDefaultAsync(
+                item => item.Id == Project.PcrVersionId.Value,
+                cancellationToken)
+            : null;
         Lines = await _dbContext.CalculationLineItems.AsNoTracking()
             .Where(item => item.CalculationRunId == run.Id)
             .OrderBy(item => item.LifecycleStage)

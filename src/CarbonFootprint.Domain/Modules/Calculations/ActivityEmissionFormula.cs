@@ -7,6 +7,18 @@ public sealed record ActivityEmissionFormulaDefinition(string Id);
 
 public static class ActivityEmissionFormula
 {
+    public const string PcrFormulaRuleSetV1 = "pcr-formulas-v1";
+
+    public static ActivityEmissionFormulaDefinition Resolve(string ruleSetVersion, ActivityDataKind kind)
+    {
+        if (!string.Equals(ruleSetVersion, PcrFormulaRuleSetV1, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Unsupported PCR formula rule set: {ruleSetVersion}.");
+        }
+
+        return Resolve(kind);
+    }
+
     public static ActivityEmissionFormulaDefinition Resolve(ActivityDataKind kind) => kind switch
     {
         ActivityDataKind.Material => new("material-input-times-factor-times-allocation-v1"),

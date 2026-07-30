@@ -31,6 +31,9 @@ public sealed class ReportsModel : PageModel
 
     public IReadOnlyList<CalculationRunRecord> Runs { get; private set; } = [];
 
+    public IReadOnlyDictionary<Guid, PcrVersionRecord> PcrRulesByRunId { get; private set; } =
+        new Dictionary<Guid, PcrVersionRecord>();
+
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         if (_organizationScope.OrganizationId.HasValue)
@@ -38,6 +41,21 @@ public sealed class ReportsModel : PageModel
             Runs = await _dbContext.CalculationRuns.AsNoTracking()
                 .OrderByDescending(item => item.CreatedAt)
                 .ToArrayAsync(cancellationToken);
+            var projectIds = Runs.Select(item => item.ProjectVersionId).Distinct().ToArray();
+            var projects = await _dbContext.InventoryProjectVersions.AsNoTracking()
+                .Where(item => projectIds.Contains(item.Id) && item.PcrVersionId.HasValue)
+                .ToDictionaryAsync(item => item.Id, cancellationToken);
+            var pcrIds = projects.Values.Select(item => item.PcrVersionId!.Value).Distinct().ToArray();
+            var pcrs = await _dbContext.PcrVersions.AsNoTracking()
+                .Where(item => pcrIds.Contains(item.Id))
+                .ToDictionaryAsync(item => item.Id, cancellationToken);
+            PcrRulesByRunId = Runs
+                .Where(run => projects.TryGetValue(run.ProjectVersionId, out var project)
+                    && project.PcrVersionId.HasValue
+                    && pcrs.ContainsKey(project.PcrVersionId.Value))
+                .ToDictionary(
+                    run => run.Id,
+                    run => pcrs[projects[run.ProjectVersionId].PcrVersionId!.Value]);
         }
     }
 
@@ -62,8 +80,14 @@ public sealed class ReportsModel : PageModel
             .OrderBy(item => item.LifecycleStage)
             .ThenBy(item => item.ActivityId)
             .ToArrayAsync(cancellationToken);
+        var pcr = project.PcrVersionId.HasValue
+            ? await _dbContext.PcrVersions.AsNoTracking().SingleOrDefaultAsync(
+                item => item.Id == project.PcrVersionId.Value,
+                cancellationToken)
+            : null;
+        var roundingDecimalPlaces = Math.Clamp(pcr?.RoundingDecimalPlaces ?? 3, 0, 12);
         var builder = new StringBuilder();
-        builder.AppendLine("run_id,input_sha256,workflow_status,pcr_version,functional_unit,stage,activity_id,formula_id,activity_value,activity_unit,factor_version_id,factor_value,factor_unit,allocation_factor,emissions,emissions_unit");
+        builder.AppendLine("run_id,input_sha256,workflow_status,pcr_version,functional_unit,stage,activity_id,formula_id,activity_value,activity_unit,factor_version_id,factor_value,factor_unit,allocation_factor,emissions,emissions_unit,reported_emissions,cutoff_threshold_percent,rounding_decimal_places,reporting_requirements");
         foreach (var line in lines)
         {
             builder.AppendLine(string.Join(",",
@@ -82,7 +106,11 @@ public sealed class ReportsModel : PageModel
                 Csv(line.FactorUnit),
                 Csv(line.AllocationFactor),
                 Csv(line.Emissions),
-                Csv(line.EmissionsUnitCode)));
+                Csv(line.EmissionsUnitCode),
+                Csv(line.Emissions.ToString($"F{roundingDecimalPlaces}", CultureInfo.InvariantCulture)),
+                Csv(pcr?.CutoffThresholdPercent ?? 0m),
+                Csv(roundingDecimalPlaces),
+                Csv(pcr?.ReportingRequirements ?? string.Empty)));
         }
 
         await AddExportAuditAsync("report.inventory-exported", run.Id, cancellationToken);

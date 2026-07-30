@@ -43,7 +43,7 @@ async function withDatabase(callback) {
     }
 }
 
-async function publishPcrFixture(registrationNumber) {
+async function publishPcrFixture(registrationNumber, versionNumber, supersedePrevious = false) {
     const rowCount = await withDatabase(async (client) => {
         const result = await client.query(
             `UPDATE app.pcr_versions
@@ -51,9 +51,21 @@ async function publishPcrFixture(registrationNumber) {
                  publication_status = 'Published',
                  reviewed_at = NOW(),
                  published_at = NOW()
-             WHERE registration_number = $1`,
-            [registrationNumber]
+             WHERE registration_number = $1
+               AND version_number = $2`,
+            [registrationNumber, versionNumber]
         );
+        if (supersedePrevious) {
+            await client.query(
+                `UPDATE app.pcr_versions
+                 SET deprecated_at = NOW(),
+                     deprecation_reason = $3
+                 WHERE registration_number = $1
+                   AND version_number < $2
+                   AND publication_status = 'Published'`,
+                [registrationNumber, versionNumber, `Superseded by version ${versionNumber}.`]
+            );
+        }
         return result.rowCount;
     });
     assert(rowCount === 1, `Expected one PCR fixture to publish, updated ${rowCount}.`);
@@ -147,7 +159,7 @@ try {
 
     await registerLink.click();
     await expectUrl(page, "/Identity/Account/Register", "Register link did not navigate");
-    await page.getByRole("heading", { name: "建立初始管理者" }).waitFor({ state: "visible" });
+    await page.getByRole("heading", { name: /建立(初始管理者|新帳號)/ }).waitFor({ state: "visible" });
     await expectVisible(page.locator("[data-history-back]"), "Register back link is not clickable");
     await page.locator("[data-history-back]").click();
     await expectUrl(page, "/Identity/Account/Login", "Register back link did not return to login");
@@ -171,7 +183,7 @@ try {
     await page.locator('input[name="Input.ConfirmPassword"]').fill(testPassword);
     await page.getByRole("button", { name: "建立帳號並寄送確認信" }).click();
     await expectUrl(page, "/Identity/Account/Login", "Registration did not return to login");
-    await page.getByText("初始管理者已建立").waitFor({ state: "visible" });
+    await page.getByText(/(初始管理者|帳號)已建立/).waitFor({ state: "visible" });
 
     await page.locator('input[name="Input.Identifier"]').fill(testEmail);
     await page.locator('input[name="Input.Password"]').fill(testPassword);
@@ -252,23 +264,29 @@ try {
     assert(await emptyPcrSelect.isDisabled(), "PCR select should be disabled without a published PCR.");
     assert((await emptyPcrSelect.locator("option").first().textContent()).includes("尚無已發布 PCR 版本"), "Empty PCR select did not explain its prerequisite.");
 
+    const pcrDocumentPath = path.join(artifactsDirectory, "e2e-pcr.txt");
+    await fs.writeFile(pcrDocumentPath, "Controlled E2E PCR source document.", "utf8");
+    async function createPcr(registrationNumber, versionNumber, validTo, title) {
+        await page.goto(`${baseUrl}/Workspace/pcr`, { waitUntil: "networkidle" });
+        await page.locator("#registrationNumber").fill(registrationNumber);
+        await page.locator("#pcrTitle").fill(title);
+        await page.locator("#pcrVersionNumber").fill(String(versionNumber));
+        await page.locator("#pcrApprovalDate").fill("2024-12-01");
+        await page.locator("#pcrValidFrom").fill("2025-01-01");
+        await page.locator("#pcrValidTo").fill(validTo);
+        await page.locator("#sourceReference").fill("https://example.test/e2e-pcr");
+        await page.locator("#standardCode").fill("ISO 14067");
+        await page.locator("#cccClassification").fill("E2E-CCC");
+        await page.locator("#pcrApplicability").fill("E2E products");
+        await page.locator("#ruleRequirements").fill("E2E rules");
+        await page.locator("#originalDocument").setInputFiles(pcrDocumentPath);
+        await page.getByRole("button", { name: "儲存 PCR 草稿" }).click();
+        await page.getByText("PCR 草稿已建立").waitFor({ state: "visible" });
+    }
+
     const pcrRegistration = `PCR-E2E-${Date.now()}`;
-    await page.goto(`${baseUrl}/Workspace/pcr`, { waitUntil: "networkidle" });
-    await page.locator("#registrationNumber").fill(pcrRegistration);
-    await page.locator("#pcrTitle").fill("E2E PCR 規範");
-    await page.locator("#pcrVersionNumber").fill("1");
-    await page.locator("#pcrValidFrom").fill("2025-01-01");
-    await page.locator("#pcrValidTo").fill("2027-12-31");
-    await page.locator("#sourceReference").fill("E2E controlled source");
-    await page.locator("#standardCode").fill("ISO 14067");
-    await page.locator("#cccClassification").fill("E2E-CCC");
-    await page.locator("#pcrApplicability").fill("E2E products");
-    await page.locator("#ruleRequirements").fill("E2E rules");
-    await page.locator("#originalDocumentName").fill("e2e-pcr.pdf");
-    await page.locator("#originalDocumentSha256").fill("a".repeat(64));
-    await page.getByRole("button", { name: "儲存 PCR 草稿" }).click();
-    await page.getByText("PCR 草稿已建立").waitFor({ state: "visible" });
-    await publishPcrFixture(pcrRegistration);
+    await createPcr(pcrRegistration, 1, "2027-12-31", "E2E PCR 規範");
+    await publishPcrFixture(pcrRegistration, 1);
 
     async function createInventory(productLabel, functionalUnit) {
         await page.goto(`${baseUrl}/Workspace/inventory`, { waitUntil: "networkidle" });
@@ -276,15 +294,43 @@ try {
         const pcrSelect = page.locator("#pcrVersionId");
         await expectSelectOptions(productSelect, 3, "Product-version select failed after reload");
         await expectSelectOptions(pcrSelect, 2, "Published PCR did not become selectable");
-        await productSelect.selectOption({ label: `${productLabel} v1` });
-        await pcrSelect.selectOption({ label: `${pcrRegistration} v1 - E2E PCR 規範` });
+        await productSelect.selectOption({ label: `${productLabel} 第 1 版` });
+        await pcrSelect.selectOption({ label: `${pcrRegistration} 第 1 版－E2E PCR 規範` });
         await page.locator("#functionalUnit").fill(functionalUnit);
         await page.getByRole("button", { name: "儲存盤查第 1 版" }).click();
         await page.getByText("盤查專案第 1 版已建立。").waitFor({ state: "visible" });
     }
 
+    await page.goto(`${baseUrl}/Workspace/inventory`, { waitUntil: "networkidle" });
+    await page.locator("#productVersionId").selectOption({ label: "E2E 產品 A 第 1 版" });
+    await page.locator("#pcrVersionId").selectOption({ label: `${pcrRegistration} 第 1 版－E2E PCR 規範` });
+    await page.locator("#declaredUnit").selectOption("kg");
+    await page.getByRole("button", { name: "儲存盤查第 1 版" }).click();
+    await page.getByText("PCR-DECLARED-UNIT").waitFor({ state: "visible" });
+
     await createInventory("E2E 產品 A", "1 件 E2E 產品 A");
     await createInventory("E2E 產品 B", "1 件 E2E 產品 B");
+
+    const expiredPcrRegistration = `PCR-EXPIRED-${Date.now()}`;
+    await createPcr(expiredPcrRegistration, 1, "2025-12-31", "E2E 已過期 PCR");
+    await publishPcrFixture(expiredPcrRegistration, 1);
+    await page.goto(`${baseUrl}/Workspace/inventory`, { waitUntil: "networkidle" });
+    const expiredPcrOption = page.locator("#pcrVersionId option", { hasText: expiredPcrRegistration });
+    assert(await expiredPcrOption.isDisabled(), "Expired PCR was selectable for the inventory period.");
+
+    await createPcr(pcrRegistration, 2, "2028-12-31", "E2E PCR 規範");
+    await publishPcrFixture(pcrRegistration, 2, true);
+    await page.goto(`${baseUrl}/Workspace/inventory`, { waitUntil: "networkidle" });
+    const selectablePcrText = await page.locator("#pcrVersionId").textContent();
+    assert(selectablePcrText.includes(`${pcrRegistration} 第 2 版`), "Superseding PCR was not offered.");
+    assert(!selectablePcrText.includes(`${pcrRegistration} 第 1 版`), "Superseded PCR remained selectable.");
+
+    await page.goto(`${baseUrl}/Workspace/pcr`, { waitUntil: "networkidle" });
+    const supersedingPcrRecord = page.locator("li", { hasText: `${pcrRegistration} 第 2 版` });
+    await supersedingPcrRecord.getByRole("button", { name: "撤回" }).click();
+    await page.getByText("PCR 版本已撤回").waitFor({ state: "visible" });
+    await page.goto(`${baseUrl}/Workspace/inventory`, { waitUntil: "networkidle" });
+    assert(!(await page.locator("#pcrVersionId").textContent()).includes(`${pcrRegistration} 第 2 版`), "Withdrawn PCR remained selectable.");
 
     // Draft factors are not offered; once published, every lifecycle factor select becomes usable.
     await page.goto(`${baseUrl}/Workspace/lifecycle`, { waitUntil: "networkidle" });
@@ -293,6 +339,7 @@ try {
     assert((await emptyFactorSelect.locator("option").first().textContent()).includes("尚無已發布排放係數"), "Empty factor select did not explain its prerequisite.");
 
     const factorName = `E2E 排放係數 ${Date.now()}`;
+    await page.goto(`${baseUrl}/Workspace/factors`, { waitUntil: "networkidle" });
     const factorRegistry = page.locator("details.lifecycle-factor-registry");
     await factorRegistry.locator("summary").click();
     await expectSelectOptions(factorRegistry.locator("#denominatorUnitCode"), 4, "Denominator-unit select is unusable");
@@ -309,7 +356,6 @@ try {
     await page.locator("#factorSourceReference").fill("https://example.invalid/e2e-factor");
     await page.locator("#datasetName").fill("E2E dataset");
     await page.locator("#factorOriginalDocumentName").fill("e2e-factor-source.pdf");
-    await page.locator("#factorOriginalDocumentSha256").fill("b".repeat(64));
     await page.locator("#factorApplicability").fill("E2E inventory period");
     await page.getByRole("button", { name: "建立係數草稿" }).click();
     await page.getByText("係數草稿已建立").waitFor({ state: "visible" });
@@ -344,7 +390,7 @@ try {
     await page.locator("#collection-raw-material").selectOption("供應商聲明／問卷");
     await page.locator("#source-reference-raw-material").fill("E2E-SUPPLIER-001");
     await page.locator("#value-raw-material").fill("2");
-    await page.getByRole("button", { name: "儲存「原料取得」活動" }).click();
+    await page.getByRole("button", { name: "儲存「原料取得階段」活動" }).click();
     await page.getByText("活動數據已保存。").waitFor({ state: "visible" });
 
     await page.goto(`${baseUrl}/Workspace/calculation`, { waitUntil: "networkidle" });

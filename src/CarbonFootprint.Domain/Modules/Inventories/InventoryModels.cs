@@ -74,7 +74,10 @@ public sealed record InventoryProjectSnapshot(
     string AllocationReason = "",
     string Exclusions = "",
     string Assumptions = "",
-    string EstimationReason = "");
+    string EstimationReason = "",
+    decimal CutoffThresholdPercent = 0m,
+    int RoundingDecimalPlaces = 3,
+    string ReportingRequirements = "");
 
 public static class ActivityKindRules
 {

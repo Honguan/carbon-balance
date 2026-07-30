@@ -111,9 +111,11 @@ public sealed class PcrVersionRecord : IOrganizationOwned
 {
     public Guid Id { get; set; }
     public Guid OrganizationId { get; set; }
+    public Guid RuleSetId { get; set; }
     public required string RegistrationNumber { get; set; }
     public int VersionNumber { get; set; }
     public required string Title { get; set; }
+    public DateOnly? ApprovalDate { get; set; }
     public DateOnly? ValidFrom { get; set; }
     public DateOnly? ValidTo { get; set; }
     public required string PublicationStatus { get; set; }
@@ -123,13 +125,44 @@ public sealed class PcrVersionRecord : IOrganizationOwned
     public string Applicability { get; set; } = string.Empty;
     public string RuleRequirements { get; set; } = string.Empty;
     public string OriginalDocumentName { get; set; } = string.Empty;
+    public string OriginalDocumentObjectKey { get; set; } = string.Empty;
+    public string OriginalDocumentContentType { get; set; } = string.Empty;
+    public long OriginalDocumentSizeBytes { get; set; }
     public string OriginalDocumentSha256 { get; set; } = string.Empty;
+    public string OriginalDocumentScanStatus { get; set; } = string.Empty;
+    public string ProductCategoryPatterns { get; set; } = "*";
+    public string FunctionalUnitPattern { get; set; } = "*";
+    public string DeclaredUnitCode { get; set; } = string.Empty;
+    public string SystemBoundaryCode { get; set; } = string.Empty;
+    public string PermittedAllocationMethodsCsv { get; set; } = string.Empty;
+    public decimal CutoffThresholdPercent { get; set; }
+    public string FormulaRuleSetVersion { get; set; } = string.Empty;
+    public int RoundingDecimalPlaces { get; set; } = 3;
+    public string ReportingRequirements { get; set; } = string.Empty;
+    public bool IsCustomRule { get; set; }
+    public string CustomRuleJustification { get; set; } = string.Empty;
+    public string CustomApprovalStatus { get; set; } = "NotRequired";
+    public Guid? SupersedesVersionId { get; set; }
+    public DateTimeOffset? DeprecatedAt { get; set; }
+    public string DeprecationReason { get; set; } = string.Empty;
     public string ReviewStatus { get; set; } = "Pending";
+    public Guid? CreatedBy { get; set; }
     public Guid? ReviewedBy { get; set; }
     public DateTimeOffset? ReviewedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? PublishedAt { get; set; }
     public DateTimeOffset? WithdrawnAt { get; set; }
+}
+
+public sealed class PcrStageRuleRecord : IOrganizationOwned
+{
+    public Guid Id { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid PcrVersionId { get; set; }
+    public int LifecycleStage { get; set; }
+    public required string Requirement { get; set; }
+    public string PermittedActivityKindsCsv { get; set; } = string.Empty;
+    public string RequiredFieldsCsv { get; set; } = string.Empty;
 }
 
 public sealed class LifecycleStageDeclarationRecord : IOrganizationOwned

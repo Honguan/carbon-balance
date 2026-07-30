@@ -107,7 +107,15 @@ public sealed class WorkspaceModel : PageModel
 
     public IReadOnlyList<PcrVersionRecord> PcrVersions { get; private set; } = [];
 
+    public IReadOnlyList<PcrStageRuleRecord> PcrStageRules { get; private set; } = [];
+
     public IReadOnlyList<PcrVersionRecord> SelectablePcrVersions { get; private set; } = [];
+
+    public IReadOnlyDictionary<Guid, int> PcrAffectedProjectCounts { get; private set; } =
+        new Dictionary<Guid, int>();
+
+    public IReadOnlyDictionary<Guid, IReadOnlyList<InventoryProjectVersionRecord>> PcrAffectedProjects { get; private set; } =
+        new Dictionary<Guid, IReadOnlyList<InventoryProjectVersionRecord>>();
 
     public IReadOnlyList<ActivityDataRecord> Activities { get; private set; } = [];
 
@@ -560,9 +568,13 @@ public sealed class WorkspaceModel : PageModel
             await LoadAsync(cancellationToken);
             return Page();
         }
-        if (!await _dbContext.ProductVersions.AnyAsync(
-                item => item.Id == productVersionId && item.OrganizationId == organizationId,
-                cancellationToken))
+        var productContext = await (
+                from version in _dbContext.ProductVersions.AsNoTracking()
+                join product in _dbContext.Products.AsNoTracking() on version.ProductId equals product.Id
+                where version.Id == productVersionId && version.OrganizationId == organizationId
+                select new { version.Id, product.CategoryCode })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (productContext is null)
         {
             ModelState.AddModelError("productVersionId", "所選產品版本不存在或不屬於目前組織。");
             await LoadAsync(cancellationToken);
@@ -579,10 +591,37 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
-        var pcrReference = ToPcrReference(pcr);
-        if (!pcrReference.IsAvailableOn(periodEnd))
+        var pcrStageRules = await _dbContext.PcrStageRules
+            .AsNoTracking()
+            .Where(item => item.PcrVersionId == pcr.Id)
+            .OrderBy(item => item.LifecycleStage)
+            .ToArrayAsync(cancellationToken);
+        var pcrRuleSet = ToPcrRuleSet(pcr, pcrStageRules);
+        var defaultStageApplicability = Enum.GetValues<LifecycleStage>()
+            .ToDictionary(
+                stage => stage,
+                stage => pcrRuleSet.StageRules
+                    .SingleOrDefault(item => item.Stage == stage)?.Requirement != PcrStageRequirement.Prohibited);
+        var pcrViolations = PcrRuleEngine.Validate(
+            pcrRuleSet,
+            new PcrProjectContext(
+                Guid.Empty,
+                productContext.CategoryCode,
+                periodEnd,
+                functionalUnit.Trim(),
+                declaredUnit.Trim(),
+                systemBoundary.Trim(),
+                allocationMethod.Trim(),
+                defaultStageApplicability,
+                [],
+                exclusions.Trim()),
+            requireCompleteInventory: false);
+        if (pcrViolations.Count > 0)
         {
-            ModelState.AddModelError("inventory", "PCR 版本未發布、已撤回或不在盤查期間有效範圍。");
+            foreach (var violation in pcrViolations)
+            {
+                ModelState.AddModelError("inventory", $"{violation.Code}：{violation.Message}");
+            }
             await LoadAsync(cancellationToken);
             return Page();
         }
@@ -616,8 +655,8 @@ public sealed class WorkspaceModel : PageModel
                 OrganizationId = organizationId,
                 InventoryProjectVersionId = projectId,
                 LifecycleStage = (int)stage,
-                IsApplicable = true,
-                Reason = string.Empty
+                IsApplicable = defaultStageApplicability[stage],
+                Reason = defaultStageApplicability[stage] ? string.Empty : "PCR 規則禁止納入此階段。"
             }));
         AddAudit("inventory.version.created", "InventoryProjectVersion", projectId);
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -649,6 +688,21 @@ public sealed class WorkspaceModel : PageModel
         {
             return BadRequest();
         }
+        var pcrStageRule = project.PcrVersionId.HasValue
+            ? await _dbContext.PcrStageRules.AsNoTracking().SingleOrDefaultAsync(
+                item => item.PcrVersionId == project.PcrVersionId.Value
+                    && item.LifecycleStage == declaration.LifecycleStage,
+                cancellationToken)
+            : null;
+        if (pcrStageRule is not null
+            && Enum.TryParse<PcrStageRequirement>(pcrStageRule.Requirement, out var stageRequirement)
+            && ((stageRequirement == PcrStageRequirement.Mandatory && !isApplicable)
+                || (stageRequirement == PcrStageRequirement.Prohibited && isApplicable)))
+        {
+            ModelState.AddModelError("stage", "階段適用性不可違反已選 PCR 的必要或禁止規則。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
         if (!isApplicable && string.IsNullOrWhiteSpace(reason))
         {
             ModelState.AddModelError("stage", "不適用階段必須填寫原因。");
@@ -675,6 +729,7 @@ public sealed class WorkspaceModel : PageModel
         string registrationNumber,
         int versionNumber,
         string title,
+        DateOnly? approvalDate,
         DateOnly? validFrom,
         DateOnly? validTo,
         string sourceReference,
@@ -682,8 +737,33 @@ public sealed class WorkspaceModel : PageModel
         string cccClassification,
         string pcrApplicability,
         string ruleRequirements,
-        string originalDocumentName,
-        string originalDocumentSha256,
+        string productCategoryPatterns,
+        string functionalUnitPattern,
+        string declaredUnitCode,
+        string systemBoundaryCode,
+        string permittedAllocationMethods,
+        decimal cutoffThresholdPercent,
+        string formulaRuleSetVersion,
+        int roundingDecimalPlaces,
+        string reportingRequirements,
+        bool isCustomRule,
+        string customRuleJustification,
+        IFormFile originalDocument,
+        string rawMaterialRequirement,
+        string rawMaterialKinds,
+        string rawMaterialRequiredFields,
+        string manufacturingRequirement,
+        string manufacturingKinds,
+        string manufacturingRequiredFields,
+        string distributionRequirement,
+        string distributionKinds,
+        string distributionRequiredFields,
+        string useRequirement,
+        string useKinds,
+        string useRequiredFields,
+        string endOfLifeRequirement,
+        string endOfLifeKinds,
+        string endOfLifeRequiredFields,
         CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
@@ -691,32 +771,116 @@ public sealed class WorkspaceModel : PageModel
             return Forbid();
         }
 
-        var validSha = SourceDocumentIntegrity.TryNormalizeSha256(originalDocumentSha256, out var normalizedSha);
         if (string.IsNullOrWhiteSpace(registrationNumber)
             || versionNumber < 1
             || string.IsNullOrWhiteSpace(title)
-            || string.IsNullOrWhiteSpace(sourceReference)
+            || !IsHttpSourceUrl(sourceReference)
             || string.IsNullOrWhiteSpace(standardCode)
             || string.IsNullOrWhiteSpace(cccClassification)
             || string.IsNullOrWhiteSpace(pcrApplicability)
             || string.IsNullOrWhiteSpace(ruleRequirements)
-            || string.IsNullOrWhiteSpace(originalDocumentName)
-            || !validSha
+            || string.IsNullOrWhiteSpace(productCategoryPatterns)
+            || string.IsNullOrWhiteSpace(functionalUnitPattern)
+            || string.IsNullOrWhiteSpace(declaredUnitCode)
+            || string.IsNullOrWhiteSpace(systemBoundaryCode)
+            || string.IsNullOrWhiteSpace(permittedAllocationMethods)
+            || string.IsNullOrWhiteSpace(formulaRuleSetVersion)
+            || string.IsNullOrWhiteSpace(reportingRequirements)
+            || cutoffThresholdPercent is < 0 or > 100
+            || roundingDecimalPlaces is < 0 or > 12
+            || (isCustomRule && string.IsNullOrWhiteSpace(customRuleJustification))
+            || originalDocument is null
+            || originalDocument.Length <= 0
+            || approvalDate is null
+            || validFrom is null
+            || validTo is null
             || validFrom > validTo)
         {
-            ModelState.AddModelError("pcr", "PCR 登錄編號、正整數版本、名稱、來源與有效期間必須有效。");
+            ModelState.AddModelError("pcr", "PCR 識別、適用條件、計算規則、原始文件與有效期間必須完整且有效。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var organizationId = RequireOrganization();
+        if (!await _dbContext.Units.AnyAsync(
+                item => item.CatalogueVersion == CurrentUnitCatalogueVersion
+                    && item.Code == declaredUnitCode.Trim(),
+                cancellationToken))
+        {
+            ModelState.AddModelError("pcr", "PCR 標示單位必須使用目前受控單位目錄中的代碼。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        if (!string.Equals(
+                formulaRuleSetVersion.Trim(),
+                ActivityEmissionFormula.PcrFormulaRuleSetV1,
+                StringComparison.Ordinal))
+        {
+            ModelState.AddModelError("pcr", "PCR 公式規則版本目前僅支援 pcr-formulas-v1。");
             await LoadAsync(cancellationToken);
             return Page();
         }
 
         var pcrVersionId = Guid.NewGuid();
+        if (!TryBuildPcrStageRules(
+                organizationId,
+                pcrVersionId,
+                [
+                    (LifecycleStage.RawMaterial, rawMaterialRequirement, rawMaterialKinds, rawMaterialRequiredFields),
+                    (LifecycleStage.Manufacturing, manufacturingRequirement, manufacturingKinds, manufacturingRequiredFields),
+                    (LifecycleStage.Distribution, distributionRequirement, distributionKinds, distributionRequiredFields),
+                    (LifecycleStage.Use, useRequirement, useKinds, useRequiredFields),
+                    (LifecycleStage.EndOfLife, endOfLifeRequirement, endOfLifeKinds, endOfLifeRequiredFields)
+                ],
+                out var stageRules,
+                out var stageRuleError))
+        {
+            ModelState.AddModelError("pcr", stageRuleError);
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var existingVersions = await _dbContext.PcrVersions
+            .AsNoTracking()
+            .Where(item => item.RegistrationNumber == registrationNumber.Trim())
+            .OrderByDescending(item => item.VersionNumber)
+            .ToArrayAsync(cancellationToken);
+        if (existingVersions.Any(item => item.VersionNumber == versionNumber))
+        {
+            ModelState.AddModelError("pcr", "同一 PCR 登錄編號不可重複建立相同版本號。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        StoredEvidence storedDocument;
+        try
+        {
+            await using var content = originalDocument.OpenReadStream();
+            storedDocument = await _evidenceStorageService.StoreAsync(
+                organizationId,
+                content,
+                originalDocument.FileName,
+                originalDocument.ContentType,
+                cancellationToken);
+        }
+        catch (InvalidOperationException exception)
+        {
+            ModelState.AddModelError("pcr", exception.Message);
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        var previousVersion = existingVersions.FirstOrDefault(item => item.VersionNumber < versionNumber);
         _dbContext.PcrVersions.Add(new PcrVersionRecord
         {
             Id = pcrVersionId,
-            OrganizationId = RequireOrganization(),
+            OrganizationId = organizationId,
+            RuleSetId = existingVersions.FirstOrDefault()?.RuleSetId ?? Guid.NewGuid(),
             RegistrationNumber = registrationNumber.Trim(),
             VersionNumber = versionNumber,
             Title = title.Trim(),
+            ApprovalDate = approvalDate,
             ValidFrom = validFrom,
             ValidTo = validTo,
             PublicationStatus = PcrPublicationStatus.Draft.ToString(),
@@ -725,14 +889,35 @@ public sealed class WorkspaceModel : PageModel
             CccClassification = cccClassification.Trim(),
             Applicability = pcrApplicability.Trim(),
             RuleRequirements = ruleRequirements.Trim(),
-            OriginalDocumentName = originalDocumentName?.Trim() ?? string.Empty,
-            OriginalDocumentSha256 = normalizedSha,
+            OriginalDocumentName = storedDocument.OriginalFileName,
+            OriginalDocumentObjectKey = storedDocument.ObjectKey,
+            OriginalDocumentContentType = storedDocument.ContentType,
+            OriginalDocumentSizeBytes = storedDocument.SizeBytes,
+            OriginalDocumentSha256 = storedDocument.Sha256,
+            OriginalDocumentScanStatus = storedDocument.ScanStatus.ToString(),
+            ProductCategoryPatterns = productCategoryPatterns.Trim(),
+            FunctionalUnitPattern = functionalUnitPattern.Trim(),
+            DeclaredUnitCode = declaredUnitCode.Trim(),
+            SystemBoundaryCode = systemBoundaryCode.Trim(),
+            PermittedAllocationMethodsCsv = NormalizeCsv(permittedAllocationMethods),
+            CutoffThresholdPercent = cutoffThresholdPercent,
+            FormulaRuleSetVersion = formulaRuleSetVersion.Trim(),
+            RoundingDecimalPlaces = roundingDecimalPlaces,
+            ReportingRequirements = reportingRequirements.Trim(),
+            IsCustomRule = isCustomRule,
+            CustomRuleJustification = customRuleJustification?.Trim() ?? string.Empty,
+            CustomApprovalStatus = isCustomRule
+                ? PcrCustomApprovalStatus.Pending.ToString()
+                : PcrCustomApprovalStatus.NotRequired.ToString(),
+            SupersedesVersionId = previousVersion?.Id,
             ReviewStatus = PcrReviewStatus.Pending.ToString(),
+            CreatedBy = Guid.TryParse(_userManager.GetUserId(User), out var creatorId) ? creatorId : null,
             CreatedAt = DateTimeOffset.UtcNow
         });
+        _dbContext.PcrStageRules.AddRange(stageRules);
         AddAudit("pcr.version.created", "PcrVersion", pcrVersionId);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        StatusMessage = "PCR 草稿已建立；發布後才可建立新盤查。";
+        StatusMessage = $"PCR 草稿已建立；原始文件 SHA-256：{storedDocument.Sha256}。";
         return RedirectToPage(new { section = Section });
     }
 
@@ -751,11 +936,71 @@ public sealed class WorkspaceModel : PageModel
         {
             return BadRequest();
         }
+        if (pcr.ReviewStatus != PcrReviewStatus.Pending.ToString())
+        {
+            return BadRequest();
+        }
+
+        var reviewerId = Guid.TryParse(_userManager.GetUserId(User), out var currentUserId)
+            ? currentUserId
+            : (Guid?)null;
+        if (pcr.CreatedBy.HasValue && pcr.CreatedBy == reviewerId)
+        {
+            ModelState.AddModelError("pcr", "PCR 建立者不可核准自己的規則版本，請由另一位具權限且已啟用 MFA 的人員審查。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
 
         pcr.ReviewStatus = PcrReviewStatus.Approved.ToString();
+        if (pcr.IsCustomRule)
+        {
+            pcr.CustomApprovalStatus = PcrCustomApprovalStatus.Approved.ToString();
+        }
         pcr.ReviewedAt = DateTimeOffset.UtcNow;
-        pcr.ReviewedBy = Guid.TryParse(_userManager.GetUserId(User), out var reviewerId) ? reviewerId : null;
+        pcr.ReviewedBy = reviewerId;
         AddAudit("pcr.version.reviewed", "PcrVersion", pcr.Id);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return RedirectToPage(new { section = Section });
+    }
+
+    public async Task<IActionResult> OnPostRejectPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
+        {
+            return Forbid();
+        }
+
+        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(
+            item => item.Id == pcrVersionId,
+            cancellationToken);
+        if (pcr is null)
+        {
+            return NotFound();
+        }
+        if (pcr.PublicationStatus != PcrPublicationStatus.Draft.ToString()
+            || pcr.ReviewStatus != PcrReviewStatus.Pending.ToString())
+        {
+            return BadRequest();
+        }
+
+        var reviewerId = Guid.TryParse(_userManager.GetUserId(User), out var currentUserId)
+            ? currentUserId
+            : (Guid?)null;
+        if (pcr.CreatedBy.HasValue && pcr.CreatedBy == reviewerId)
+        {
+            ModelState.AddModelError("pcr", "PCR 建立者不可審查自己建立的版本。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
+        pcr.ReviewStatus = PcrReviewStatus.Rejected.ToString();
+        if (pcr.IsCustomRule)
+        {
+            pcr.CustomApprovalStatus = PcrCustomApprovalStatus.Rejected.ToString();
+        }
+        pcr.ReviewedAt = DateTimeOffset.UtcNow;
+        pcr.ReviewedBy = reviewerId;
+        AddAudit("pcr.version.rejected", "PcrVersion", pcr.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return RedirectToPage(new { section = Section });
     }
@@ -777,16 +1022,55 @@ public sealed class WorkspaceModel : PageModel
             return NotFound();
         }
 
+        var hasControlledDeclaredUnit = await _dbContext.Units.AnyAsync(
+            item => item.CatalogueVersion == CurrentUnitCatalogueVersion
+                && item.Code == pcr.DeclaredUnitCode,
+            cancellationToken);
+        var hasLaterReleasedVersion = await _dbContext.PcrVersions.AnyAsync(
+            item => item.RuleSetId == pcr.RuleSetId
+                && item.VersionNumber > pcr.VersionNumber
+                && item.PublicationStatus != PcrPublicationStatus.Draft.ToString(),
+            cancellationToken);
         if (!string.Equals(pcr.PublicationStatus, PcrPublicationStatus.Draft.ToString(), StringComparison.Ordinal)
-            || pcr.ReviewStatus != PcrReviewStatus.Approved.ToString())
+            || pcr.ReviewStatus != PcrReviewStatus.Approved.ToString()
+            || hasLaterReleasedVersion
+            || (pcr.IsCustomRule
+                && pcr.CustomApprovalStatus != PcrCustomApprovalStatus.Approved.ToString())
+            || !SourceDocumentIntegrity.TryNormalizeSha256(pcr.OriginalDocumentSha256, out _)
+            || string.IsNullOrWhiteSpace(pcr.OriginalDocumentObjectKey)
+            || !string.Equals(pcr.OriginalDocumentScanStatus, "Clean", StringComparison.Ordinal)
+            || string.IsNullOrWhiteSpace(pcr.ProductCategoryPatterns)
+            || string.IsNullOrWhiteSpace(pcr.FunctionalUnitPattern)
+            || string.IsNullOrWhiteSpace(pcr.DeclaredUnitCode)
+            || !hasControlledDeclaredUnit
+            || string.IsNullOrWhiteSpace(pcr.SystemBoundaryCode)
+            || !string.Equals(
+                pcr.FormulaRuleSetVersion,
+                ActivityEmissionFormula.PcrFormulaRuleSetV1,
+                StringComparison.Ordinal)
+            || await _dbContext.PcrStageRules.CountAsync(
+                item => item.PcrVersionId == pcr.Id,
+                cancellationToken) != Enum.GetValues<LifecycleStage>().Length)
         {
-            ModelState.AddModelError("pcr", "只有草稿 PCR 版本可發布。");
+            ModelState.AddModelError("pcr", "只有已核准、原始文件驗證成功且規則完整的 PCR 草稿可發布。");
             await LoadAsync(cancellationToken);
             return Page();
         }
 
         pcr.PublicationStatus = PcrPublicationStatus.Published.ToString();
         pcr.PublishedAt = DateTimeOffset.UtcNow;
+        var publishedPredecessors = await _dbContext.PcrVersions
+            .Where(item => item.RuleSetId == pcr.RuleSetId
+                && item.Id != pcr.Id
+                && item.VersionNumber < pcr.VersionNumber
+                && item.PublicationStatus == PcrPublicationStatus.Published.ToString())
+            .ToArrayAsync(cancellationToken);
+        foreach (var predecessor in publishedPredecessors)
+        {
+            predecessor.DeprecatedAt = DateTimeOffset.UtcNow;
+            predecessor.DeprecationReason = $"由 {pcr.RegistrationNumber} 第 {pcr.VersionNumber} 版取代。";
+            AddAudit("pcr.version.superseded", "PcrVersion", predecessor.Id);
+        }
         AddAudit("pcr.version.published", "PcrVersion", pcr.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "PCR 版本已發布。";
@@ -1707,12 +1991,16 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
-        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(
-            item => item.Id == project.PcrVersionId.Value,
+        var pcrViolations = await ValidatePcrProjectAsync(
+            project,
+            requireCompleteInventory: true,
             cancellationToken);
-        if (pcr is null || !ToPcrReference(pcr).IsAvailableOn(project.PeriodEnd))
+        if (pcrViolations.Count > 0)
         {
-            ModelState.AddModelError("calculation", "PCR 版本未發布、已撤回或不在盤查期間有效範圍。");
+            foreach (var violation in pcrViolations)
+            {
+                ModelState.AddModelError("calculation", $"{violation.Code}：{violation.Message}");
+            }
             await LoadAsync(cancellationToken);
             return Page();
         }
@@ -1758,6 +2046,9 @@ public sealed class WorkspaceModel : PageModel
         var factorRecords = await _dbContext.EmissionFactorVersions
             .Where(item => factorIds.Contains(item.Id))
             .ToDictionaryAsync(item => item.Id, cancellationToken);
+        var pcr = await _dbContext.PcrVersions.AsNoTracking().SingleAsync(
+            item => item.Id == project.PcrVersionId,
+            cancellationToken);
 
         return new InventoryProjectSnapshot(
             RequireOrganization(),
@@ -1767,7 +2058,7 @@ public sealed class WorkspaceModel : PageModel
             project.PeriodEnd,
             project.FunctionalUnit,
             project.PcrVersion,
-            PendingStageFormulaRuleSetVersion,
+            pcr.FormulaRuleSetVersion,
             "gwp-fixture-p0-v1",
             GetActivityUnitCatalogueVersion(activities),
             stageDeclarations.Select(item => new StageDeclaration(
@@ -1826,7 +2117,10 @@ public sealed class WorkspaceModel : PageModel
             project.AllocationReason,
             project.Exclusions,
             project.Assumptions,
-            project.EstimationReason);
+            project.EstimationReason,
+            pcr.CutoffThresholdPercent,
+            pcr.RoundingDecimalPlaces,
+            pcr.ReportingRequirements);
     }
 
     private async Task LoadAsync(CancellationToken cancellationToken)
@@ -1849,10 +2143,26 @@ public sealed class WorkspaceModel : PageModel
         Memberships = await _dbContext.OrganizationMemberships.AsNoTracking().OrderBy(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         Invitations = await _dbContext.OrganizationInvitations.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         PcrVersions = await _dbContext.PcrVersions.AsNoTracking().OrderBy(item => item.RegistrationNumber).ThenByDescending(item => item.VersionNumber).ToArrayAsync(cancellationToken);
+        PcrStageRules = await _dbContext.PcrStageRules.AsNoTracking().OrderBy(item => item.LifecycleStage).ToArrayAsync(cancellationToken);
         SelectablePcrVersions = PcrVersions
-            .Where(item => item.PublicationStatus == PcrPublicationStatus.Published.ToString())
+            .Where(item => ToPcrRuleSet(
+                    item,
+                    PcrStageRules.Where(rule => rule.PcrVersionId == item.Id))
+                .IsPublishedAndApproved)
             .ToArray();
         InventoryProjects = await _dbContext.InventoryProjectVersions.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
+        PcrAffectedProjectCounts = InventoryProjects
+            .Where(item => item.PcrVersionId.HasValue)
+            .GroupBy(item => item.PcrVersionId!.Value)
+            .ToDictionary(group => group.Key, group => group.Count());
+        PcrAffectedProjects = InventoryProjects
+            .Where(item => item.PcrVersionId.HasValue)
+            .GroupBy(item => item.PcrVersionId!.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<InventoryProjectVersionRecord>)group
+                    .OrderBy(item => item.PeriodEnd)
+                    .ToArray());
         if (!ProjectVersionId.HasValue || InventoryProjects.All(item => item.Id != ProjectVersionId.Value))
         {
             ProjectVersionId = InventoryProjects.FirstOrDefault()?.Id;
@@ -2061,14 +2371,243 @@ public sealed class WorkspaceModel : PageModel
         return result.Succeeded;
     }
 
-    private static PcrVersionReference ToPcrReference(PcrVersionRecord record) => new(
-        record.Id,
-        record.RegistrationNumber,
-        record.VersionNumber,
-        record.ValidFrom,
-        record.ValidTo,
-        Enum.Parse<PcrPublicationStatus>(record.PublicationStatus),
-        Enum.Parse<PcrReviewStatus>(record.ReviewStatus));
+    private async Task<IReadOnlyList<PcrRuleViolation>> ValidatePcrProjectAsync(
+        InventoryProjectVersionRecord project,
+        bool requireCompleteInventory,
+        CancellationToken cancellationToken)
+    {
+        if (!project.PcrVersionId.HasValue)
+        {
+            return
+            [
+                new(
+                    "PCR-MISSING",
+                    "InventoryProjectVersion",
+                    project.Id.ToString(),
+                    "盤查版本未綁定 PCR 規則版本。")
+            ];
+        }
+
+        var pcr = await _dbContext.PcrVersions.AsNoTracking().SingleOrDefaultAsync(
+            item => item.Id == project.PcrVersionId.Value,
+            cancellationToken);
+        if (pcr is null)
+        {
+            return
+            [
+                new(
+                    "PCR-NOT-FOUND",
+                    "InventoryProjectVersion",
+                    project.Id.ToString(),
+                    "盤查綁定的 PCR 規則版本不存在。")
+            ];
+        }
+
+        var stageRules = await _dbContext.PcrStageRules.AsNoTracking()
+            .Where(item => item.PcrVersionId == pcr.Id)
+            .OrderBy(item => item.LifecycleStage)
+            .ToArrayAsync(cancellationToken);
+        var categoryCode = await (
+                from productVersion in _dbContext.ProductVersions.AsNoTracking()
+                join product in _dbContext.Products.AsNoTracking() on productVersion.ProductId equals product.Id
+                where productVersion.Id == project.ProductVersionId
+                select product.CategoryCode)
+            .SingleAsync(cancellationToken);
+        var declarations = await _dbContext.LifecycleStageDeclarations.AsNoTracking()
+            .Where(item => item.InventoryProjectVersionId == project.Id)
+            .ToDictionaryAsync(
+                item => (LifecycleStage)item.LifecycleStage,
+                item => item.IsApplicable,
+                cancellationToken);
+        var activities = await _dbContext.ActivityData.AsNoTracking()
+            .Where(item => item.InventoryProjectVersionId == project.Id)
+            .OrderBy(item => item.Id)
+            .ToArrayAsync(cancellationToken);
+        var activityContexts = activities.Select(activity => new PcrActivityContext(
+            activity.Id,
+            (LifecycleStage)activity.LifecycleStage,
+            Enum.TryParse<ActivityDataKind>(activity.ActivityKind, out var kind) ? kind : (ActivityDataKind)0,
+            GetPopulatedActivityFields(activity))).ToArray();
+
+        return PcrRuleEngine.Validate(
+            ToPcrRuleSet(pcr, stageRules),
+            new PcrProjectContext(
+                project.Id,
+                categoryCode,
+                project.PeriodEnd,
+                project.FunctionalUnit,
+                project.DeclaredUnit,
+                project.SystemBoundary,
+                project.AllocationMethod,
+                declarations,
+                activityContexts,
+                project.Exclusions),
+            requireCompleteInventory);
+    }
+
+    private static PcrRuleSetVersion ToPcrRuleSet(
+        PcrVersionRecord record,
+        IEnumerable<PcrStageRuleRecord> stageRules)
+    {
+        var sourceVerified = !string.IsNullOrWhiteSpace(record.OriginalDocumentObjectKey)
+            && string.Equals(record.OriginalDocumentScanStatus, "Clean", StringComparison.Ordinal)
+            && SourceDocumentIntegrity.TryNormalizeSha256(record.OriginalDocumentSha256, out _);
+        var publicationStatus = sourceVerified
+            ? Enum.Parse<PcrPublicationStatus>(record.PublicationStatus)
+            : PcrPublicationStatus.Draft;
+        return new PcrRuleSetVersion(
+            record.Id,
+            record.RuleSetId,
+            record.RegistrationNumber,
+            record.VersionNumber,
+            record.ProductCategoryPatterns,
+            record.ApprovalDate,
+            record.ValidFrom,
+            record.ValidTo,
+            publicationStatus,
+            Enum.Parse<PcrReviewStatus>(record.ReviewStatus),
+            record.FunctionalUnitPattern,
+            record.DeclaredUnitCode,
+            record.SystemBoundaryCode,
+            SplitCsv(record.PermittedAllocationMethodsCsv)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase),
+            record.CutoffThresholdPercent,
+            record.FormulaRuleSetVersion,
+            record.RoundingDecimalPlaces,
+            record.ReportingRequirements,
+            record.IsCustomRule,
+            record.CustomRuleJustification,
+            Enum.Parse<PcrCustomApprovalStatus>(record.CustomApprovalStatus),
+            record.DeprecatedAt,
+            record.SupersedesVersionId,
+            stageRules.Select(rule => new PcrLifecycleStageRule(
+                    (LifecycleStage)rule.LifecycleStage,
+                    Enum.Parse<PcrStageRequirement>(rule.Requirement),
+                    SplitCsv(rule.PermittedActivityKindsCsv)
+                        .Select(value => Enum.Parse<ActivityDataKind>(value))
+                        .ToHashSet(),
+                    SplitCsv(rule.RequiredFieldsCsv).ToHashSet(StringComparer.Ordinal)))
+                .OrderBy(rule => rule.Stage)
+                .ToArray());
+    }
+
+    private static bool TryBuildPcrStageRules(
+        Guid organizationId,
+        Guid pcrVersionId,
+        IReadOnlyList<(LifecycleStage Stage, string Requirement, string Kinds, string RequiredFields)> inputs,
+        out PcrStageRuleRecord[] rules,
+        out string error)
+    {
+        var allowedFields = new HashSet<string>(StringComparer.Ordinal)
+        {
+            nameof(ActivityDataRecord.Name),
+            nameof(ActivityDataRecord.SupplierOrScenario),
+            nameof(ActivityDataRecord.EquipmentCategory),
+            nameof(ActivityDataRecord.DataSourceType),
+            nameof(ActivityDataRecord.DataProvider),
+            nameof(ActivityDataRecord.CollectionMethod),
+            nameof(ActivityDataRecord.SourceReference),
+            nameof(ActivityDataRecord.RawValue),
+            nameof(ActivityDataRecord.RawUnitCode),
+            nameof(ActivityDataRecord.PeriodStart),
+            nameof(ActivityDataRecord.PeriodEnd),
+            nameof(ActivityDataRecord.FactorVersionId),
+            nameof(ActivityDataRecord.AllocationFactor),
+            nameof(ActivityDataRecord.DataQuality),
+            nameof(ActivityDataRecord.EvidenceSha256)
+        };
+        var result = new List<PcrStageRuleRecord>();
+        foreach (var input in inputs)
+        {
+            if (!Enum.TryParse<PcrStageRequirement>(input.Requirement, true, out var requirement))
+            {
+                rules = [];
+                error = $"{LifecycleStageDisplayName(input.Stage)}的必要性設定無效。";
+                return false;
+            }
+
+            var kindValues = SplitCsv(input.Kinds);
+            if (kindValues.Count == 0
+                || kindValues.Any(value => !Enum.TryParse<ActivityDataKind>(value, true, out _)))
+            {
+                rules = [];
+                error = $"{LifecycleStageDisplayName(input.Stage)}的活動類型清單無效。";
+                return false;
+            }
+
+            var requiredFields = SplitCsv(input.RequiredFields);
+            if (requiredFields.Any(field => !allowedFields.Contains(field)))
+            {
+                rules = [];
+                error = $"{LifecycleStageDisplayName(input.Stage)}含有未受控的必填欄位。";
+                return false;
+            }
+
+            result.Add(new PcrStageRuleRecord
+            {
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationId,
+                PcrVersionId = pcrVersionId,
+                LifecycleStage = (int)input.Stage,
+                Requirement = requirement.ToString(),
+                PermittedActivityKindsCsv = string.Join(
+                    ",",
+                    kindValues.Select(value => Enum.Parse<ActivityDataKind>(value, true).ToString())),
+                RequiredFieldsCsv = string.Join(",", requiredFields)
+            });
+        }
+
+        rules = result.ToArray();
+        error = string.Empty;
+        return true;
+    }
+
+    private static IReadOnlySet<string> GetPopulatedActivityFields(ActivityDataRecord activity)
+    {
+        var fields = new HashSet<string>(StringComparer.Ordinal)
+        {
+            nameof(ActivityDataRecord.Name),
+            nameof(ActivityDataRecord.RawValue),
+            nameof(ActivityDataRecord.RawUnitCode),
+            nameof(ActivityDataRecord.PeriodStart),
+            nameof(ActivityDataRecord.PeriodEnd),
+            nameof(ActivityDataRecord.FactorVersionId),
+            nameof(ActivityDataRecord.AllocationFactor)
+        };
+        AddPopulated(nameof(ActivityDataRecord.SupplierOrScenario), activity.SupplierOrScenario);
+        AddPopulated(nameof(ActivityDataRecord.EquipmentCategory), activity.EquipmentCategory);
+        AddPopulated(nameof(ActivityDataRecord.DataSourceType), activity.DataSourceType);
+        AddPopulated(nameof(ActivityDataRecord.DataProvider), activity.DataProvider);
+        AddPopulated(nameof(ActivityDataRecord.CollectionMethod), activity.CollectionMethod);
+        AddPopulated(nameof(ActivityDataRecord.SourceReference), activity.SourceReference);
+        AddPopulated(nameof(ActivityDataRecord.DataQuality), activity.DataQuality);
+        AddPopulated(nameof(ActivityDataRecord.EvidenceSha256), activity.EvidenceSha256);
+        return fields;
+
+        void AddPopulated(string field, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                fields.Add(field);
+            }
+        }
+    }
+
+    private static IReadOnlyList<string> SplitCsv(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split(
+                    [',', ';'],
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+    private static string NormalizeCsv(string? value) => string.Join(",", SplitCsv(value));
+
+    private static bool IsHttpSourceUrl(string? value) =>
+        Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri)
+        && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
 
     private void AddAudit(string action, string resourceType, Guid resourceId)
     {

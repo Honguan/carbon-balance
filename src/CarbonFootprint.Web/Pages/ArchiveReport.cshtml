@@ -4,6 +4,8 @@
 @using CarbonFootprint.Domain.Modules.Inventories
 @{
     ViewData["Title"] = "可歸檔產品碳足跡報告";
+    var roundingDecimalPlaces = Math.Clamp(Model.PcrRule?.RoundingDecimalPlaces ?? 3, 0, 12);
+    string FormatReportingDecimal(decimal value) => value.ToString($"F{roundingDecimalPlaces}");
     string WorkflowStatusName(string status) => status switch
     {
         "Draft" => "草稿",
@@ -55,7 +57,10 @@
     <dt class="col-sm-4">資料品質摘要</dt><dd class="col-sm-8"><code>@Model.Run.DataQualitySummaryJson</code></dd>
     <dt class="col-sm-4">計算版本 ID</dt><dd class="col-sm-8"><code>@Model.Run.Id</code></dd>
     <dt class="col-sm-4">輸入資料 SHA-256</dt><dd class="col-sm-8"><code>@Model.Run.InputSha256</code></dd>
-    <dt class="col-sm-4">產品總量</dt><dd class="col-sm-8">@Model.Run.ProductTotal kgCO2e</dd>
+    <dt class="col-sm-4">PCR 截斷門檻</dt><dd class="col-sm-8">@(Model.PcrRule?.CutoffThresholdPercent ?? 0m)%（排除項目須明確揭露）</dd>
+    <dt class="col-sm-4">報告四捨五入</dt><dd class="col-sm-8">小數 @roundingDecimalPlaces 位；內部計算保留原始精度</dd>
+    <dt class="col-sm-4">PCR 報告要求</dt><dd class="col-sm-8">@(Model.PcrRule?.ReportingRequirements ?? "未保存額外報告要求")</dd>
+    <dt class="col-sm-4">產品總量</dt><dd class="col-sm-8">@FormatReportingDecimal(Model.Run.ProductTotal) kgCO2e</dd>
 </dl>
 
 <h2>逐項追溯</h2>
@@ -75,7 +80,7 @@
                     <td>@line.CanonicalActivityValue @line.ActivityUnitCode</td>
                     <td><code>@line.FactorVersionId</code>（@line.FactorValue @line.FactorUnit）</td>
                     <td>@line.AllocationFactor</td>
-                    <td>@line.Emissions @line.EmissionsUnitCode</td>
+                    <td>@FormatReportingDecimal(line.Emissions) @line.EmissionsUnitCode</td>
                     <td><code>@evidenceHash</code></td>
                 </tr>
             }

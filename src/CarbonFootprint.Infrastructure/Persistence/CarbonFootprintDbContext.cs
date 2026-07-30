@@ -26,6 +26,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
     public DbSet<ProductVersionRecord> ProductVersions => Set<ProductVersionRecord>();
     public DbSet<InventoryProjectVersionRecord> InventoryProjectVersions => Set<InventoryProjectVersionRecord>();
     public DbSet<PcrVersionRecord> PcrVersions => Set<PcrVersionRecord>();
+    public DbSet<PcrStageRuleRecord> PcrStageRules => Set<PcrStageRuleRecord>();
     public DbSet<LifecycleStageDeclarationRecord> LifecycleStageDeclarations => Set<LifecycleStageDeclarationRecord>();
     public DbSet<UnitRecord> Units => Set<UnitRecord>();
     public DbSet<EmissionFactorVersionRecord> EmissionFactorVersions => Set<EmissionFactorVersionRecord>();
@@ -192,9 +193,45 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.Applicability).HasMaxLength(2000);
             entity.Property(item => item.RuleRequirements).HasMaxLength(4000);
             entity.Property(item => item.OriginalDocumentName).HasMaxLength(300);
+            entity.Property(item => item.OriginalDocumentObjectKey).HasMaxLength(1000);
+            entity.Property(item => item.OriginalDocumentContentType).HasMaxLength(200);
             entity.Property(item => item.OriginalDocumentSha256).HasMaxLength(64);
+            entity.Property(item => item.OriginalDocumentScanStatus).HasMaxLength(30);
+            entity.Property(item => item.ProductCategoryPatterns).HasMaxLength(1000);
+            entity.Property(item => item.FunctionalUnitPattern).HasMaxLength(500);
+            entity.Property(item => item.DeclaredUnitCode).HasMaxLength(50);
+            entity.Property(item => item.SystemBoundaryCode).HasMaxLength(200);
+            entity.Property(item => item.PermittedAllocationMethodsCsv).HasMaxLength(1000);
+            entity.Property(item => item.CutoffThresholdPercent).HasPrecision(9, 6);
+            entity.Property(item => item.FormulaRuleSetVersion).HasMaxLength(200);
+            entity.Property(item => item.ReportingRequirements).HasMaxLength(4000);
+            entity.Property(item => item.CustomRuleJustification).HasMaxLength(4000);
+            entity.Property(item => item.CustomApprovalStatus).HasMaxLength(30);
+            entity.Property(item => item.DeprecationReason).HasMaxLength(2000);
             entity.Property(item => item.ReviewStatus).HasMaxLength(30);
             entity.HasIndex(item => new { item.OrganizationId, item.RegistrationNumber, item.VersionNumber }).IsUnique();
+            entity.HasIndex(item => new { item.OrganizationId, item.RuleSetId, item.VersionNumber }).IsUnique();
+            entity.HasOne<PcrVersionRecord>()
+                .WithMany()
+                .HasForeignKey(item => item.SupersedesVersionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ApplicationUser>()
+                .WithMany()
+                .HasForeignKey(item => item.CreatedBy)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<PcrStageRuleRecord>(entity =>
+        {
+            entity.ToTable("pcr_stage_rules");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Requirement).HasMaxLength(30);
+            entity.Property(item => item.PermittedActivityKindsCsv).HasMaxLength(1000);
+            entity.Property(item => item.RequiredFieldsCsv).HasMaxLength(1000);
+            entity.HasIndex(item => new { item.PcrVersionId, item.LifecycleStage }).IsUnique();
+            entity.HasOne<PcrVersionRecord>()
+                .WithMany()
+                .HasForeignKey(item => item.PcrVersionId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<ActivityDataRecord>(entity =>
         {
@@ -264,7 +301,8 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
                 new UnitRecord { Id = Guid.Parse("72000000-0000-0000-0000-000000000002"), Code = "g", Symbol = "g", Dimension = "mass", ScaleToCanonical = 0.001m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v2", AliasesCsv = "gram,grams" },
                 new UnitRecord { Id = Guid.Parse("72000000-0000-0000-0000-000000000003"), Code = "tonne", Symbol = "t", Dimension = "mass", ScaleToCanonical = 1000m, OffsetToCanonical = 0m, CanonicalCode = "kg", CatalogueVersion = "units-p0-v2", AliasesCsv = "ton,tons,tonnes" },
                 new UnitRecord { Id = Guid.Parse("72000000-0000-0000-0000-000000000004"), Code = "kWh", Symbol = "kWh", Dimension = "energy", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "kWh", CatalogueVersion = "units-p0-v2", AliasesCsv = "kilowatt-hour" },
-                new UnitRecord { Id = Guid.Parse("72000000-0000-0000-0000-000000000005"), Code = "tonne-km", Symbol = "t·km", Dimension = "transport-work", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "tonne-km", CatalogueVersion = "units-p0-v2", AliasesCsv = "t-km,tkm", CompositeExpression = "tonne*km" });
+                new UnitRecord { Id = Guid.Parse("72000000-0000-0000-0000-000000000005"), Code = "tonne-km", Symbol = "t·km", Dimension = "transport-work", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "tonne-km", CatalogueVersion = "units-p0-v2", AliasesCsv = "t-km,tkm", CompositeExpression = "tonne*km" },
+                new UnitRecord { Id = Guid.Parse("72000000-0000-0000-0000-000000000006"), Code = "piece", Symbol = "pc", Dimension = "count", ScaleToCanonical = 1m, OffsetToCanonical = 0m, CanonicalCode = "piece", CatalogueVersion = "units-p0-v2", AliasesCsv = "pieces,item,items,件,個" });
         });
         builder.Entity<EmissionFactorVersionRecord>(entity =>
         {
@@ -387,6 +425,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         builder.Entity<ProductVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<InventoryProjectVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<PcrVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<PcrStageRuleRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<LifecycleStageDeclarationRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<EmissionFactorVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<ActivityDataRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
@@ -415,6 +454,43 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         if (immutableChange is not null)
         {
             throw new InvalidOperationException($"{immutableChange.Metadata.ClrType.Name} 是不可變 append-only 資料。");
+        }
+
+        var publishedPcrChange = ChangeTracker.Entries<PcrVersionRecord>()
+            .FirstOrDefault(entry =>
+                entry.State == EntityState.Modified
+                && !string.Equals(
+                    entry.Property(item => item.PublicationStatus).OriginalValue,
+                    "Draft",
+                    StringComparison.Ordinal)
+                && entry.Properties.Any(property =>
+                    property.IsModified
+                    && property.Metadata.Name is not nameof(PcrVersionRecord.PublicationStatus)
+                        and not nameof(PcrVersionRecord.WithdrawnAt)
+                        and not nameof(PcrVersionRecord.DeprecatedAt)
+                        and not nameof(PcrVersionRecord.DeprecationReason)));
+        if (publishedPcrChange is not null)
+        {
+            throw new InvalidOperationException("已發布或撤回的 PCR 規則版本不可修改；請建立新版本。");
+        }
+
+        var changedStageRules = ChangeTracker.Entries<PcrStageRuleRecord>()
+            .Where(entry => entry.State is EntityState.Modified or EntityState.Deleted)
+            .ToArray();
+        if (changedStageRules.Length > 0)
+        {
+            var changedPcrIds = changedStageRules
+                .Select(entry => entry.Entity.PcrVersionId)
+                .Distinct()
+                .ToArray();
+            var hasPublishedStageRuleChange = PcrVersions
+                .AsNoTracking()
+                .Any(item => changedPcrIds.Contains(item.Id)
+                    && item.PublicationStatus != "Draft");
+            if (hasPublishedStageRuleChange)
+            {
+                throw new InvalidOperationException("已發布或撤回的 PCR 階段規則不可修改；請建立新版本。");
+            }
         }
 
         foreach (var entry in ChangeTracker.Entries<IOrganizationOwned>()

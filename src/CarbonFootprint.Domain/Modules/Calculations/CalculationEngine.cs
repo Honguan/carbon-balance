@@ -17,7 +17,7 @@ public sealed class CalculationEngine
             .ThenBy(activity => activity.Id)
             .Select(activity =>
             {
-                var formula = ActivityEmissionFormula.Resolve(activity.Kind);
+                var formula = ActivityEmissionFormula.Resolve(snapshot.RuleSetVersion, activity.Kind);
                 return new CalculationLineItem(
                     activity.Id,
                     activity.Stage,
@@ -99,6 +99,20 @@ public sealed class CalculationEngine
         {
             throw new InvalidOperationException("盤查期間起日不可晚於迄日。");
         }
+
+        if (snapshot.CutoffThresholdPercent is < 0m or > 100m)
+        {
+            throw new InvalidOperationException("PCR cutoff threshold must be between 0 and 100 percent.");
+        }
+
+        if (snapshot.RoundingDecimalPlaces is < 0 or > 12)
+        {
+            throw new InvalidOperationException("PCR reporting rounding must be between 0 and 12 decimal places.");
+        }
+
+        _ = ActivityEmissionFormula.Resolve(
+            snapshot.RuleSetVersion,
+            snapshot.Activities.FirstOrDefault()?.Kind ?? ActivityDataKind.Material);
 
         var declarations = snapshot.Stages.GroupBy(stage => stage.Stage).ToDictionary(group => group.Key);
         foreach (var stage in Enum.GetValues<LifecycleStage>())

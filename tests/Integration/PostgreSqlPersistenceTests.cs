@@ -5,6 +5,7 @@ using CarbonFootprint.Infrastructure.LegacyImport;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Organizations;
 using CarbonFootprint.Domain.Modules.Organizations;
+using CarbonFootprint.Domain.Modules.Standards;
 using CarbonFootprint.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,9 +31,10 @@ public sealed class PostgreSqlPersistenceTests
             .OrderBy(item => item.Code)
             .ToArrayAsync();
 
-        Assert.Equal(5, units.Length);
+        Assert.Equal(6, units.Length);
         Assert.Equal(1000m, units.Single(item => item.Code == "tonne").ScaleToCanonical);
         Assert.Equal("transport-work", units.Single(item => item.Code == "tonne-km").Dimension);
+        Assert.Equal("count", units.Single(item => item.Code == "piece").Dimension);
     }
 
     [Fact]
@@ -590,6 +592,105 @@ public sealed class PostgreSqlPersistenceTests
             item.UserId == inviteeId && item.ClaimType == "organization_id" && item.ClaimValue == organizationId.ToString()));
     }
 
+    [Fact]
+    public async Task PublishedPcr_ContentAndStageRulesAreImmutable()
+    {
+        var organizationId = Guid.NewGuid();
+        var pcr = CreatePcrVersion(organizationId, PcrPublicationStatus.Published);
+        var stageRule = new PcrStageRuleRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            PcrVersionId = pcr.Id,
+            LifecycleStage = 1,
+            Requirement = PcrStageRequirement.Mandatory.ToString(),
+            PermittedActivityKindsCsv = "Material,MaterialTransport",
+            RequiredFieldsCsv = "SourceReference"
+        };
+
+        await using (var setup = CreateContext(organizationId))
+        {
+            setup.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationId,
+                Name = "PCR immutability organization",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            setup.PcrVersions.Add(pcr);
+            setup.PcrStageRules.Add(stageRule);
+            await setup.SaveChangesAsync();
+        }
+
+        await using (var context = CreateContext(organizationId))
+        {
+            var published = await context.PcrVersions.SingleAsync(item => item.Id == pcr.Id);
+            published.Title = "不可覆寫的名稱";
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+            Assert.Contains("請建立新版本", exception.Message, StringComparison.Ordinal);
+        }
+
+        await using (var context = CreateContext(organizationId))
+        {
+            var rule = await context.PcrStageRules.SingleAsync(item => item.Id == stageRule.Id);
+            rule.Requirement = PcrStageRequirement.Optional.ToString();
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+            Assert.Contains("階段規則不可修改", exception.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task PcrStageRules_AreTenantScoped()
+    {
+        var organizationA = Guid.NewGuid();
+        var organizationB = Guid.NewGuid();
+        var pcrA = CreatePcrVersion(organizationA, PcrPublicationStatus.Draft);
+        var pcrB = CreatePcrVersion(organizationB, PcrPublicationStatus.Draft);
+
+        await using (var context = CreateContext(organizationA))
+        {
+            context.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationA,
+                Name = "PCR tenant A",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            context.PcrVersions.Add(pcrA);
+            context.PcrStageRules.Add(new PcrStageRuleRecord
+            {
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationA,
+                PcrVersionId = pcrA.Id,
+                LifecycleStage = 1,
+                Requirement = PcrStageRequirement.Optional.ToString()
+            });
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = CreateContext(organizationB))
+        {
+            context.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationB,
+                Name = "PCR tenant B",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            context.PcrVersions.Add(pcrB);
+            context.PcrStageRules.Add(new PcrStageRuleRecord
+            {
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationB,
+                PcrVersionId = pcrB.Id,
+                LifecycleStage = 1,
+                Requirement = PcrStageRequirement.Optional.ToString()
+            });
+            await context.SaveChangesAsync();
+        }
+
+        await using var verification = CreateContext(organizationA);
+        Assert.Equal([pcrA.Id], await verification.PcrStageRules.Select(item => item.PcrVersionId).ToArrayAsync());
+        Assert.Null(await verification.PcrStageRules.SingleOrDefaultAsync(item => item.PcrVersionId == pcrB.Id));
+    }
+
     private static CarbonFootprintDbContext CreateContext(Guid organizationId)
         => CreateContext(new TestOrganizationScope(organizationId));
 
@@ -658,5 +759,45 @@ public sealed class PostgreSqlPersistenceTests
             OriginalDocumentSha256 = originalDocumentSha256,
             Applicability = "測試適用性",
             ReviewStatus = reviewStatus.ToString()
+        };
+
+    private static PcrVersionRecord CreatePcrVersion(
+        Guid organizationId,
+        PcrPublicationStatus publicationStatus) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            RuleSetId = Guid.NewGuid(),
+            RegistrationNumber = $"PCR-{Guid.NewGuid():N}",
+            VersionNumber = 1,
+            Title = "PCR integration rule",
+            ApprovalDate = new DateOnly(2026, 1, 1),
+            ValidFrom = new DateOnly(2026, 1, 1),
+            ValidTo = new DateOnly(2027, 12, 31),
+            PublicationStatus = publicationStatus.ToString(),
+            SourceReference = "https://example.test/pcr",
+            StandardCode = "ISO 14067",
+            CccClassification = "TEST",
+            Applicability = "Integration test",
+            RuleRequirements = "Test requirements",
+            OriginalDocumentName = "pcr.pdf",
+            OriginalDocumentObjectKey = $"test/{Guid.NewGuid():N}",
+            OriginalDocumentContentType = "application/pdf",
+            OriginalDocumentSizeBytes = 100,
+            OriginalDocumentSha256 = new string('a', 64),
+            OriginalDocumentScanStatus = "Clean",
+            ProductCategoryPatterns = "*",
+            FunctionalUnitPattern = "*",
+            DeclaredUnitCode = "*",
+            SystemBoundaryCode = "*",
+            FormulaRuleSetVersion = "test-v1",
+            ReportingRequirements = "Test reporting",
+            ReviewStatus = PcrReviewStatus.Approved.ToString(),
+            CustomApprovalStatus = PcrCustomApprovalStatus.NotRequired.ToString(),
+            CreatedAt = DateTimeOffset.UtcNow,
+            PublishedAt = publicationStatus == PcrPublicationStatus.Published
+                ? DateTimeOffset.UtcNow
+                : null
         };
 }

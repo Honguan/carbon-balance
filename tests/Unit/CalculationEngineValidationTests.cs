@@ -39,6 +39,23 @@ public sealed class CalculationEngineValidationTests
 
         Assert.True(CanonicalManifest.Matches(snapshot, "engine-test", inputSha256));
         Assert.False(CanonicalManifest.Matches(snapshot with { FunctionalUnit = "2 units" }, "engine-test", inputSha256));
+        Assert.False(CanonicalManifest.Matches(snapshot with { CutoffThresholdPercent = 1m }, "engine-test", inputSha256));
+        Assert.False(CanonicalManifest.Matches(snapshot with { RoundingDecimalPlaces = 6 }, "engine-test", inputSha256));
+        Assert.False(CanonicalManifest.Matches(snapshot with { ReportingRequirements = "PCR report v2" }, "engine-test", inputSha256));
+    }
+
+    [Fact]
+    public void Calculate_UnsupportedPcrFormulaRuleSet_IsRejected()
+    {
+        var snapshot = CreateSnapshot(rawValue: 1m, canonicalValue: 1m) with
+        {
+            RuleSetVersion = "unknown-formulas-v1"
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => new CalculationEngine().Calculate(Guid.NewGuid(), snapshot, "engine-test"));
+
+        Assert.Contains("Unsupported PCR formula rule set", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -167,7 +184,7 @@ public sealed class CalculationEngineValidationTests
             new DateOnly(2026, 12, 31),
             "1 unit",
             "pcr-test-1",
-            "rules-1",
+            ActivityEmissionFormula.PcrFormulaRuleSetV1,
             "gwp-1",
             "units-1",
             [

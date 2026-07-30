@@ -8,6 +8,12 @@
     ViewData["Title"] = "盤查工作區";
     var isSetupSection = Model.Section is "setup" or "product" or "pcr" or "inventory";
     var latestSelectedRun = Model.Runs.FirstOrDefault(item => item.ProjectVersionId == Model.ProjectVersionId);
+    var selectedInventory = Model.InventoryProjects.FirstOrDefault(item => item.Id == Model.ProjectVersionId);
+    var selectedPcr = selectedInventory?.PcrVersionId is { } selectedPcrId
+        ? Model.PcrVersions.FirstOrDefault(item => item.Id == selectedPcrId)
+        : null;
+    string FormatReportingDecimal(decimal value) =>
+        value.ToString($"F{Math.Clamp(selectedPcr?.RoundingDecimalPlaces ?? 3, 0, 12)}");
     var factorsById = Model.Factors.ToDictionary(item => item.Id);
     var hasFacilities = Model.Facilities.Count > 0;
     var hasProductVersions = Model.ProductVersions.Count > 0;
@@ -296,7 +302,7 @@ else
                             <p>分別記錄規範識別、有效期間、適用範圍與原始文件完整性。</p>
                         </div>
                     </div>
-                    <form method="post" asp-page-handler="CreatePcr">
+                    <form method="post" asp-page-handler="CreatePcr" enctype="multipart/form-data">
                         <h3 class="workspace-subheading">規範識別與有效期間</h3>
                         <label class="form-label" for="registrationNumber">登錄編號</label>
                         <input class="form-control" id="registrationNumber" name="registrationNumber" required />
@@ -304,13 +310,15 @@ else
                         <input class="form-control" id="pcrTitle" name="title" required />
                         <label class="form-label mt-2" for="pcrVersionNumber">版本</label>
                         <input class="form-control" type="number" min="1" id="pcrVersionNumber" name="versionNumber" value="1" required />
+                        <label class="form-label mt-2" for="pcrApprovalDate">核准日</label>
+                        <input class="form-control" type="date" id="pcrApprovalDate" name="approvalDate" required />
                         <label class="form-label mt-2" for="pcrValidFrom">有效起日</label>
-                        <input class="form-control" type="date" id="pcrValidFrom" name="validFrom" value="2025-01-01" />
+                        <input class="form-control" type="date" id="pcrValidFrom" name="validFrom" value="2025-01-01" required />
                         <label class="form-label mt-2" for="pcrValidTo">有效迄日</label>
-                        <input class="form-control" type="date" id="pcrValidTo" name="validTo" value="2027-12-31" />
+                        <input class="form-control" type="date" id="pcrValidTo" name="validTo" value="2027-12-31" required />
                         <h3 class="workspace-subheading mt-4">標準與適用範圍</h3>
                         <label class="form-label mt-2" for="sourceReference">來源參照</label>
-                        <input class="form-control" id="sourceReference" name="sourceReference" placeholder="文件編號或受控來源 URI" required />
+                        <input class="form-control" type="url" id="sourceReference" name="sourceReference" placeholder="https://主管機關或受控來源" required />
                         <label class="form-label mt-2" for="standardCode">標準代碼</label>
                         <input class="form-control" id="standardCode" name="standardCode" value="ISO 14067" required />
                         <label class="form-label mt-2" for="cccClassification">CCC 分類</label>
@@ -319,11 +327,110 @@ else
                         <textarea class="form-control" id="pcrApplicability" name="pcrApplicability" required></textarea>
                         <label class="form-label mt-2" for="ruleRequirements">規則要求模板</label>
                         <textarea class="form-control" id="ruleRequirements" name="ruleRequirements" required></textarea>
+
+                        <h3 class="workspace-subheading mt-4">機器可執行適用條件</h3>
+                        <label class="form-label mt-2" for="productCategoryPatterns">產品分類代碼範圍</label>
+                        <input class="form-control" id="productCategoryPatterns" name="productCategoryPatterns" value="*" required aria-describedby="productCategoryPatterns-help" />
+                        <p class="workspace-select-help" id="productCategoryPatterns-help">可用逗號分隔，尾端 * 表示前綴比對，例如 ELECTRONICS-*。</p>
+                        <label class="form-label mt-2" for="functionalUnitPattern">功能單位規則</label>
+                        <input class="form-control" id="functionalUnitPattern" name="functionalUnitPattern" value="*" required />
+                        <label class="form-label mt-2" for="declaredUnitCode">標示單位</label>
+                        <select class="form-select" id="declaredUnitCode" name="declaredUnitCode" required>
+                            @foreach (var unit in Model.Units.Where(item => item.CatalogueVersion == "units-p0-v2"))
+                            {
+                                <option value="@unit.Code" selected="@(unit.Code == "piece")">@unit.Code（@unit.Symbol）</option>
+                            }
+                        </select>
+                        <label class="form-label mt-2" for="systemBoundaryCode">系統邊界</label>
+                        <input class="form-control" id="systemBoundaryCode" name="systemBoundaryCode" value="搖籃到墳墓" required />
+                        <label class="form-label mt-2" for="permittedAllocationMethods">允許分配方法</label>
+                        <input class="form-control" id="permittedAllocationMethods" name="permittedAllocationMethods" value="物理量分配" required />
+                        <label class="form-label mt-2" for="cutoffThresholdPercent">截斷門檻（%）</label>
+                        <input class="form-control" type="number" min="0" max="100" step="0.000001" id="cutoffThresholdPercent" name="cutoffThresholdPercent" value="0" required />
+                        <label class="form-label mt-2" for="formulaRuleSetVersion">公式規則版本</label>
+                        <select class="form-select" id="formulaRuleSetVersion" name="formulaRuleSetVersion" required>
+                            <option value="pcr-formulas-v1">pcr-formulas-v1</option>
+                        </select>
+                        <label class="form-label mt-2" for="roundingDecimalPlaces">結果小數位數</label>
+                        <input class="form-control" type="number" min="0" max="12" id="roundingDecimalPlaces" name="roundingDecimalPlaces" value="3" required />
+                        <label class="form-label mt-2" for="reportingRequirements">報告要求</label>
+                        <textarea class="form-control" id="reportingRequirements" name="reportingRequirements" required>揭露各生命週期階段與產品總量。</textarea>
+
+                        <h3 class="workspace-subheading mt-4">五階段規則</h3>
+                        <p class="workspace-help">活動類型與必填欄位使用系統代碼，以逗號分隔。</p>
+                        <div class="border rounded p-3 mt-2">
+                            <h4 class="h6">原料取得階段</h4>
+                            <select class="form-select" name="rawMaterialRequirement" aria-label="原料取得階段必要性">
+                                <option value="Mandatory">必須納入</option>
+                                <option value="Optional">可選</option>
+                                <option value="Prohibited">禁止納入</option>
+                            </select>
+                            <label class="form-label mt-2" for="rawMaterialKinds">允許活動類型</label>
+                            <input class="form-control" id="rawMaterialKinds" name="rawMaterialKinds" value="Material,MaterialTransport" required />
+                            <label class="form-label mt-2" for="rawMaterialRequiredFields">活動必填欄位</label>
+                            <input class="form-control" id="rawMaterialRequiredFields" name="rawMaterialRequiredFields" value="SourceReference,DataProvider,DataQuality" />
+                        </div>
+                        <div class="border rounded p-3 mt-2">
+                            <h4 class="h6">製造階段</h4>
+                            <select class="form-select" name="manufacturingRequirement" aria-label="製造階段必要性">
+                                <option value="Mandatory">必須納入</option>
+                                <option value="Optional">可選</option>
+                                <option value="Prohibited">禁止納入</option>
+                            </select>
+                            <label class="form-label mt-2" for="manufacturingKinds">允許活動類型</label>
+                            <input class="form-control" id="manufacturingKinds" name="manufacturingKinds" value="Energy,ManufacturingWaste,OutsourcedTreatmentTransport" required />
+                            <label class="form-label mt-2" for="manufacturingRequiredFields">活動必填欄位</label>
+                            <input class="form-control" id="manufacturingRequiredFields" name="manufacturingRequiredFields" value="SourceReference,DataProvider,DataQuality" />
+                        </div>
+                        <div class="border rounded p-3 mt-2">
+                            <h4 class="h6">配送與銷售階段</h4>
+                            <select class="form-select" name="distributionRequirement" aria-label="配送與銷售階段必要性">
+                                <option value="Mandatory">必須納入</option>
+                                <option value="Optional">可選</option>
+                                <option value="Prohibited">禁止納入</option>
+                            </select>
+                            <label class="form-label mt-2" for="distributionKinds">允許活動類型</label>
+                            <input class="form-control" id="distributionKinds" name="distributionKinds" value="DistributionTransport" required />
+                            <label class="form-label mt-2" for="distributionRequiredFields">活動必填欄位</label>
+                            <input class="form-control" id="distributionRequiredFields" name="distributionRequiredFields" value="SourceReference,DataProvider,DataQuality" />
+                        </div>
+                        <div class="border rounded p-3 mt-2">
+                            <h4 class="h6">使用階段</h4>
+                            <select class="form-select" name="useRequirement" aria-label="使用階段必要性">
+                                <option value="Mandatory">必須納入</option>
+                                <option value="Optional">可選</option>
+                                <option value="Prohibited">禁止納入</option>
+                            </select>
+                            <label class="form-label mt-2" for="useKinds">允許活動類型</label>
+                            <input class="form-control" id="useKinds" name="useKinds" value="UseEnergy,UseConsumable" required />
+                            <label class="form-label mt-2" for="useRequiredFields">活動必填欄位</label>
+                            <input class="form-control" id="useRequiredFields" name="useRequiredFields" value="SourceReference,DataProvider,DataQuality" />
+                        </div>
+                        <div class="border rounded p-3 mt-2">
+                            <h4 class="h6">廢棄處理階段</h4>
+                            <select class="form-select" name="endOfLifeRequirement" aria-label="廢棄處理階段必要性">
+                                <option value="Mandatory">必須納入</option>
+                                <option value="Optional">可選</option>
+                                <option value="Prohibited">禁止納入</option>
+                            </select>
+                            <label class="form-label mt-2" for="endOfLifeKinds">允許活動類型</label>
+                            <input class="form-control" id="endOfLifeKinds" name="endOfLifeKinds" value="EndOfLifeTreatment,EndOfLifeTransport" required />
+                            <label class="form-label mt-2" for="endOfLifeRequiredFields">活動必填欄位</label>
+                            <input class="form-control" id="endOfLifeRequiredFields" name="endOfLifeRequiredFields" value="SourceReference,DataProvider,DataQuality" />
+                        </div>
+
+                        <h3 class="workspace-subheading mt-4">自訂規則例外</h3>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="isCustomRule" name="isCustomRule" value="true" />
+                            <label class="form-check-label" for="isCustomRule">沒有適用官方 PCR，建立受控自訂規則</label>
+                        </div>
+                        <label class="form-label mt-2" for="customRuleJustification">自訂規則理由</label>
+                        <textarea class="form-control" id="customRuleJustification" name="customRuleJustification"></textarea>
+
                         <h3 class="workspace-subheading mt-4">原始文件完整性</h3>
-                        <label class="form-label mt-2" for="originalDocumentName">原始文件名稱</label>
-                        <input class="form-control" id="originalDocumentName" name="originalDocumentName" required />
-                        <label class="form-label mt-2" for="originalDocumentSha256">原始文件 SHA-256</label>
-                        <input class="form-control" id="originalDocumentSha256" name="originalDocumentSha256" pattern="[0-9a-fA-F]{64}" required />
+                        <label class="form-label mt-2" for="originalDocument">原始文件</label>
+                        <input class="form-control" type="file" id="originalDocument" name="originalDocument" required />
+                        <p class="workspace-select-help">系統會掃描檔案並自動計算、保存 SHA-256，不需手動輸入。</p>
                         <button class="btn btn-primary mt-3" type="submit">儲存 PCR 草稿</button>
                     </form>
                     <h3 class="workspace-subheading mt-4">審查與發布狀態</h3>
@@ -332,11 +439,37 @@ else
                         {
                             <li class="mb-2">
                                 @pcr.RegistrationNumber 第 @(pcr.VersionNumber) 版：@pcr.Title（@PublicationStatusName(pcr.PublicationStatus)）
+                                <span>｜有效期：@pcr.ValidFrom～@pcr.ValidTo</span>
+                                <span>｜受影響盤查：@(Model.PcrAffectedProjectCounts.GetValueOrDefault(pcr.Id))</span>
+                                @if (pcr.DeprecatedAt.HasValue)
+                                {
+                                    <span class="text-danger">｜已被取代：@pcr.DeprecationReason</span>
+                                }
+                                @if (Model.PcrAffectedProjects.TryGetValue(pcr.Id, out var affectedProjects)
+                                    && affectedProjects.Count > 0)
+                                {
+                                    <details class="mt-1">
+                                        <summary>查看受影響盤查專案</summary>
+                                        <ul>
+                                            @foreach (var project in affectedProjects)
+                                            {
+                                                <li>
+                                                    @project.FunctionalUnit（@project.PeriodStart～@project.PeriodEnd）
+                                                    <code>@project.Id</code>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </details>
+                                }
                                 @if (pcr.PublicationStatus == PcrPublicationStatus.Draft.ToString())
                                 {
                                     <form class="d-inline" method="post" asp-page-handler="ReviewPcr">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
                                         <button class="btn btn-sm btn-outline-primary" type="submit">核准審查</button>
+                                    </form>
+                                    <form class="d-inline" method="post" asp-page-handler="RejectPcr">
+                                        <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">拒絕審查</button>
                                     </form>
                                     <form class="d-inline" method="post" asp-page-handler="PublishPcr">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
@@ -400,7 +533,12 @@ else
                         <label class="form-label mt-2" for="functionalUnit">功能單位</label>
                         <input class="form-control" id="functionalUnit" name="functionalUnit" value="1 個產品" required />
                         <label class="form-label mt-2" for="declaredUnit">標示單位</label>
-                        <input class="form-control" id="declaredUnit" name="declaredUnit" value="1 件" required />
+                        <select class="form-select" id="declaredUnit" name="declaredUnit" required>
+                            @foreach (var unit in Model.Units.Where(item => item.CatalogueVersion == "units-p0-v2"))
+                            {
+                                <option value="@unit.Code" selected="@(unit.Code == "piece")">@unit.Code（@unit.Symbol）</option>
+                            }
+                        </select>
                         <label class="form-label mt-2" for="systemBoundary">系統邊界</label>
                         <textarea class="form-control" id="systemBoundary" name="systemBoundary" required maxlength="1000">搖籃到墳墓</textarea>
                         <h3 class="workspace-subheading mt-4">分配、排除與資料假設</h3>
@@ -421,7 +559,12 @@ else
                                 <option value="">@(hasSelectablePcrVersions ? "請選擇已發布 PCR 版本" : "尚無已發布 PCR 版本")</option>
                                 @foreach (var pcr in Model.SelectablePcrVersions)
                                 {
-                                    <option value="@pcr.Id">@pcr.RegistrationNumber 第 @(pcr.VersionNumber) 版－@pcr.Title</option>
+                                    <option value="@pcr.Id"
+                                            data-pcr-option
+                                            data-valid-from="@(pcr.ValidFrom?.ToString("yyyy-MM-dd"))"
+                                            data-valid-to="@(pcr.ValidTo?.ToString("yyyy-MM-dd"))">
+                                        @pcr.RegistrationNumber 第 @(pcr.VersionNumber) 版－@pcr.Title
+                                    </option>
                                 }
                             </select>
                             <p class="workspace-select-help" id="pcrVersionId-help">
@@ -431,7 +574,7 @@ else
                                 }
                                 else
                                 {
-                                    <span>只列出目前已發布的 PCR 版本；期間有效性會在儲存時再次檢查。</span>
+                                    <span>只列出已發布且未撤回／取代的 PCR 版本；依盤查迄日停用不適用版本，儲存時會再次檢查。</span>
                                 }
                             </p>
                         </div>
@@ -864,6 +1007,15 @@ else
                 <input type="hidden" name="inventoryProjectVersionId" value="@Model.ProjectVersionId" />
                 <button class="btn btn-success mt-3" type="submit">凍結輸入並計算</button>
             </form>
+            @if (selectedPcr is not null)
+            {
+                <div class="workspace-subpanel mt-3">
+                    <h3 class="h6">本次 PCR 計算與報告規則</h3>
+                    <p>截斷門檻：@selectedPcr.CutoffThresholdPercent%（排除項目須在盤查中明確揭露）</p>
+                    <p>報告四捨五入：小數 @selectedPcr.RoundingDecimalPlaces 位；內部計算保留原始精度。</p>
+                    <p>報告要求：@selectedPcr.ReportingRequirements</p>
+                </div>
+            }
             <a class="btn btn-outline-success mt-3"
                asp-page="/Workspace"
                asp-page-handler="ExportExcel"
@@ -892,7 +1044,7 @@ else
                 <dl class="row">
                     <dt class="col-sm-3">計算版本 ID</dt><dd class="col-sm-9"><code>@run.Id</code></dd>
                     <dt class="col-sm-3">輸入資料 SHA-256</dt><dd class="col-sm-9"><code>@run.InputSha256</code></dd>
-                    <dt class="col-sm-3">產品總量</dt><dd class="col-sm-9">@run.ProductTotal kgCO2e</dd>
+                    <dt class="col-sm-3">產品總量</dt><dd class="col-sm-9">@FormatReportingDecimal(run.ProductTotal) kgCO2e</dd>
                     <dt class="col-sm-3">引擎／規則／單位版本</dt><dd class="col-sm-9">@run.EngineBuild / @run.RuleSetVersion / @run.UnitCatalogueVersion</dd>
                     <dt class="col-sm-3">快照完整性</dt>
                     <dd class="col-sm-9">@(Model.LatestManifestHashValid == true ? "SHA-256 驗證通過" : "SHA-256 驗證失敗")</dd>
@@ -910,11 +1062,11 @@ else
                 @if (Model.LatestDifference is { } difference)
                 {
                     <h3 class="h5">與前次計算版本比較</h3>
-                    <p>產品總量差異：@difference.ProductDelta kgCO2e</p>
+                    <p>產品總量差異：@FormatReportingDecimal(difference.ProductDelta) kgCO2e</p>
                     <ul>
                         @foreach (var stage in difference.Stages)
                         {
-                            <li>@FormalStageName(stage.Stage)：@stage.Baseline → @stage.Candidate（差異 @stage.Delta）</li>
+                            <li>@FormalStageName(stage.Stage)：@FormatReportingDecimal(stage.Baseline) → @FormatReportingDecimal(stage.Candidate)（差異 @FormatReportingDecimal(stage.Delta)）</li>
                         }
                     </ul>
                 }
@@ -929,7 +1081,7 @@ else
                                 <td>@line.CanonicalActivityValue @line.ActivityUnitCode</td>
                                 <td>@line.FactorValue @line.FactorUnit</td>
                                 <td>@FormulaName(line.ActivityAmountFormulaId)<br />@FormulaName(line.FormulaId)</td>
-                                <td>@line.Emissions @line.EmissionsUnitCode</td>
+                                <td>@FormatReportingDecimal(line.Emissions) @line.EmissionsUnitCode</td>
                             </tr>
                         }
                         </tbody>

@@ -1358,6 +1358,10 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("applicability");
 
+                    b.Property<DateOnly?>("ApprovalDate")
+                        .HasColumnType("date")
+                        .HasColumnName("approval_date");
+
                     b.Property<string>("CccClassification")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1367,6 +1371,59 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<decimal>("CutoffThresholdPercent")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("cutoff_threshold_percent");
+
+                    b.Property<string>("CustomApprovalStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("custom_approval_status");
+
+                    b.Property<string>("CustomRuleJustification")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("custom_rule_justification");
+
+                    b.Property<DateTimeOffset?>("DeprecatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deprecated_at");
+
+                    b.Property<string>("DeprecationReason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("deprecation_reason");
+
+                    b.Property<string>("DeclaredUnitCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("declared_unit_code");
+
+                    b.Property<string>("FormulaRuleSetVersion")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("formula_rule_set_version");
+
+                    b.Property<string>("FunctionalUnitPattern")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("functional_unit_pattern");
+
+                    b.Property<bool>("IsCustomRule")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_custom_rule");
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid")
@@ -1378,11 +1435,45 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(300)")
                         .HasColumnName("original_document_name");
 
+                    b.Property<string>("OriginalDocumentContentType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("original_document_content_type");
+
+                    b.Property<string>("OriginalDocumentObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("original_document_object_key");
+
+                    b.Property<string>("OriginalDocumentScanStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("original_document_scan_status");
+
+                    b.Property<long>("OriginalDocumentSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("original_document_size_bytes");
+
                     b.Property<string>("OriginalDocumentSha256")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("original_document_sha256");
+
+                    b.Property<string>("PermittedAllocationMethodsCsv")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("permitted_allocation_methods_csv");
+
+                    b.Property<string>("ProductCategoryPatterns")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("product_category_patterns");
 
                     b.Property<string>("PublicationStatus")
                         .IsRequired()
@@ -1399,6 +1490,12 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("registration_number");
+
+                    b.Property<string>("ReportingRequirements")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("reporting_requirements");
 
                     b.Property<string>("ReviewStatus")
                         .IsRequired()
@@ -1420,6 +1517,14 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(4000)")
                         .HasColumnName("rule_requirements");
 
+                    b.Property<Guid>("RuleSetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rule_set_id");
+
+                    b.Property<int>("RoundingDecimalPlaces")
+                        .HasColumnType("integer")
+                        .HasColumnName("rounding_decimal_places");
+
                     b.Property<string>("SourceReference")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -1431,6 +1536,16 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("standard_code");
+
+                    b.Property<Guid?>("SupersedesVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supersedes_version_id");
+
+                    b.Property<string>("SystemBoundaryCode")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("system_boundary_code");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -1461,7 +1576,64 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_pcr_versions_organization_id_registration_number_version_nu");
 
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_pcr_versions_created_by");
+
+                    b.HasIndex("OrganizationId", "RuleSetId", "VersionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ix_pcr_versions_organization_id_rule_set_id_version_number");
+
+                    b.HasIndex("SupersedesVersionId")
+                        .HasDatabaseName("ix_pcr_versions_supersedes_version_id");
+
                     b.ToTable("pcr_versions", "app");
+                });
+
+            modelBuilder.Entity("CarbonFootprint.Infrastructure.Persistence.PcrStageRuleRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("LifecycleStage")
+                        .HasColumnType("integer")
+                        .HasColumnName("lifecycle_stage");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organization_id");
+
+                    b.Property<string>("PermittedActivityKindsCsv")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("permitted_activity_kinds_csv");
+
+                    b.Property<Guid>("PcrVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pcr_version_id");
+
+                    b.Property<string>("RequiredFieldsCsv")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("required_fields_csv");
+
+                    b.Property<string>("Requirement")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("requirement");
+
+                    b.HasKey("Id")
+                        .HasName("pk_pcr_stage_rules");
+
+                    b.HasIndex("PcrVersionId", "LifecycleStage")
+                        .IsUnique()
+                        .HasDatabaseName("ix_pcr_stage_rules_pcr_version_id_lifecycle_stage");
+
+                    b.ToTable("pcr_stage_rules", "app");
                 });
 
             modelBuilder.Entity("CarbonFootprint.Infrastructure.Persistence.ProductRecord", b =>
@@ -1726,6 +1898,19 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                             OffsetToCanonical = 0m,
                             ScaleToCanonical = 1m,
                             Symbol = "t·km"
+                        },
+                        new
+                        {
+                            Id = new Guid("72000000-0000-0000-0000-000000000006"),
+                            AliasesCsv = "pieces,item,items,件,個",
+                            CanonicalCode = "piece",
+                            CatalogueVersion = "units-p0-v2",
+                            Code = "piece",
+                            CompositeExpression = "",
+                            Dimension = "count",
+                            OffsetToCanonical = 0m,
+                            ScaleToCanonical = 1m,
+                            Symbol = "pc"
                         });
                 });
 
@@ -2088,6 +2273,31 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_organization_memberships_users_user_id");
+                });
+
+            modelBuilder.Entity("CarbonFootprint.Infrastructure.Persistence.PcrStageRuleRecord", b =>
+                {
+                    b.HasOne("CarbonFootprint.Infrastructure.Persistence.PcrVersionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PcrVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_pcr_stage_rules_pcr_versions_pcr_version_id");
+                });
+
+            modelBuilder.Entity("CarbonFootprint.Infrastructure.Persistence.PcrVersionRecord", b =>
+                {
+                    b.HasOne("CarbonFootprint.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_pcr_versions_users_created_by");
+
+                    b.HasOne("CarbonFootprint.Infrastructure.Persistence.PcrVersionRecord", null)
+                        .WithMany()
+                        .HasForeignKey("SupersedesVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_pcr_versions_pcr_versions_supersedes_version_id");
                 });
 
             modelBuilder.Entity("CarbonFootprint.Infrastructure.Persistence.ProductRecord", b =>

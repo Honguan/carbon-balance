@@ -16,15 +16,22 @@ else
     <div class="table-responsive">
         <table class="table">
             <thead>
-                <tr><th>計算版本</th><th>建立時間</th><th>總量</th><th>輸入資料 SHA-256</th><th>匯出</th></tr>
+                <tr><th>計算版本</th><th>建立時間</th><th>總量</th><th>PCR 報告規則</th><th>輸入資料 SHA-256</th><th>匯出</th></tr>
             </thead>
             <tbody>
                 @foreach (var run in Model.Runs)
                 {
+                    var pcr = Model.PcrRulesByRunId.GetValueOrDefault(run.Id);
+                    var roundingDecimalPlaces = Math.Clamp(pcr?.RoundingDecimalPlaces ?? 3, 0, 12);
                     <tr>
                         <td><code>@run.Id</code></td>
                         <td>@run.CreatedAt</td>
-                        <td>@run.ProductTotal kgCO2e</td>
+                        <td>@run.ProductTotal.ToString($"F{roundingDecimalPlaces}") kgCO2e</td>
+                        <td>
+                            截斷 @((pcr?.CutoffThresholdPercent ?? 0m))%；
+                            小數 @roundingDecimalPlaces 位；
+                            @(pcr?.ReportingRequirements ?? "未保存額外報告要求")
+                        </td>
                         <td><code>@run.InputSha256</code></td>
                         <td>
                             <form class="d-inline" method="post" asp-page-handler="InventoryCsv">

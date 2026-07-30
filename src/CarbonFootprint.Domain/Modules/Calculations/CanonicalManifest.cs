@@ -28,6 +28,9 @@ public static class CanonicalManifest
             writer.WriteString("estimationReason", snapshot.EstimationReason);
             writer.WriteString("pcrVersion", snapshot.PcrVersion);
             writer.WriteString("ruleSetVersion", snapshot.RuleSetVersion);
+            writer.WriteNumber("cutoffThresholdPercent", snapshot.CutoffThresholdPercent);
+            writer.WriteNumber("roundingDecimalPlaces", snapshot.RoundingDecimalPlaces);
+            writer.WriteString("reportingRequirements", snapshot.ReportingRequirements);
             writer.WriteString("gwpVersion", snapshot.GwpVersion);
             writer.WriteString("unitCatalogueVersion", snapshot.UnitCatalogueVersion);
             writer.WriteString("engineBuild", engineBuild);

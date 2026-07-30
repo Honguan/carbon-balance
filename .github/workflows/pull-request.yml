@@ -186,6 +186,33 @@ jobs:
             --env ASPNETCORE_ENVIRONMENT=Development \
             --env "ConnectionStrings__Database=${E2E_DATABASE}" \
             carbon-footprint-auth-e2e:${{ github.sha }} --migrate
+      - name: Start evidence services
+        run: |
+          docker run --detach \
+            --name carbon-minio-e2e \
+            --network host \
+            --env MINIO_ROOT_USER=carbon_e2e_minio \
+            --env MINIO_ROOT_PASSWORD=auth-e2e-minio-password \
+            minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1 \
+            server /data --address ":9000"
+
+          docker run --detach \
+            --name carbon-clamav-e2e \
+            --network host \
+            clamav/clamav:1.5-debian13-slim@sha256:a73435b0fa51886e9e6dd1881656023ba9dce756e055f23981270badbb8ca3d7
+
+          for attempt in {1..80}; do
+            if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null \
+              && docker exec carbon-clamav-e2e clamdscan --ping 1 >/dev/null 2>&1; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 80 ]; then
+              docker logs carbon-minio-e2e
+              docker logs carbon-clamav-e2e
+              exit 1
+            fi
+            sleep 2
+          done
       - name: Start web application
         run: |
           docker run --detach \
@@ -196,6 +223,12 @@ jobs:
             --env "ConnectionStrings__Database=${E2E_DATABASE}" \
             --env MAIL__HOST=127.0.0.1 \
             --env MAIL__PORT=1025 \
+            --env OBJECTSTORAGE__ENDPOINT=http://127.0.0.1:9000 \
+            --env OBJECTSTORAGE__BUCKET=carbon-e2e-evidence \
+            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_minio \
+            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-minio-password \
+            --env MALWARESCANNER__HOST=127.0.0.1 \
+            --env MALWARESCANNER__PORT=3310 \
             --env DataProtection__KeyPath=/tmp/data-protection-keys \
             carbon-footprint-auth-e2e:${{ github.sha }}
 
@@ -235,7 +268,10 @@ jobs:
           if-no-files-found: warn
       - name: Stop browser-test application
         if: always()
-        run: docker rm --force carbon-auth-e2e >/dev/null 2>&1 || true
+        run: |
+          docker rm --force carbon-auth-e2e >/dev/null 2>&1 || true
+          docker rm --force carbon-minio-e2e >/dev/null 2>&1 || true
+          docker rm --force carbon-clamav-e2e >/dev/null 2>&1 || true
 
   secret-scan:
     runs-on: ubuntu-latest

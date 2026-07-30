@@ -188,7 +188,7 @@ public sealed class MinimalFiveStageGoldenCaseTests
             periodEnd,
             "1 個產品",
             "pcr-golden-unapproved-1",
-            "rules-golden-1",
+            ActivityEmissionFormula.PcrFormulaRuleSetV1,
             "gwp-ar6-100y-fixture",
             "units-golden-1",
             Enum.GetValues<LifecycleStage>()

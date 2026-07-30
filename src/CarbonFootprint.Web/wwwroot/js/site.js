@@ -49,6 +49,31 @@ const initializeSite = (root = document) => {
         });
     });
 
+    root.querySelectorAll("select:has(option[data-pcr-option])").forEach((select) => {
+        const form = select.form;
+        const periodEnd = form?.querySelector("[name='periodEnd']");
+        if (!(periodEnd instanceof HTMLInputElement)) {
+            return;
+        }
+
+        const syncPcrValidity = () => {
+            const selectedDate = periodEnd.value;
+            select.querySelectorAll("option[data-pcr-option]").forEach((option) => {
+                const validFrom = option.dataset.validFrom ?? "";
+                const validTo = option.dataset.validTo ?? "";
+                const unavailable = Boolean(selectedDate)
+                    && ((validFrom && selectedDate < validFrom) || (validTo && selectedDate > validTo));
+                option.disabled = unavailable;
+                if (unavailable && option.selected) {
+                    select.value = "";
+                }
+            });
+        };
+
+        periodEnd.addEventListener("change", syncPcrValidity);
+        syncPcrValidity();
+    });
+
     root.querySelectorAll("[data-factor-list-filter]").forEach((input) => {
         const list = root.querySelector("[data-factor-list]");
         if (!(input instanceof HTMLInputElement) || !list) {
