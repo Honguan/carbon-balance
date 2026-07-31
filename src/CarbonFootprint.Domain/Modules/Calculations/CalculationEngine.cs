@@ -307,6 +307,11 @@ public sealed class CalculationEngine
 
         foreach (var activity in snapshot.Activities)
         {
+            if (activity.EmissionFormula is null)
+            {
+                _ = ActivityEmissionFormula.Resolve(snapshot.RuleSetVersion, activity.Kind);
+            }
+
             ActivityAmountFormula.ValidateDerived(
                 activity.Kind,
                 activity.AmountFormulaId,
