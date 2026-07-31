@@ -52,11 +52,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tar --exclude=.git --exclude=source-bridge.tar.gz -czf source-bridge.tar.gz .
+          tar --exclude=.git -czf /tmp/source-bridge.tar.gz .
       - name: Upload branch source
         if: steps.mode.outputs.patch != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: carbon-balance-source
-          path: source-bridge.tar.gz
+          path: /tmp/source-bridge.tar.gz
           retention-days: 1
