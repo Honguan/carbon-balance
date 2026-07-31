@@ -12,6 +12,8 @@ Legacy and default calculation lines retain their PCR activity-specific auditabl
 
 The current validation scope additionally covers the governance console, authenticated governance API, role and permission matrix, verified-MFA checks for high-risk operations, evidence access auditing, tenant isolation, immutable governance records, definition publication locks, readiness acknowledgements, workflow transitions, archive generation and browser navigation.
 
+PostgreSQL integration fixtures use test-specific stable keys and verify only the records created by each test. This keeps repeated coverage runs deterministic even when global definitions from other tests remain intentionally visible.
+
 Two-factor login and recovery routes remain enabled. Direct requests without the temporary two-factor identity cookie are safely redirected to the login page, while valid password-to-MFA login flows continue to the Identity two-factor pages.
 
 The branch must pass the complete pull-request validation workflow before it can be considered for merge. Passing CI alone does not prove that issues #21–#30 satisfy every acceptance criterion; the completion review and issue-specific evidence remain authoritative.
