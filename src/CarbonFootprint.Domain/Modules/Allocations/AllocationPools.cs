@@ -216,7 +216,7 @@ public static class AllocationPoolCalculator
 
         if (previous.PoolId != current.PoolId)
         {
-            throw new InvalidOperationException("Allocation versions must belong to the same pool." );
+            throw new InvalidOperationException("Allocation versions must belong to the same pool.");
         }
 
         return previous.Method != current.Method

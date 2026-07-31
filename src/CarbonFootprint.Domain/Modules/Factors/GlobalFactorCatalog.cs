@@ -153,7 +153,7 @@ public static class GlobalFactorCatalogService
         var sourceDatasets = normalizedRecords.Select(item => item.SourceDataset).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (sourceOrganizations.Length != 1 || sourceDatasets.Length != 1)
         {
-            throw new InvalidOperationException("One import batch must contain exactly one source organization and dataset." );
+            throw new InvalidOperationException("One import batch must contain exactly one source organization and dataset.");
         }
 
         var existingBatch = current.Batches.FirstOrDefault(batch =>
@@ -465,7 +465,7 @@ public static class GlobalFactorCatalogService
     {
         if (value.Length != 64 || value.Any(character => !Uri.IsHexDigit(character)))
         {
-            throw new InvalidOperationException($"{name} must be a 64-character SHA-256 hexadecimal string." );
+            throw new InvalidOperationException($"{name} must be a 64-character SHA-256 hexadecimal string.");
         }
     }
 }

@@ -133,19 +133,19 @@ public static class InventoryReadinessValidator
         if (context.InventoryPeriodStart > context.InventoryPeriodEnd)
         {
             AddBlocking(results, "INV-PERIOD-ORDER", "InventoryProjectVersion", projectKey, null, string.Empty,
-                "盤查期間起日不可晚於迄日。", "修正盤查期間。" );
+                "盤查期間起日不可晚於迄日。", "修正盤查期間。");
         }
 
         if (!context.PcrIsAvailable)
         {
             AddBlocking(results, "INV-PCR-STATUS", "InventoryProjectVersion", projectKey, null, string.Empty,
-                "PCR 未發布、已撤回、已過期或尚未生效。", "選擇目前有效且已核准的 PCR 版本。" );
+                "PCR 未發布、已撤回、已過期或尚未生效。", "選擇目前有效且已核准的 PCR 版本。");
         }
 
         if (!context.PcrIsCompatible)
         {
             AddBlocking(results, "INV-PCR-COMPATIBILITY", "InventoryProjectVersion", projectKey, null, string.Empty,
-                "產品、功能單位、宣告單位或系統邊界不符合 PCR。", "依 PCR 修正盤查設定或選擇正確的 PCR。" );
+                "產品、功能單位、宣告單位或系統邊界不符合 PCR。", "依 PCR 修正盤查設定或選擇正確的 PCR。");
         }
 
         if (string.IsNullOrWhiteSpace(context.Assumptions))
@@ -196,7 +196,7 @@ public static class InventoryReadinessValidator
                 stage,
                 string.Empty,
                 $"PCR 要求的 {stage} 階段沒有有效活動資料。",
-                "新增該階段活動，或依 PCR 提供合法的不適用說明。" );
+                "新增該階段活動，或依 PCR 提供合法的不適用說明。");
         }
     }
 
@@ -212,7 +212,7 @@ public static class InventoryReadinessValidator
             if (activity.PeriodStart > activity.PeriodEnd)
             {
                 AddBlocking(results, "INV-ACTIVITY-PERIOD", "ActivityData", key, activity.Stage, owner,
-                    "活動資料期間起日不可晚於迄日。", "修正活動資料期間。" );
+                    "活動資料期間起日不可晚於迄日。", "修正活動資料期間。");
             }
 
             var ageDays = context.EvaluationDate.DayNumber - activity.PeriodEnd.DayNumber;
@@ -233,13 +233,13 @@ public static class InventoryReadinessValidator
             if (activity.IsEstimated && string.IsNullOrWhiteSpace(activity.EstimationReason))
             {
                 AddBlocking(results, "INV-ESTIMATION-REASON", "ActivityData", key, activity.Stage, owner,
-                    "估算資料缺少估算理由。", "補上估算方法、資料來源與使用理由。" );
+                    "估算資料缺少估算理由。", "補上估算方法、資料來源與使用理由。");
             }
 
             if (activity.IsExcluded && string.IsNullOrWhiteSpace(activity.ExclusionReason))
             {
                 AddBlocking(results, "INV-EXCLUSION-REASON", "ActivityData", key, activity.Stage, owner,
-                    "排除活動缺少排除理由。", "補上 PCR 截斷依據與排除理由。" );
+                    "排除活動缺少排除理由。", "補上 PCR 截斷依據與排除理由。");
             }
 
             ValidateFactor(activity, results);
@@ -262,7 +262,7 @@ public static class InventoryReadinessValidator
         if (activity.Factor is null)
         {
             AddBlocking(results, "INV-FACTOR-MISSING", "ActivityData", activityKey, activity.Stage, owner,
-                "活動尚未選擇排放係數。", "選擇已發布且適用的排放係數版本。" );
+                "活動尚未選擇排放係數。", "選擇已發布且適用的排放係數版本。");
             return;
         }
 
@@ -272,7 +272,7 @@ public static class InventoryReadinessValidator
         if (!factor.IsPublished || !factor.IsReviewed || factor.IsWithdrawn)
         {
             AddBlocking(results, "INV-FACTOR-STATUS", "EmissionFactorVersion", factorKey, activity.Stage, owner,
-                "排放係數未發布、未完成審查或已撤回。", "改用可用的已發布係數版本。" );
+                "排放係數未發布、未完成審查或已撤回。", "改用可用的已發布係數版本。");
         }
 
         if (!factor.IsGeographyCompatible)
@@ -292,13 +292,13 @@ public static class InventoryReadinessValidator
         if (!factor.IsWithinValidityPeriod)
         {
             AddBlocking(results, "INV-FACTOR-VALIDITY", "EmissionFactorVersion", factorKey, activity.Stage, owner,
-                "排放係數不涵蓋活動資料期間。", "選擇有效期間涵蓋活動資料的係數版本。" );
+                "排放係數不涵蓋活動資料期間。", "選擇有效期間涵蓋活動資料的係數版本。");
         }
 
         if (!factor.IsUnitCompatible)
         {
             AddBlocking(results, "INV-FACTOR-UNIT", "EmissionFactorVersion", factorKey, activity.Stage, owner,
-                "活動量單位與係數分母單位不相容。", "修正單位或選擇維度相容的係數。" );
+                "活動量單位與係數分母單位不相容。", "修正單位或選擇維度相容的係數。");
         }
     }
 
@@ -312,7 +312,7 @@ public static class InventoryReadinessValidator
         if (!activity.IsExcluded && requiredEvidence.Length == 0)
         {
             AddBlocking(results, "INV-EVIDENCE-MISSING", "ActivityData", activity.ActivityId.ToString("D"), activity.Stage, owner,
-                "活動缺少必要佐證文件。", "上傳並連結發票、帳單、量測紀錄或其他必要佐證。" );
+                "活動缺少必要佐證文件。", "上傳並連結發票、帳單、量測紀錄或其他必要佐證。");
             return;
         }
 
@@ -322,19 +322,19 @@ public static class InventoryReadinessValidator
             if (!evidence.HasVerifiedSha256)
             {
                 AddBlocking(results, "INV-EVIDENCE-HASH", "EvidenceDocumentVersion", key, activity.Stage, owner,
-                    "佐證文件缺少伺服器驗證的 SHA-256。", "重新上傳原始文件並完成完整性驗證。" );
+                    "佐證文件缺少伺服器驗證的 SHA-256。", "重新上傳原始文件並完成完整性驗證。");
             }
 
             if (!evidence.MalwareScanPassed)
             {
                 AddBlocking(results, "INV-EVIDENCE-SCAN", "EvidenceDocumentVersion", key, activity.Stage, owner,
-                    "佐證文件未通過惡意程式掃描。", "隔離文件並上傳通過掃描的版本。" );
+                    "佐證文件未通過惡意程式掃描。", "隔離文件並上傳通過掃描的版本。");
             }
 
             if (!evidence.IsRetained)
             {
                 AddBlocking(results, "INV-EVIDENCE-RETENTION", "EvidenceDocumentVersion", key, activity.Stage, owner,
-                    "佐證文件不符合保存政策。", "修正物件保存狀態或重新連結可保存版本。" );
+                    "佐證文件不符合保存政策。", "修正物件保存狀態或重新連結可保存版本。");
             }
         }
     }
@@ -350,13 +350,13 @@ public static class InventoryReadinessValidator
             if (delta > Math.Abs(allocation.Tolerance))
             {
                 AddBlocking(results, "INV-ALLOCATION-TOTAL", "AllocationPoolVersion", key, null, string.Empty,
-                    "分配池比例總和不是 100%。", "修正分配基礎，使比例在容許誤差內合計為 100%。" );
+                    "分配池比例總和不是 100%。", "修正分配基礎，使比例在容許誤差內合計為 100%。");
             }
 
             if (!allocation.HasCompleteBasis)
             {
                 AddBlocking(results, "INV-ALLOCATION-BASIS", "AllocationPoolVersion", key, null, string.Empty,
-                    "分配池缺少必要分配基礎。", "補齊分母、各產品基礎值、單位與公式。" );
+                    "分配池缺少必要分配基礎。", "補齊分母、各產品基礎值、單位與公式。");
             }
 
             if (!allocation.HasEvidence)
@@ -408,19 +408,19 @@ public static class InventoryReadinessValidator
         if (!context.CalculationRunExists)
         {
             AddBlocking(results, "INV-CALCULATION-MISSING", "InventoryProjectVersion", key, null, string.Empty,
-                "尚未建立計算執行結果。", "完成計算後再提交。" );
+                "尚未建立計算執行結果。", "完成計算後再提交。");
         }
 
         if (!context.CalculationManifestMatches)
         {
             AddBlocking(results, "INV-MANIFEST-STALE", "InventoryProjectVersion", key, null, string.Empty,
-                "最新計算清單與目前輸入不一致。", "重新計算並確認輸入雜湊一致。" );
+                "最新計算清單與目前輸入不一致。", "重新計算並確認輸入雜湊一致。");
         }
 
         if (!context.FormulaRuleSetIsPublished)
         {
             AddBlocking(results, "INV-FORMULA-STATUS", "InventoryProjectVersion", key, null, string.Empty,
-                "計算使用未發布或已撤回的公式規則版本。", "使用已發布公式重新計算。" );
+                "計算使用未發布或已撤回的公式規則版本。", "使用已發布公式重新計算。");
         }
     }
 

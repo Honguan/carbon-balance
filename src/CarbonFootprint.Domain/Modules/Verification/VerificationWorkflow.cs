@@ -174,7 +174,7 @@ public static class VerificationWorkflowService
         if (!AllowedTransitions.TryGetValue(request.CurrentState, out var allowed)
             || !allowed.Contains(request.TargetState))
         {
-            throw new InvalidOperationException($"Transition {request.CurrentState} -> {request.TargetState} is not allowed." );
+            throw new InvalidOperationException($"Transition {request.CurrentState} -> {request.TargetState} is not allowed.");
         }
 
         if (string.IsNullOrWhiteSpace(request.Reason)
@@ -183,12 +183,12 @@ public static class VerificationWorkflowService
                 or VerificationWorkflowState.Revoked
                 or VerificationWorkflowState.Superseded)
         {
-            throw new InvalidOperationException("This workflow transition requires a reason." );
+            throw new InvalidOperationException("This workflow transition requires a reason.");
         }
 
         if (HighImpactTargets.Contains(request.TargetState) && !request.Actor.HasMfa)
         {
-            throw new InvalidOperationException("MFA is required for approval, verification, publication and revocation transitions." );
+            throw new InvalidOperationException("MFA is required for approval, verification, publication and revocation transitions.");
         }
 
         if (request.TargetState is VerificationWorkflowState.InternallyApproved or VerificationWorkflowState.Verified)
@@ -199,25 +199,25 @@ public static class VerificationWorkflowService
         if (request.TargetState is VerificationWorkflowState.ReadyForReview or VerificationWorkflowState.Submitted
             && !request.ReadinessPassed)
         {
-            throw new InvalidOperationException("Inventory readiness validation must pass before review or submission." );
+            throw new InvalidOperationException("Inventory readiness validation must pass before review or submission.");
         }
 
         if (request.TargetState is VerificationWorkflowState.InternallyApproved or VerificationWorkflowState.Verified
             && request.HasOpenBlockingFindings)
         {
-            throw new InvalidOperationException("Blocking findings must be resolved or explicitly accepted before approval or verification." );
+            throw new InvalidOperationException("Blocking findings must be resolved or explicitly accepted before approval or verification.");
         }
 
         if (request.TargetState == VerificationWorkflowState.Verified
             && (!request.HasVerificationRecord || !request.HasSignedStatement))
         {
-            throw new InvalidOperationException("Verification requires a completed verification record and signed statement." );
+            throw new InvalidOperationException("Verification requires a completed verification record and signed statement.");
         }
 
         if (request.TargetState == VerificationWorkflowState.Published
             && request.CurrentState != VerificationWorkflowState.Verified)
         {
-            throw new InvalidOperationException("Only a verified inventory version can be published." );
+            throw new InvalidOperationException("Only a verified inventory version can be published.");
         }
 
         var invalidated = request.InputsChangedAfterApproval
@@ -228,7 +228,7 @@ public static class VerificationWorkflowService
                 or VerificationWorkflowState.Published;
         if (invalidated && request.TargetState != VerificationWorkflowState.Draft)
         {
-            throw new InvalidOperationException("Governed inputs changed after approval or verification. Create a new version or return to Draft." );
+            throw new InvalidOperationException("Governed inputs changed after approval or verification. Create a new version or return to Draft.");
         }
 
         return new(
@@ -265,12 +265,12 @@ public static class VerificationWorkflowService
         ArgumentNullException.ThrowIfNull(finding);
         if (finding.Status is ReviewFindingStatus.Resolved or ReviewFindingStatus.AcceptedRisk)
         {
-            throw new InvalidOperationException("A closed finding cannot receive another response." );
+            throw new InvalidOperationException("A closed finding cannot receive another response.");
         }
 
         if (string.IsNullOrWhiteSpace(response))
         {
-            throw new InvalidOperationException("Finding response is required." );
+            throw new InvalidOperationException("Finding response is required.");
         }
 
         return finding with
@@ -293,17 +293,17 @@ public static class VerificationWorkflowService
         ArgumentNullException.ThrowIfNull(reviewer);
         if (!reviewer.Roles.Contains("Reviewer") && !reviewer.Roles.Contains("Administrator"))
         {
-            throw new InvalidOperationException("Reviewer or administrator role is required to resolve a finding." );
+            throw new InvalidOperationException("Reviewer or administrator role is required to resolve a finding.");
         }
 
         if (string.IsNullOrWhiteSpace(resolution))
         {
-            throw new InvalidOperationException("Finding resolution is required." );
+            throw new InvalidOperationException("Finding resolution is required.");
         }
 
         if (acceptRisk && finding.Severity == ReviewFindingSeverity.Critical)
         {
-            throw new InvalidOperationException("Critical findings cannot be accepted as residual risk." );
+            throw new InvalidOperationException("Critical findings cannot be accepted as residual risk.");
         }
 
         return finding with
@@ -325,33 +325,33 @@ public static class VerificationWorkflowService
         ArgumentNullException.ThrowIfNull(verifier);
         if (!verifier.HasMfa)
         {
-            throw new InvalidOperationException("MFA is required to complete verification." );
+            throw new InvalidOperationException("MFA is required to complete verification.");
         }
 
         if (!verifier.Roles.Contains("Verifier") && !verifier.Roles.Contains("Administrator"))
         {
-            throw new InvalidOperationException("Verifier role is required." );
+            throw new InvalidOperationException("Verifier role is required.");
         }
 
         if (string.Equals(verifier.UserId, creatorUserId, StringComparison.Ordinal)
             || materialEditors.Contains(verifier.UserId))
         {
-            throw new InvalidOperationException("The creator or a material editor cannot verify the same inventory version." );
+            throw new InvalidOperationException("The creator or a material editor cannot verify the same inventory version.");
         }
 
         if (record.CompletedAt < record.StartedAt)
         {
-            throw new InvalidOperationException("Verification completion time cannot precede the start time." );
+            throw new InvalidOperationException("Verification completion time cannot precede the start time.");
         }
 
         if (record.SamplingItems.Count == 0)
         {
-            throw new InvalidOperationException("Verification requires at least one sampling record." );
+            throw new InvalidOperationException("Verification requires at least one sampling record.");
         }
 
         if (!record.HasValidSignedStatement)
         {
-            throw new InvalidOperationException("Verification requires a valid SHA-256 for the signed statement." );
+            throw new InvalidOperationException("Verification requires a valid SHA-256 for the signed statement.");
         }
 
         return record;
@@ -362,7 +362,7 @@ public static class VerificationWorkflowService
         if (string.Equals(request.Actor.UserId, request.CreatorUserId, StringComparison.Ordinal)
             || request.Actor.MateriallyEditedProjectVersionIds.Contains(request.ProjectVersionId))
         {
-            throw new InvalidOperationException("The inventory creator or material editor cannot approve or verify the same project version." );
+            throw new InvalidOperationException("The inventory creator or material editor cannot approve or verify the same project version.");
         }
 
         var requiredRole = request.TargetState == VerificationWorkflowState.Verified
@@ -371,7 +371,7 @@ public static class VerificationWorkflowService
         if (!request.Actor.Roles.Contains(requiredRole)
             && !request.Actor.Roles.Contains("Administrator"))
         {
-            throw new InvalidOperationException($"{requiredRole} role is required." );
+            throw new InvalidOperationException($"{requiredRole} role is required.");
         }
     }
 

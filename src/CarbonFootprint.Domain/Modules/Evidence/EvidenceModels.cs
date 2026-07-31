@@ -199,19 +199,19 @@ public static class EvidenceDocumentService
 
         if (request.Bytes.Length == 0)
         {
-            throw new InvalidOperationException("Evidence file cannot be empty." );
+            throw new InvalidOperationException("Evidence file cannot be empty.");
         }
 
         if (request.CoverageStart is not null
             && request.CoverageEnd is not null
             && request.CoverageStart > request.CoverageEnd)
         {
-            throw new InvalidOperationException("Evidence coverage start cannot be later than the end date." );
+            throw new InvalidOperationException("Evidence coverage start cannot be later than the end date.");
         }
 
         if (request.ScanResult.Status != EvidenceScanStatus.Clean)
         {
-            throw new InvalidOperationException("Evidence cannot become available until the uploaded bytes pass malware scanning." );
+            throw new InvalidOperationException("Evidence cannot become available until the uploaded bytes pass malware scanning.");
         }
 
         var documents = current.Documents.ToList();
@@ -242,10 +242,10 @@ public static class EvidenceDocumentService
         else
         {
             document = documents.SingleOrDefault(item => item.Id == request.ExistingDocumentId.Value)
-                ?? throw new InvalidOperationException("Evidence document does not exist." );
+                ?? throw new InvalidOperationException("Evidence document does not exist.");
             if (document.OrganizationId != request.OrganizationId)
             {
-                throw new InvalidOperationException("Evidence document belongs to another organization." );
+                throw new InvalidOperationException("Evidence document belongs to another organization.");
             }
 
             previous = versions
@@ -254,7 +254,7 @@ public static class EvidenceDocumentService
                 .FirstOrDefault();
             if (previous is not null && IsRetentionLocked(current, previous.Id, request.UploadedAt))
             {
-                throw new InvalidOperationException("A retention-locked evidence version cannot be replaced. Create a separate logical document instead." );
+                throw new InvalidOperationException("A retention-locked evidence version cannot be replaced. Create a separate logical document instead.");
             }
         }
 
@@ -301,16 +301,16 @@ public static class EvidenceDocumentService
         ArgumentNullException.ThrowIfNull(current);
         ArgumentNullException.ThrowIfNull(link);
         var version = current.Versions.SingleOrDefault(item => item.Id == link.DocumentVersionId)
-            ?? throw new InvalidOperationException("Evidence version does not exist." );
+            ?? throw new InvalidOperationException("Evidence version does not exist.");
         var document = current.Documents.Single(item => item.Id == version.DocumentId);
         if (document.OrganizationId != link.OrganizationId)
         {
-            throw new InvalidOperationException("Evidence cannot be linked across organizations." );
+            throw new InvalidOperationException("Evidence cannot be linked across organizations.");
         }
 
         if (!version.IsUsable)
         {
-            throw new InvalidOperationException("Only clean, hash-verified and available evidence versions can be linked." );
+            throw new InvalidOperationException("Only clean, hash-verified and available evidence versions can be linked.");
         }
 
         if (current.Links.Any(item =>
@@ -338,7 +338,7 @@ public static class EvidenceDocumentService
     {
         if (!current.Versions.Any(item => item.Id == access.DocumentVersionId))
         {
-            throw new InvalidOperationException("Evidence version does not exist." );
+            throw new InvalidOperationException("Evidence version does not exist.");
         }
 
         return current with
@@ -361,20 +361,20 @@ public static class EvidenceDocumentService
     {
         if (!policy.IsPublished)
         {
-            throw new InvalidOperationException("Only published retention policies can be applied." );
+            throw new InvalidOperationException("Only published retention policies can be applied.");
         }
 
         var version = current.Versions.SingleOrDefault(item => item.Id == documentVersionId)
-            ?? throw new InvalidOperationException("Evidence version does not exist." );
+            ?? throw new InvalidOperationException("Evidence version does not exist.");
         var document = current.Documents.Single(item => item.Id == version.DocumentId);
         if (document.OrganizationId != policy.OrganizationId)
         {
-            throw new InvalidOperationException("Retention policy and evidence document belong to different organizations." );
+            throw new InvalidOperationException("Retention policy and evidence document belong to different organizations.");
         }
 
         if (legalHold && !policy.AllowLegalHold)
         {
-            throw new InvalidOperationException("This retention policy does not allow legal hold." );
+            throw new InvalidOperationException("This retention policy does not allow legal hold.");
         }
 
         var retainUntil = legalHold

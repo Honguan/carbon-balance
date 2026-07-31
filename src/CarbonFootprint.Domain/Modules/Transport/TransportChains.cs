@@ -180,7 +180,7 @@ public static class TransportChainCalculator
         ArgumentNullException.ThrowIfNull(overrides);
         if (!template.IsTemplate)
         {
-            throw new InvalidOperationException("Only route templates can be instantiated." );
+            throw new InvalidOperationException("Only route templates can be instantiated.");
         }
 
         var legs = template.Legs
@@ -340,7 +340,7 @@ public static class TransportChainCalculator
                 leg.CargoMassTonnes
                 * leg.DistanceKilometres
                 * leg.ShipmentAllocationShare,
-            _ => throw new InvalidOperationException("Unsupported transport calculation method." )
+            _ => throw new InvalidOperationException("Unsupported transport calculation method.")
         };
 
         var ttw = leg.Boundary.HasFlag(TransportEmissionBoundary.TankToWheel)
