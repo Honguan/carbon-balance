@@ -1,0 +1,310 @@
+@page
+@using CarbonFootprint.Domain.Modules.Evidence
+@using CarbonFootprint.Domain.Modules.Readiness
+@using CarbonFootprint.Domain.Modules.Verification
+@using CarbonFootprint.Infrastructure.Persistence
+@model CarbonFootprint.Web.Pages.GovernanceModel
+@{
+    ViewData["Title"] = "治理與查驗控制台";
+    var selectedProject = Model.Projects.FirstOrDefault(item => item.Id == Model.ProjectVersionId);
+    var definitions = Model.Overview?.Definitions ?? [];
+    var formulaDefinitions = definitions.Where(item => item.DefinitionType == GovernanceDefinitionTypes.ActivityFormula && item.PublicationStatus == "Published").ToArray();
+    var factorDefinitions = definitions.Where(item => item.DefinitionType == GovernanceDefinitionTypes.GlobalEmissionFactor && item.PublicationStatus == "Published").ToArray();
+    var qualityDefinitions = definitions.Where(item => item.DefinitionType == GovernanceDefinitionTypes.DataQualityRuleSet && item.PublicationStatus == "Published").ToArray();
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1>治理與查驗控制台</h1>
+        <p class="text-muted mb-0">集中管理規則版本、資料品質、分配、運輸、佐證、就緒檢查、審查流程與不可變查驗封存。</p>
+    </div>
+    <div class="text-end">
+        <span class="badge @(Model.HasVerifiedMfa ? "text-bg-success" : "text-bg-warning")">
+            MFA：@(Model.HasVerifiedMfa ? "本次登入已驗證" : "尚未以第二因素驗證")
+        </span>
+        @if (!Model.HasVerifiedMfa)
+        {
+            <div><a class="small" href="/Identity/Account/Manage/TwoFactorAuthentication">設定或確認雙因素驗證</a></div>
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="alert alert-info" role="status">@Model.StatusMessage</div>
+}
+
+@if (Model.Projects.Count == 0)
+{
+    <div class="alert alert-warning">尚未建立盤查專案。請先在盤查工作區建立產品、PCR 與盤查版本。</div>
+}
+else
+{
+    <form method="get" class="card card-body mb-4">
+        <label class="form-label" for="projectVersionId">盤查專案版本</label>
+        <div class="input-group">
+            <select class="form-select" id="projectVersionId" name="projectVersionId">
+                @foreach (var project in Model.Projects)
+                {
+                    <option value="@project.Id" selected="@(project.Id == Model.ProjectVersionId)">
+                        版本 @project.VersionNumber · @project.PeriodStart ～ @project.PeriodEnd · @project.WorkflowStatus · @project.Id
+                    </option>
+                }
+            </select>
+            <button class="btn btn-primary" type="submit">載入</button>
+        </div>
+    </form>
+
+    @if (selectedProject is not null)
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-3"><div class="card card-body h-100"><small>工作流程</small><strong>@selectedProject.WorkflowStatus</strong></div></div>
+            <div class="col-md-3"><div class="card card-body h-100"><small>就緒結果</small><strong>@(Model.Readiness?.CanSubmit(Model.AcknowledgedRuleCodes) == true ? "可提交" : "尚未通過")</strong></div></div>
+            <div class="col-md-3"><div class="card card-body h-100"><small>計算版本</small><strong>@Model.Runs.Count</strong></div></div>
+            <div class="col-md-3"><div class="card card-body h-100"><small>查驗封存</small><strong>@(Model.Overview?.Archives.Count ?? 0)</strong></div></div>
+        </div>
+    }
+
+    <section class="card mb-4" aria-labelledby="readiness-heading">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h2 class="h5 mb-0" id="readiness-heading">盤查就緒檢查</h2>
+            <span class="badge @(Model.Readiness?.CanSubmit(Model.AcknowledgedRuleCodes) == true ? "text-bg-success" : "text-bg-danger")">
+                @(Model.Readiness?.CanSubmit(Model.AcknowledgedRuleCodes) == true ? "通過" : "阻擋或待說明")
+            </span>
+        </div>
+        <div class="card-body">
+            @if (Model.Readiness is null || Model.Readiness.Results.Count == 0)
+            {
+                <p class="mb-0">目前沒有就緒警示。</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead><tr><th>代碼</th><th>嚴重度</th><th>對象</th><th>訊息／修正方式</th><th>說明</th></tr></thead>
+                        <tbody>
+                        @foreach (var result in Model.Readiness.Results)
+                        {
+                            <tr>
+                                <td><code>@result.Code</code></td>
+                                <td>@result.Severity</td>
+                                <td>@result.EntityType<br /><small>@result.EntityKey</small></td>
+                                <td>@result.Message<br /><small class="text-muted">@result.Remediation</small></td>
+                                <td>
+                                    @if (result.RequiresAcknowledgement && Model.CanEdit)
+                                    {
+                                        if (Model.AcknowledgedRuleCodes.Contains(result.Code))
+                                        {
+                                            <span class="badge text-bg-success">已說明</span>
+                                        }
+                                        else
+                                        {
+                                            <form method="post" asp-page-handler="Acknowledge" class="d-flex gap-2">
+                                                <input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" />
+                                                <input type="hidden" name="ruleCode" value="@result.Code" />
+                                                <input class="form-control form-control-sm" name="explanation" required maxlength="4000" placeholder="輸入原因與處置" />
+                                                <button class="btn btn-sm btn-outline-primary" type="submit">保存</button>
+                                            </form>
+                                        }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="card mb-4" aria-labelledby="workflow-heading">
+        <div class="card-header"><h2 class="h5 mb-0" id="workflow-heading">審查與第三方查驗流程</h2></div>
+        <div class="card-body">
+            <form method="post" asp-page-handler="Transition" class="row g-3">
+                <input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" />
+                <div class="col-md-4">
+                    <label class="form-label">目標狀態</label>
+                    <select class="form-select" name="targetState" required>
+                        @foreach (var state in Enum.GetValues<VerificationWorkflowState>())
+                        {
+                            <option value="@state">@state</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">轉換理由</label>
+                    <input class="form-control" name="reason" required maxlength="4000" value="Workflow transition requested through the governance console." />
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" type="submit">執行轉換</button>
+                </div>
+            </form>
+            <p class="small text-muted mt-2 mb-0">核准、查驗、發布、撤銷與取代等高影響狀態，必須使用已完成第二因素驗證的登入工作階段，並強制職責分離。</p>
+        </div>
+    </section>
+
+    <div class="accordion mb-4" id="governance-actions">
+        @if (Model.CanManage)
+        {
+            <div class="accordion-item">
+                <h2 class="accordion-header"><button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#definition-panel">治理定義與全域目錄</button></h2>
+                <div id="definition-panel" class="accordion-collapse collapse show" data-bs-parent="#governance-actions">
+                    <div class="accordion-body">
+                        <form method="post" asp-page-handler="SaveDefinition" class="row g-3 mb-4">
+                            <input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" />
+                            <div class="col-md-4"><label class="form-label">定義類型</label><select class="form-select" name="definitionType">@foreach (var type in new[] { GovernanceDefinitionTypes.DataQualityRuleSet, GovernanceDefinitionTypes.ActivityFormula, GovernanceDefinitionTypes.GlobalEmissionFactor, GovernanceDefinitionTypes.TransportRouteTemplate, GovernanceDefinitionTypes.EvidenceRetentionPolicy }) { <option value="@type">@type</option> }</select></div>
+                            <div class="col-md-4"><label class="form-label">穩定識別</label><input class="form-control" name="stableKey" required maxlength="300" /></div>
+                            <div class="col-md-4"><label class="form-label">名稱</label><input class="form-control" name="name" required maxlength="500" /></div>
+                            <div class="col-12"><label class="form-label">版本化 JSON 定義</label><textarea class="form-control font-monospace" rows="8" name="payloadJson" required>{}</textarea></div>
+                            <div class="col-md-4"><label class="form-label">來源穩定 ID</label><input class="form-control" name="sourceStableId" /></div>
+                            <div class="col-md-4"><label class="form-label">來源名稱</label><input class="form-control" name="sourceName" /></div>
+                            <div class="col-md-4"><label class="form-label">資料集版本</label><input class="form-control" name="sourceDatasetVersion" /></div>
+                            <div class="col-md-6"><label class="form-label">來源 URL</label><input class="form-control" type="url" name="sourceUrl" /></div>
+                            <div class="col-md-3"><label class="form-label">授權碼</label><input class="form-control" name="licenseCode" /></div>
+                            <div class="col-md-3"><label class="form-label">來源佐證版本 ID</label><input class="form-control" type="text" name="sourceEvidenceDocumentVersionId" /></div>
+                            <div class="col-12"><button class="btn btn-primary" type="submit">建立新草稿版本</button></div>
+                        </form>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle">
+                                <thead><tr><th>類型／識別</th><th>版本</th><th>狀態</th><th>SHA-256</th><th>操作</th></tr></thead>
+                                <tbody>
+                                @foreach (var definition in definitions)
+                                {
+                                    <tr>
+                                        <td>@definition.DefinitionType<br /><strong>@definition.StableKey</strong><br /><small>@definition.Name</small></td>
+                                        <td>@definition.VersionNumber</td>
+                                        <td>@definition.PublicationStatus</td>
+                                        <td><code class="small">@definition.CanonicalSha256</code></td>
+                                        <td>
+                                            @if (definition.PublicationStatus == "Draft")
+                                            {
+                                                <form class="d-inline" method="post" asp-page-handler="PublishDefinition"><input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" /><input type="hidden" name="definitionVersionId" value="@definition.Id" /><button class="btn btn-sm btn-success" type="submit">發布</button></form>
+                                            }
+                                            @if (definition.PublicationStatus == "Published")
+                                            {
+                                                <form class="d-inline" method="post" asp-page-handler="ActivateDefinition"><input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" /><input type="hidden" name="definitionVersionId" value="@definition.Id" /><input type="hidden" name="enabled" value="true" /><input type="hidden" name="overridePayloadJson" value="{}" /><button class="btn btn-sm btn-outline-primary" type="submit">組織啟用</button></form>
+                                                <form class="d-inline" method="post" asp-page-handler="WithdrawDefinition"><input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" /><input type="hidden" name="definitionVersionId" value="@definition.Id" /><input type="hidden" name="reason" value="Withdrawn through governance console." /><button class="btn btn-sm btn-outline-danger" type="submit">撤回</button></form>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (Model.CanEdit)
+        {
+            <div class="accordion-item">
+                <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#activity-governance-panel">活動資料治理</button></h2>
+                <div id="activity-governance-panel" class="accordion-collapse collapse" data-bs-parent="#governance-actions">
+                    <div class="accordion-body">
+                        <h3 class="h6">公式與全域係數綁定</h3>
+                        <form method="post" asp-page-handler="BindFormula" class="row g-2 mb-3">
+                            <input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" />
+                            <div class="col-md-4"><select class="form-select" name="activityId" required><option value="">選擇活動</option>@foreach (var activity in Model.Activities) { <option value="@activity.Id">@activity.Name (@activity.Id)</option> }</select></div>
+                            <div class="col-md-4"><select class="form-select" name="formulaDefinitionVersionId" required><option value="">選擇已發布公式</option>@foreach (var definition in formulaDefinitions) { <option value="@definition.Id">@definition.Name v@definition.VersionNumber</option> }</select></div>
+                            <div class="col-md-3"><input class="form-control font-monospace" name="formulaValuesJson" value="{}" required /></div>
+                            <div class="col-md-1"><button class="btn btn-primary" type="submit">綁定</button></div>
+                        </form>
+                        <form method="post" asp-page-handler="BindGlobalFactor" class="row g-2 mb-4">
+                            <input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" />
+                            <div class="col-md-5"><select class="form-select" name="activityId" required><option value="">選擇活動</option>@foreach (var activity in Model.Activities) { <option value="@activity.Id">@activity.Name (@activity.Id)</option> }</select></div>
+                            <div class="col-md-5"><select class="form-select" name="globalFactorDefinitionVersionId" required><option value="">選擇已發布全域係數</option>@foreach (var definition in factorDefinitions) { <option value="@definition.Id">@definition.Name v@definition.VersionNumber</option> }</select></div>
+                            <div class="col-md-2"><button class="btn btn-primary" type="submit">綁定係數</button></div>
+                        </form>
+
+                        <h3 class="h6">資料品質與不確定性</h3>
+                        <form method="post" asp-page-handler="SaveDataQuality" class="row g-2 mb-4">
+                            <input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" />
+                            <div class="col-md-4"><select class="form-select" name="activityId" required><option value="">選擇活動</option>@foreach (var activity in Model.Activities) { <option value="@activity.Id">@activity.Name</option> }</select></div>
+                            <div class="col-md-4"><select class="form-select" name="ruleSetDefinitionVersionId" required><option value="">選擇品質規則集</option>@foreach (var definition in qualityDefinitions) { <option value="@definition.Id">@definition.Name v@definition.VersionNumber</option> }</select></div>
+                            <div class="col-md-4"><button class="btn btn-primary" type="submit">評估並保存</button></div>
+                            <div class="col-md-6"><textarea class="form-control font-monospace" rows="7" name="assessmentJson" required placeholder="DataQualityAssessmentVersion JSON"></textarea></div>
+                            <div class="col-md-6"><textarea class="form-control font-monospace" rows="7" name="uncertaintyInputsJson" placeholder="UncertaintyInput JSON array；無資料可填 null">null</textarea></div>
+                        </form>
+
+                        <h3 class="h6">分配池與多段運輸</h3>
+                        <div class="row g-3">
+                            <div class="col-md-6"><form method="post" asp-page-handler="SaveAllocation"><input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" /><label class="form-label">AllocationPoolVersion JSON</label><textarea class="form-control font-monospace" rows="9" name="poolJson" required></textarea><button class="btn btn-primary mt-2" type="submit">驗證並保存分配池</button></form></div>
+                            <div class="col-md-6"><form method="post" asp-page-handler="SaveTransport"><input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" /><label class="form-label">TransportChainVersion JSON</label><textarea class="form-control font-monospace" rows="9" name="chainJson" required></textarea><button class="btn btn-primary mt-2" type="submit">計算並保存運輸鏈</button></form></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="accordion-item">
+                <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#evidence-panel">佐證文件鏈</button></h2>
+                <div id="evidence-panel" class="accordion-collapse collapse" data-bs-parent="#governance-actions">
+                    <div class="accordion-body">
+                        <form method="post" enctype="multipart/form-data" asp-page-handler="UploadEvidence" class="row g-3 mb-4">
+                            <input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" />
+                            <div class="col-md-4"><label class="form-label">文件名稱</label><input class="form-control" name="title" required /></div>
+                            <div class="col-md-3"><label class="form-label">分類</label><select class="form-select" name="category">@foreach (var category in Enum.GetValues<EvidenceCategory>()) { <option value="@category">@category</option> }</select></div>
+                            <div class="col-md-5"><label class="form-label">檔案</label><input class="form-control" type="file" name="file" required /></div>
+                            <div class="col-md-4"><label class="form-label">既有文件 ID（建立新版本時填寫）</label><input class="form-control" name="existingDocumentId" /></div>
+                            <div class="col-md-3 form-check ms-2 mt-5"><input class="form-check-input" type="checkbox" name="isSensitive" value="true" id="isSensitive" /><label class="form-check-label" for="isSensitive">敏感文件</label></div>
+                            <div class="col-12"><button class="btn btn-primary" type="submit">上傳、掃描並建立版本</button></div>
+                        </form>
+                        <form method="post" asp-page-handler="LinkEvidence" class="row g-2 mb-4">
+                            <input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" />
+                            <div class="col-md-3"><select class="form-select" name="documentVersionId" required><option value="">佐證版本</option>@foreach (var version in Model.Overview?.EvidenceVersions ?? []) { <option value="@version.Id">@version.OriginalFileName v@version.VersionNumber</option> }</select></div>
+                            <div class="col-md-2"><select class="form-select" name="targetType">@foreach (var type in Enum.GetValues<EvidenceLinkTargetType>()) { <option value="@type">@type</option> }</select></div>
+                            <div class="col-md-3"><input class="form-control" name="targetId" required placeholder="目標 UUID" /></div>
+                            <div class="col-md-3"><input class="form-control" name="purpose" placeholder="用途" /></div>
+                            <div class="col-md-1"><button class="btn btn-primary" type="submit">連結</button></div>
+                        </form>
+                        <div class="table-responsive"><table class="table table-sm"><thead><tr><th>文件</th><th>版本／狀態</th><th>SHA-256</th><th>下載</th></tr></thead><tbody>@foreach (var version in Model.Overview?.EvidenceVersions ?? []) { var document = Model.Overview?.EvidenceDocuments.FirstOrDefault(item => item.Id == version.DocumentId); <tr><td>@document?.Title<br /><small>@version.OriginalFileName</small></td><td>v@version.VersionNumber · @version.ScanStatus · @version.StorageStatus</td><td><code>@version.Sha256</code></td><td><a class="btn btn-sm btn-outline-primary" asp-page-handler="Evidence" asp-route-documentVersionId="@version.Id">下載</a></td></tr> }</tbody></table></div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (Model.CanReview || Model.CanVerify)
+        {
+            <div class="accordion-item">
+                <h2 class="accordion-header"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#verification-panel">查核發現、查驗紀錄與封存</button></h2>
+                <div id="verification-panel" class="accordion-collapse collapse" data-bs-parent="#governance-actions">
+                    <div class="accordion-body">
+                        <div class="row g-3 mb-4">
+                            @if (Model.CanReview)
+                            {
+                                <div class="col-md-6"><form method="post" asp-page-handler="SaveFinding"><input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" /><label class="form-label">ReviewFinding JSON</label><textarea class="form-control font-monospace" rows="10" name="findingJson" required></textarea><button class="btn btn-primary mt-2" type="submit">保存查核發現</button></form></div>
+                            }
+                            @if (Model.CanVerify)
+                            {
+                                <div class="col-md-6"><form method="post" asp-page-handler="SaveVerificationRecord"><input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" /><label class="form-label">VerificationRecord JSON</label><textarea class="form-control font-monospace" rows="10" name="verificationRecordJson" required></textarea><button class="btn btn-primary mt-2" type="submit">保存查驗與簽署摘要</button></form></div>
+                            }
+                        </div>
+                        <h3 class="h6">不可變查驗封存</h3>
+                        @foreach (var run in Model.Runs)
+                        {
+                            <form class="d-inline-block me-2 mb-2" method="post" asp-page-handler="GenerateArchive"><input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" /><input type="hidden" name="calculationRunId" value="@run.Id" /><button class="btn btn-outline-primary" type="submit">封存 @run.Id</button></form>
+                        }
+                        <div class="table-responsive mt-3"><table class="table table-sm"><thead><tr><th>計算版本</th><th>格式</th><th>SHA-256</th><th>建立時間</th><th>下載</th></tr></thead><tbody>@foreach (var archive in Model.Overview?.Archives ?? []) { <tr><td>@archive.CalculationRunId</td><td>@archive.ExportSchemaVersion</td><td><code>@archive.ArchiveSha256</code></td><td>@archive.GeneratedAt</td><td><a class="btn btn-sm btn-primary" asp-page-handler="Archive" asp-route-archiveId="@archive.Id">下載 ZIP</a></td></tr> }</tbody></table></div>
+                        @if (Model.Runs.Count >= 2)
+                        {
+                            <form method="post" asp-page-handler="CompareRuns" class="row g-2 mt-3"><input type="hidden" name="projectVersionId" value="@Model.ProjectVersionId" /><div class="col-md-5"><select class="form-select" name="previousRunId">@foreach (var run in Model.Runs) { <option value="@run.Id">@run.CreatedAt · @run.Id</option> }</select></div><div class="col-md-5"><select class="form-select" name="currentRunId">@foreach (var run in Model.Runs) { <option value="@run.Id">@run.CreatedAt · @run.Id</option> }</select></div><div class="col-md-2"><button class="btn btn-outline-dark" type="submit">比較版本</button></div></form>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <section class="card mb-4">
+        <div class="card-header"><h2 class="h5 mb-0">治理事件與通知收件匣</h2></div>
+        <div class="card-body table-responsive">
+            <table class="table table-sm"><thead><tr><th>時間</th><th>事件</th><th>對象</th><th>摘要</th></tr></thead><tbody>
+            @foreach (var item in Model.Overview?.Events.Take(100) ?? [])
+            {
+                <tr><td>@item.OccurredAt</td><td><code>@item.EventType</code></td><td>@item.EntityType · @item.EntityId</td><td><code class="small">@item.PayloadSha256</code></td></tr>
+            }
+            </tbody></table>
+        </div>
+    </section>
+}

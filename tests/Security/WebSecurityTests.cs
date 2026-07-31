@@ -40,6 +40,8 @@ public sealed class WebSecurityTests : IClassFixture<WebSecurityTests.Factory>
             "/Workspace/calculation"
         }.Select(path => _client.GetAsync(path)));
         var reports = await _client.GetAsync("/Reports");
+        var governance = await _client.GetAsync("/Governance");
+        var governanceApi = await _client.GetAsync($"/api/governance/projects/{Guid.NewGuid()}/overview");
 
         Assert.Equal(HttpStatusCode.OK, health.StatusCode);
         Assert.Equal(HttpStatusCode.Redirect, manage.StatusCode);
@@ -53,6 +55,10 @@ public sealed class WebSecurityTests : IClassFixture<WebSecurityTests.Factory>
         });
         Assert.Equal(HttpStatusCode.Redirect, reports.StatusCode);
         Assert.Equal("/Identity/Account/Login", reports.Headers.Location?.AbsolutePath);
+        Assert.Equal(HttpStatusCode.Redirect, governance.StatusCode);
+        Assert.Equal("/Identity/Account/Login", governance.Headers.Location?.AbsolutePath);
+        Assert.Equal(HttpStatusCode.Redirect, governanceApi.StatusCode);
+        Assert.Equal("/Identity/Account/Login", governanceApi.Headers.Location?.AbsolutePath);
     }
 
     [Fact]

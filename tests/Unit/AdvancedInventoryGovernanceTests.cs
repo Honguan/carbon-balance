@@ -170,6 +170,42 @@ public sealed class AdvancedInventoryGovernanceTests
     }
 
     [Fact]
+    public void FormulaRegistry_AcceptsEquivalentImmutableDefinitionInstance()
+    {
+        var definition = new ActivityFormulaDefinitionVersion(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            1,
+            "factor-emission-v1",
+            ActivityCategory.PurchasedElectricity,
+            FormulaCalculationStrategy.FactorBased,
+            FormulaPublicationStatus.Published,
+            [Input("activityAmount", "kWh"), Input("emissionFactor", "kgCO2e/kWh")],
+            "emissions",
+            "kgCO2e",
+            FactorBasedFormula.ImplementationIdentifier,
+            DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+            "admin",
+            DateTimeOffset.Parse("2026-01-02T00:00:00Z"));
+        var equivalent = definition with { Inputs = definition.Inputs.ToArray() };
+        var registry = new ActivityFormulaRegistry([new FactorBasedFormula()], [definition]);
+        var context = new FormulaExecutionContext(
+            Guid.NewGuid(),
+            equivalent,
+            new Dictionary<string, FormulaValue>
+            {
+                ["activityAmount"] = Value("activityAmount", 100m, "kWh"),
+                ["emissionFactor"] = Value("emissionFactor", 0.5m, "kgCO2e/kWh")
+            },
+            new Dictionary<string, string>(),
+            DateTimeOffset.Parse("2026-07-31T00:00:00Z"));
+
+        var result = registry.Execute(context);
+
+        Assert.Equal(50m, result.Result);
+    }
+
+    [Fact]
     public void TransportChain_CalculatesTwoLegRoute()
     {
         var chain = new TransportChainVersion(

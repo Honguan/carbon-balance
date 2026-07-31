@@ -142,7 +142,7 @@ public sealed class ActivityFormulaRegistry
         var definition = context.Definition;
 
         if (!_definitions.TryGetValue(definition.Id, out var registered)
-            || registered != definition)
+            || !HasEquivalentDefinition(registered, definition))
         {
             errors.Add(new("FORMULA-NOT-REGISTERED", string.Empty, "Unsupported PCR formula rule set: formula definition version is not registered."));
             return errors;
@@ -188,6 +188,25 @@ public sealed class ActivityFormulaRegistry
 
         return errors;
     }
+
+    private static bool HasEquivalentDefinition(
+        ActivityFormulaDefinitionVersion registered,
+        ActivityFormulaDefinitionVersion requested) =>
+        registered.Id == requested.Id
+        && registered.FormulaId == requested.FormulaId
+        && registered.VersionNumber == requested.VersionNumber
+        && string.Equals(registered.Code, requested.Code, StringComparison.Ordinal)
+        && registered.Category == requested.Category
+        && registered.Strategy == requested.Strategy
+        && registered.Status == requested.Status
+        && registered.Inputs.SequenceEqual(requested.Inputs)
+        && string.Equals(registered.OutputDimension, requested.OutputDimension, StringComparison.Ordinal)
+        && string.Equals(registered.OutputUnit, requested.OutputUnit, StringComparison.Ordinal)
+        && string.Equals(registered.ImplementationKey, requested.ImplementationKey, StringComparison.Ordinal)
+        && registered.CreatedAt == requested.CreatedAt
+        && string.Equals(registered.CreatedBy, requested.CreatedBy, StringComparison.Ordinal)
+        && registered.PublishedAt == requested.PublishedAt
+        && registered.SupersedesVersionId == requested.SupersedesVersionId;
 
     public FormulaExecutionResult Execute(FormulaExecutionContext context)
     {

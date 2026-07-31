@@ -4,6 +4,7 @@ using CarbonFootprint.Domain.Modules.Calculations;
 using CarbonFootprint.Infrastructure;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Persistence;
+using CarbonFootprint.Web;
 using CarbonFootprint.Web.Security;
 using CarbonFootprint.Web.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -28,6 +29,7 @@ builder.Services.AddHttpClient<IMoenvFactorSource, MoenvFactorClient>(client =>
 builder.Services.AddScoped<MoenvFactorSynchronizationService>();
 builder.Services.AddScoped<IAuthorizationHandler, OrganizationPermissionHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, MfaEnabledHandler>();
+builder.Services.AddScoped<GovernanceAccessService>();
 builder.Services.AddRazorPages();
 builder.Services.AddProblemDetails();
 var dataProtectionPath = builder.Configuration["DataProtection:KeyPath"];
@@ -174,12 +176,6 @@ var disabledIdentityPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase
     "/Identity/Account/ResetPasswordConfirmation",
     "/Identity/Account/ConfirmEmailChange",
     "/Identity/Account/ExternalLogin",
-    "/Identity/Account/LoginWith2fa",
-    "/Identity/Account/LoginWithRecoveryCode",
-    "/Identity/Account/Manage/TwoFactorAuthentication",
-    "/Identity/Account/Manage/EnableAuthenticator",
-    "/Identity/Account/Manage/ResetAuthenticator",
-    "/Identity/Account/Manage/GenerateRecoveryCodes",
     "/Identity/Account/Manage/ExternalLogins"
 };
 
@@ -204,6 +200,7 @@ app.MapStaticAssets();
 app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
 app.MapHealthChecks("/health/ready");
 app.MapRazorPages().WithStaticAssets();
+app.MapGovernanceApi();
 app.Run();
 
 public partial class Program;
