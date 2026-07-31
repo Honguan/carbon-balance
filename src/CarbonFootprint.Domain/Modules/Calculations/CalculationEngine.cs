@@ -1,9 +1,21 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using CarbonFootprint.Domain.Modules.Formulas;
 using CarbonFootprint.Domain.Modules.Inventories;
 
 namespace CarbonFootprint.Domain.Modules.Calculations;
 
 public sealed class CalculationEngine
 {
+    private static readonly IActivityFormulaImplementation[] Implementations =
+    [
+        new DirectAmountFormula(),
+        new FactorBasedFormula(),
+        new MassBalanceFormula(),
+        new EnergyBalanceFormula()
+    ];
+
     public CalculationRun Calculate(
         Guid runId,
         InventoryProjectSnapshot snapshot,
@@ -12,30 +24,16 @@ public sealed class CalculationEngine
     {
         Validate(snapshot);
         var (manifest, hash) = CanonicalManifest.Create(snapshot, engineBuild);
+        var formulaDefinitions = snapshot.Activities
+            .Select(ResolveFormulaDefinition)
+            .GroupBy(definition => definition.Id)
+            .Select(group => group.Single())
+            .ToArray();
+        var formulaRegistry = new ActivityFormulaRegistry(Implementations, formulaDefinitions);
         var lines = snapshot.Activities
             .OrderBy(activity => activity.Stage)
             .ThenBy(activity => activity.Id)
-            .Select(activity =>
-            {
-                var formula = ActivityEmissionFormula.Resolve(snapshot.RuleSetVersion, activity.Kind);
-                return new CalculationLineItem(
-                    activity.Id,
-                    activity.Stage,
-                    formula.Id,
-                    activity.CanonicalValue,
-                    activity.CanonicalUnitCode,
-                    activity.FactorVersion.Id,
-                    activity.FactorVersion.Value,
-                    $"{activity.FactorVersion.NumeratorUnitCode}/{activity.FactorVersion.DenominatorUnitCode}",
-                    ActivityEmissionFormula.Calculate(
-                        activity.CanonicalValue,
-                        activity.FactorVersion.Value,
-                        activity.AllocationFactor),
-                    activity.FactorVersion.NumeratorUnitCode,
-                    activity.AllocationFactor,
-                    activity.AmountFormulaId,
-                    activity.FormulaInputsJson);
-            })
+            .Select(activity => CalculateLine(activity, formulaRegistry))
             .ToArray();
 
         var summaries = Enum.GetValues<LifecycleStage>()
@@ -88,6 +86,175 @@ public sealed class CalculationEngine
             dataQualitySummary);
     }
 
+    private static CalculationLineItem CalculateLine(
+        ActivityDataSnapshot activity,
+        ActivityFormulaRegistry registry)
+    {
+        var definition = ResolveFormulaDefinition(activity);
+        var values = BuildFormulaValues(activity, definition);
+        var result = registry.Execute(new FormulaExecutionContext(
+            activity.Id,
+            definition,
+            values,
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            DateTimeOffset.UnixEpoch));
+        var governanceTrace = JsonSerializer.Serialize(new
+        {
+            dataQuality = JsonDocument.Parse(activity.DataQualityAssessmentJson).RootElement,
+            allocation = JsonDocument.Parse(activity.AllocationTraceJson).RootElement,
+            transport = JsonDocument.Parse(activity.TransportTraceJson).RootElement,
+            evidence = JsonDocument.Parse(activity.EvidenceIndexJson).RootElement
+        });
+
+        return new CalculationLineItem(
+            activity.Id,
+            activity.Stage,
+            $"{definition.Code}@{definition.VersionNumber}",
+            activity.CanonicalValue,
+            activity.CanonicalUnitCode,
+            activity.FactorVersion.Id,
+            activity.FactorVersion.Value,
+            $"{activity.FactorVersion.NumeratorUnitCode}/{activity.FactorVersion.DenominatorUnitCode}",
+            result.Result,
+            result.Unit,
+            activity.AllocationFactor,
+            activity.AmountFormulaId,
+            activity.FormulaInputsJson,
+            definition.Id,
+            result.Trace,
+            governanceTrace);
+    }
+
+    private static ActivityFormulaDefinitionVersion ResolveFormulaDefinition(ActivityDataSnapshot activity)
+    {
+        if (activity.EmissionFormula is not null)
+        {
+            return activity.EmissionFormula;
+        }
+
+        var factorUnit = $"{activity.FactorVersion.NumeratorUnitCode}/{activity.FactorVersion.DenominatorUnitCode}";
+        var stableId = DeterministicGuid($"factor-based-v1|{activity.CanonicalUnitCode}|{factorUnit}");
+        return new ActivityFormulaDefinitionVersion(
+            stableId,
+            DeterministicGuid("factor-based"),
+            1,
+            "factor-based-v1",
+            ActivityCategory.OtherApproved,
+            FormulaCalculationStrategy.FactorBased,
+            FormulaPublicationStatus.Published,
+            [
+                new("activityAmount", "Activity amount", "activity", activity.CanonicalUnitCode, true, 0m, null),
+                new("emissionFactor", "Emission factor", "emission-factor", factorUnit, true, 0m, null),
+                new("allocationFactor", "Allocation factor", "ratio", "ratio", false, 0m, 1m)
+            ],
+            "emissions",
+            activity.FactorVersion.NumeratorUnitCode,
+            FactorBasedFormula.ImplementationIdentifier,
+            DateTimeOffset.UnixEpoch,
+            "system",
+            DateTimeOffset.UnixEpoch);
+    }
+
+    private static IReadOnlyDictionary<string, FormulaValue> BuildFormulaValues(
+        ActivityDataSnapshot activity,
+        ActivityFormulaDefinitionVersion definition)
+    {
+        var factorUnit = $"{activity.FactorVersion.NumeratorUnitCode}/{activity.FactorVersion.DenominatorUnitCode}";
+        var values = new Dictionary<string, FormulaValue>(StringComparer.Ordinal)
+        {
+            ["activityAmount"] = new(
+                "activityAmount",
+                activity.RawValue,
+                activity.RawUnitCode,
+                activity.CanonicalValue,
+                activity.CanonicalUnitCode,
+                activity.ConversionRuleVersion),
+            ["emissionFactor"] = new(
+                "emissionFactor",
+                activity.FactorVersion.Value,
+                factorUnit,
+                activity.FactorVersion.Value,
+                factorUnit,
+                $"factor-version:{activity.FactorVersion.Id:D}"),
+            ["allocationFactor"] = new(
+                "allocationFactor",
+                activity.AllocationFactor,
+                "ratio",
+                activity.AllocationFactor,
+                "ratio",
+                "allocation-result-v1"),
+            ["amount"] = new(
+                "amount",
+                activity.RawValue,
+                activity.RawUnitCode,
+                activity.CanonicalValue,
+                activity.CanonicalUnitCode,
+                activity.ConversionRuleVersion)
+        };
+
+        using var document = JsonDocument.Parse(activity.EmissionFormulaValuesJson);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException("Emission formula values must be a JSON object.");
+        }
+
+        foreach (var property in document.RootElement.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.Number)
+            {
+                var input = definition.Inputs.SingleOrDefault(item => string.Equals(item.Key, property.Name, StringComparison.Ordinal));
+                var unit = input?.CanonicalUnit ?? string.Empty;
+                values[property.Name] = new(
+                    property.Name,
+                    property.Value.GetDecimal(),
+                    unit,
+                    property.Value.GetDecimal(),
+                    unit,
+                    "identity-v1");
+                continue;
+            }
+
+            if (property.Value.ValueKind != JsonValueKind.Object)
+            {
+                throw new InvalidOperationException($"Formula input '{property.Name}' must be a number or an object.");
+            }
+
+            var value = property.Value;
+            var rawValue = RequiredDecimal(value, "rawValue");
+            var normalizedValue = value.TryGetProperty("normalizedValue", out var normalizedElement)
+                ? normalizedElement.GetDecimal()
+                : rawValue;
+            var inputDefinition = definition.Inputs.SingleOrDefault(item => string.Equals(item.Key, property.Name, StringComparison.Ordinal));
+            var rawUnit = OptionalString(value, "rawUnit") ?? inputDefinition?.CanonicalUnit ?? string.Empty;
+            var normalizedUnit = OptionalString(value, "normalizedUnit") ?? inputDefinition?.CanonicalUnit ?? rawUnit;
+            values[property.Name] = new(
+                property.Name,
+                rawValue,
+                rawUnit,
+                normalizedValue,
+                normalizedUnit,
+                OptionalString(value, "conversionRuleVersion") ?? "identity-v1");
+        }
+
+        return values;
+    }
+
+    private static decimal RequiredDecimal(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.Number
+            ? property.GetDecimal()
+            : throw new InvalidOperationException($"Formula value object is missing numeric '{name}'.");
+
+    private static string? OptionalString(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+
+    private static Guid DeterministicGuid(string value)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return new Guid(hash.AsSpan(0, 16));
+    }
+
     private static void Validate(InventoryProjectSnapshot snapshot)
     {
         if (snapshot.OrganizationId == Guid.Empty || snapshot.ProjectVersionId == Guid.Empty)
@@ -110,9 +277,13 @@ public sealed class CalculationEngine
             throw new InvalidOperationException("PCR reporting rounding must be between 0 and 12 decimal places.");
         }
 
-        _ = ActivityEmissionFormula.Resolve(
-            snapshot.RuleSetVersion,
-            snapshot.Activities.FirstOrDefault()?.Kind ?? ActivityDataKind.Material);
+        using (var governance = JsonDocument.Parse(snapshot.GovernanceSnapshotJson))
+        {
+            if (governance.RootElement.ValueKind is not JsonValueKind.Object)
+            {
+                throw new InvalidOperationException("Governance snapshot must be a JSON object.");
+            }
+        }
 
         var declarations = snapshot.Stages.GroupBy(stage => stage.Stage).ToDictionary(group => group.Key);
         foreach (var stage in Enum.GetValues<LifecycleStage>())
@@ -191,6 +362,12 @@ public sealed class CalculationEngine
             {
                 throw new InvalidOperationException("活動 canonical 單位與係數分母不一致。");
             }
+
+            using var formulaValues = JsonDocument.Parse(activity.EmissionFormulaValuesJson);
+            using var quality = JsonDocument.Parse(activity.DataQualityAssessmentJson);
+            using var allocation = JsonDocument.Parse(activity.AllocationTraceJson);
+            using var transport = JsonDocument.Parse(activity.TransportTraceJson);
+            using var evidence = JsonDocument.Parse(activity.EvidenceIndexJson);
         }
     }
 }

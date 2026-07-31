@@ -1889,7 +1889,7 @@ public sealed class WorkspaceModel : PageModel
         };
         activityRows.AddRange(activities.Select(activity =>
         {
-            factorById.TryGetValue(activity.FactorVersionId, out var factor);
+            factorById.TryGetValue(activity.FactorVersionId ?? Guid.Empty, out var factor);
             return (IReadOnlyList<object?>)new object?[]
             {
                 LifecycleStageDisplayName((LifecycleStage)activity.LifecycleStage),
@@ -2067,7 +2067,7 @@ public sealed class WorkspaceModel : PageModel
                 string.IsNullOrWhiteSpace(item.Reason) ? null : item.Reason)).ToArray(),
             activities.Select(activity =>
             {
-                var factor = factorRecords[activity.FactorVersionId];
+                var factor = factorRecords[activity.FactorVersionId ?? throw new InvalidOperationException("Activity factor version is required for calculation.")];
                 return new ActivityDataSnapshot(
                     activity.Id,
                     activity.OrganizationId,

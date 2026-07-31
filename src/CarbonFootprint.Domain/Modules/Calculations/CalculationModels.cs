@@ -15,7 +15,10 @@ public sealed record CalculationLineItem(
     string EmissionsUnitCode,
     decimal AllocationFactor = 1m,
     string ActivityAmountFormulaId = "direct-activity-amount-v1",
-    string FormulaInputsJson = "{}");
+    string FormulaInputsJson = "{}",
+    Guid? FormulaVersionId = null,
+    string FormulaTrace = "",
+    string GovernanceTraceJson = "{}");
 
 public sealed record CalculationStageSummary(LifecycleStage Stage, decimal Emissions);
 

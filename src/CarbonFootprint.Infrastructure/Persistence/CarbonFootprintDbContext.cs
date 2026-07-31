@@ -40,6 +40,17 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
     public DbSet<LegacyImportBatchRecord> LegacyImportBatches => Set<LegacyImportBatchRecord>();
     public DbSet<LegacyStagingRowRecord> LegacyStagingRows => Set<LegacyStagingRowRecord>();
     public DbSet<LegacyImportConflictRecord> LegacyImportConflicts => Set<LegacyImportConflictRecord>();
+    public DbSet<GovernanceDefinitionRecord> GovernanceDefinitions => Set<GovernanceDefinitionRecord>();
+    public DbSet<OrganizationDefinitionActivationRecord> OrganizationDefinitionActivations => Set<OrganizationDefinitionActivationRecord>();
+    public DbSet<ProjectGovernanceRecord> ProjectGovernanceRecords => Set<ProjectGovernanceRecord>();
+    public DbSet<GovernanceEventRecord> GovernanceEvents => Set<GovernanceEventRecord>();
+    public DbSet<EvidenceDocumentRecord> EvidenceDocuments => Set<EvidenceDocumentRecord>();
+    public DbSet<EvidenceDocumentVersionRecord> EvidenceDocumentVersions => Set<EvidenceDocumentVersionRecord>();
+    public DbSet<EvidenceLinkRecord> EvidenceLinks => Set<EvidenceLinkRecord>();
+    public DbSet<EvidenceAccessLogRecord> EvidenceAccessLogs => Set<EvidenceAccessLogRecord>();
+    public DbSet<EvidenceRetentionLockRecord> EvidenceRetentionLocks => Set<EvidenceRetentionLockRecord>();
+    public DbSet<VerificationArchiveRecord> VerificationArchives => Set<VerificationArchiveRecord>();
+    public DbSet<ProjectImpactRecord> ProjectImpacts => Set<ProjectImpactRecord>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -52,6 +63,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         ConfigureUnitsAndFactors(builder);
         ConfigureCalculations(builder);
         ConfigureAudit(builder);
+        ConfigureGovernance(builder);
         ConfigureLegacyStaging(builder);
         ConfigureTenantFilters(builder);
     }
@@ -252,12 +264,19 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.ConversionRuleVersion).HasMaxLength(100);
             entity.Property(item => item.AmountFormulaId).HasMaxLength(150);
             entity.Property(item => item.FormulaInputsJson).HasColumnType("jsonb");
+            entity.Property(item => item.FormulaTraceJson).HasColumnType("jsonb");
+            entity.Property(item => item.GovernanceTraceJson).HasColumnType("jsonb");
             entity.Property(item => item.EvidenceSha256).HasMaxLength(64);
             entity.Property(item => item.AllocationFactor).HasPrecision(18, 15);
             entity.Property(item => item.EstimationReason).HasMaxLength(4000);
             entity.Property(item => item.DataQuality).HasMaxLength(100);
             entity.HasOne<InventoryProjectVersionRecord>().WithMany().HasForeignKey(item => item.InventoryProjectVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<EmissionFactorVersionRecord>().WithMany().HasForeignKey(item => item.FactorVersionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<GovernanceDefinitionRecord>().WithMany().HasForeignKey(item => item.GlobalFactorDefinitionVersionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<GovernanceDefinitionRecord>().WithMany().HasForeignKey(item => item.FormulaDefinitionVersionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProjectGovernanceRecord>().WithMany().HasForeignKey(item => item.DataQualityGovernanceRecordId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProjectGovernanceRecord>().WithMany().HasForeignKey(item => item.AllocationGovernanceRecordId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ProjectGovernanceRecord>().WithMany().HasForeignKey(item => item.TransportGovernanceRecordId).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<LifecycleStageDeclarationRecord>(entity =>
         {
@@ -350,6 +369,8 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.Emissions).HasPrecision(38, 15);
             entity.Property(item => item.ActivityAmountFormulaId).HasMaxLength(150);
             entity.Property(item => item.FormulaInputsJson).HasColumnType("jsonb");
+            entity.Property(item => item.FormulaTraceJson).HasColumnType("jsonb");
+            entity.Property(item => item.GovernanceTraceJson).HasColumnType("jsonb");
             entity.HasOne<CalculationRunRecord>().WithMany().HasForeignKey(item => item.CalculationRunId).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<CalculationStageSummaryRecord>(entity =>
@@ -379,6 +400,149 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.Property(item => item.MetadataJson).HasColumnType("jsonb");
             entity.Property(item => item.CorrelationId).HasMaxLength(100);
             entity.HasIndex(item => new { item.OrganizationId, item.Timestamp });
+        });
+    }
+
+    private static void ConfigureGovernance(ModelBuilder builder)
+    {
+        builder.Entity<GovernanceDefinitionRecord>(entity =>
+        {
+            entity.ToTable("governance_definition_versions");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.DefinitionType).HasMaxLength(100);
+            entity.Property(item => item.StableKey).HasMaxLength(300);
+            entity.Property(item => item.Name).HasMaxLength(500);
+            entity.Property(item => item.PublicationStatus).HasMaxLength(30);
+            entity.Property(item => item.PayloadJson).HasColumnType("jsonb");
+            entity.Property(item => item.CanonicalSha256).HasMaxLength(64);
+            entity.Property(item => item.SourceStableId).HasMaxLength(300);
+            entity.Property(item => item.SourceName).HasMaxLength(300);
+            entity.Property(item => item.SourceUrl).HasMaxLength(1000);
+            entity.Property(item => item.SourceDatasetVersion).HasMaxLength(200);
+            entity.Property(item => item.LicenseCode).HasMaxLength(100);
+            entity.HasIndex(item => new { item.DefinitionType, item.StableKey, item.VersionNumber, item.OrganizationId }).IsUnique();
+            entity.HasIndex(item => new { item.DefinitionType, item.SourceStableId, item.VersionNumber });
+            entity.HasOne<GovernanceDefinitionRecord>().WithMany().HasForeignKey(item => item.SupersedesVersionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<EvidenceDocumentVersionRecord>().WithMany().HasForeignKey(item => item.SourceEvidenceDocumentVersionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<OrganizationDefinitionActivationRecord>(entity =>
+        {
+            entity.ToTable("organization_definition_activations");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.DisplayAlias).HasMaxLength(500);
+            entity.Property(item => item.InternalCategory).HasMaxLength(200);
+            entity.Property(item => item.ApplicabilityNote).HasMaxLength(2000);
+            entity.Property(item => item.OverridePayloadJson).HasColumnType("jsonb");
+            entity.HasIndex(item => new { item.OrganizationId, item.DefinitionVersionId }).IsUnique();
+            entity.HasOne<GovernanceDefinitionRecord>().WithMany().HasForeignKey(item => item.DefinitionVersionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<ProjectGovernanceRecord>(entity =>
+        {
+            entity.ToTable("project_governance_versions");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.RecordType).HasMaxLength(100);
+            entity.Property(item => item.StableKey).HasMaxLength(300);
+            entity.Property(item => item.Status).HasMaxLength(50);
+            entity.Property(item => item.PayloadJson).HasColumnType("jsonb");
+            entity.Property(item => item.CanonicalSha256).HasMaxLength(64);
+            entity.Property(item => item.LockReason).HasMaxLength(500);
+            entity.HasIndex(item => new { item.ProjectVersionId, item.RecordType, item.StableKey, item.VersionNumber }).IsUnique();
+            entity.HasIndex(item => new { item.OrganizationId, item.ProjectVersionId, item.RecordType, item.Status });
+            entity.HasOne<InventoryProjectVersionRecord>().WithMany().HasForeignKey(item => item.ProjectVersionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<GovernanceEventRecord>(entity =>
+        {
+            entity.ToTable("governance_events");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.EventType).HasMaxLength(150);
+            entity.Property(item => item.EntityType).HasMaxLength(100);
+            entity.Property(item => item.PayloadJson).HasColumnType("jsonb");
+            entity.Property(item => item.PayloadSha256).HasMaxLength(64);
+            entity.Property(item => item.CorrelationId).HasMaxLength(100);
+            entity.HasIndex(item => new { item.OrganizationId, item.ProjectVersionId, item.OccurredAt });
+            entity.HasOne<InventoryProjectVersionRecord>().WithMany().HasForeignKey(item => item.ProjectVersionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<EvidenceDocumentRecord>(entity =>
+        {
+            entity.ToTable("evidence_documents");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Title).HasMaxLength(500);
+            entity.Property(item => item.Category).HasMaxLength(100);
+            entity.HasIndex(item => new { item.OrganizationId, item.CreatedAt });
+        });
+        builder.Entity<EvidenceDocumentVersionRecord>(entity =>
+        {
+            entity.ToTable("evidence_document_versions");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.OriginalFileName).HasMaxLength(500);
+            entity.Property(item => item.ContentType).HasMaxLength(200);
+            entity.Property(item => item.ObjectKey).HasMaxLength(1000);
+            entity.Property(item => item.ObjectStorageVersion).HasMaxLength(300);
+            entity.Property(item => item.Sha256).HasMaxLength(64);
+            entity.Property(item => item.ScanStatus).HasMaxLength(30);
+            entity.Property(item => item.ScanEngine).HasMaxLength(100);
+            entity.Property(item => item.ScanEngineVersion).HasMaxLength(100);
+            entity.Property(item => item.ScanSignatureVersion).HasMaxLength(100);
+            entity.Property(item => item.ScanDetails).HasMaxLength(2000);
+            entity.Property(item => item.StorageStatus).HasMaxLength(50);
+            entity.HasIndex(item => new { item.DocumentId, item.VersionNumber }).IsUnique();
+            entity.HasIndex(item => new { item.OrganizationId, item.Sha256, item.SizeBytes });
+            entity.HasOne<EvidenceDocumentRecord>().WithMany().HasForeignKey(item => item.DocumentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<EvidenceDocumentVersionRecord>().WithMany().HasForeignKey(item => item.ReplacesVersionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<EvidenceLinkRecord>(entity =>
+        {
+            entity.ToTable("evidence_links");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.TargetType).HasMaxLength(100);
+            entity.Property(item => item.Purpose).HasMaxLength(1000);
+            entity.HasIndex(item => new { item.OrganizationId, item.DocumentVersionId, item.TargetType, item.TargetId }).IsUnique();
+            entity.HasOne<EvidenceDocumentVersionRecord>().WithMany().HasForeignKey(item => item.DocumentVersionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<EvidenceAccessLogRecord>(entity =>
+        {
+            entity.ToTable("evidence_access_logs");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Action).HasMaxLength(50);
+            entity.Property(item => item.IpAddressHash).HasMaxLength(64);
+            entity.Property(item => item.Reason).HasMaxLength(1000);
+            entity.HasIndex(item => new { item.OrganizationId, item.DocumentVersionId, item.OccurredAt });
+            entity.HasOne<EvidenceDocumentVersionRecord>().WithMany().HasForeignKey(item => item.DocumentVersionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<EvidenceRetentionLockRecord>(entity =>
+        {
+            entity.ToTable("evidence_retention_locks");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Trigger).HasMaxLength(100);
+            entity.HasIndex(item => new { item.DocumentVersionId, item.LockedAt });
+            entity.HasOne<EvidenceDocumentVersionRecord>().WithMany().HasForeignKey(item => item.DocumentVersionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<GovernanceDefinitionRecord>().WithMany().HasForeignKey(item => item.PolicyDefinitionVersionId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<VerificationArchiveRecord>(entity =>
+        {
+            entity.ToTable("verification_archives");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ExportSchemaVersion).HasMaxLength(100);
+            entity.Property(item => item.ArchiveSha256).HasMaxLength(64);
+            entity.Property(item => item.FileIndexJson).HasColumnType("jsonb");
+            entity.HasIndex(item => new { item.ProjectVersionId, item.CalculationRunId, item.ArchiveSha256 }).IsUnique();
+            entity.HasOne<InventoryProjectVersionRecord>().WithMany().HasForeignKey(item => item.ProjectVersionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<CalculationRunRecord>().WithMany().HasForeignKey(item => item.CalculationRunId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<ProjectImpactRecord>(entity =>
+        {
+            entity.ToTable("project_impacts");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ChangeType).HasMaxLength(100);
+            entity.Property(item => item.DependencyType).HasMaxLength(100);
+            entity.Property(item => item.DependencyKey).HasMaxLength(300);
+            entity.Property(item => item.PreviousVersion).HasMaxLength(200);
+            entity.Property(item => item.CurrentVersion).HasMaxLength(200);
+            entity.Property(item => item.AffectedEmissions).HasPrecision(38, 15);
+            entity.Property(item => item.LifecycleStage).HasMaxLength(100);
+            entity.Property(item => item.Reason).HasMaxLength(2000);
+            entity.HasIndex(item => new { item.OrganizationId, item.ProjectVersionId, item.DetectedAt });
+            entity.HasOne<InventoryProjectVersionRecord>().WithMany().HasForeignKey(item => item.ProjectVersionId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 
@@ -416,6 +580,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
 
     private void ConfigureTenantFilters(ModelBuilder builder)
     {
+        builder.Entity<GovernanceDefinitionRecord>().HasQueryFilter(item => item.OrganizationId == null || (_organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId));
         builder.Entity<OrganizationRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.Id == _organizationScope.OrganizationId);
         builder.Entity<OrganizationMailSettingsRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<OrganizationMembershipRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
@@ -435,6 +600,16 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         builder.Entity<CalculationStageSummaryRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<CalculationWarningRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<AuditEventRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<OrganizationDefinitionActivationRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<ProjectGovernanceRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<GovernanceEventRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<EvidenceDocumentRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<EvidenceDocumentVersionRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<EvidenceLinkRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<EvidenceAccessLogRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<EvidenceRetentionLockRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<VerificationArchiveRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
+        builder.Entity<ProjectImpactRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<LegacyImportBatchRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<LegacyStagingRowRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
         builder.Entity<LegacyImportConflictRecord>().HasQueryFilter(item => _organizationScope.OrganizationId != null && item.OrganizationId == _organizationScope.OrganizationId);
@@ -446,6 +621,8 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         {
             typeof(CalculationRunRecord), typeof(CalculationLineRecord),
             typeof(CalculationStageSummaryRecord), typeof(CalculationWarningRecord), typeof(AuditEventRecord),
+            typeof(GovernanceEventRecord), typeof(EvidenceAccessLogRecord), typeof(EvidenceRetentionLockRecord),
+            typeof(VerificationArchiveRecord), typeof(ProjectImpactRecord),
             typeof(LegacyImportBatchRecord), typeof(LegacyStagingRowRecord), typeof(LegacyImportConflictRecord)
         };
         var immutableChange = ChangeTracker.Entries().FirstOrDefault(entry =>
@@ -491,6 +668,39 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             {
                 throw new InvalidOperationException("已發布或撤回的 PCR 階段規則不可修改；請建立新版本。");
             }
+        }
+
+        var publishedDefinitionChange = ChangeTracker.Entries<GovernanceDefinitionRecord>()
+            .FirstOrDefault(entry =>
+                (entry.State is EntityState.Modified or EntityState.Deleted)
+                && !string.Equals(entry.Property(item => item.PublicationStatus).OriginalValue, "Draft", StringComparison.Ordinal)
+                && (entry.State == EntityState.Deleted
+                    || entry.Properties.Any(property =>
+                        property.IsModified
+                        && property.Metadata.Name is not nameof(GovernanceDefinitionRecord.PublicationStatus)
+                            and not nameof(GovernanceDefinitionRecord.WithdrawnAt))));
+        if (publishedDefinitionChange is not null)
+        {
+            throw new InvalidOperationException("已發布、撤回或取代的治理定義版本不可修改；請建立新版本。");
+        }
+
+        var immutableGovernanceChange = ChangeTracker.Entries<ProjectGovernanceRecord>()
+            .FirstOrDefault(entry => entry.Entity.IsImmutable && (entry.State is EntityState.Modified or EntityState.Deleted));
+        if (immutableGovernanceChange is not null)
+        {
+            throw new InvalidOperationException("已鎖定的專案治理版本不可修改；請建立新版本。");
+        }
+
+        var evidenceVersionChange = ChangeTracker.Entries<EvidenceDocumentVersionRecord>()
+            .FirstOrDefault(entry =>
+                entry.State == EntityState.Deleted
+                || (entry.State == EntityState.Modified
+                    && entry.Properties.Any(property =>
+                        property.IsModified
+                        && property.Metadata.Name is not nameof(EvidenceDocumentVersionRecord.StorageStatus))));
+        if (evidenceVersionChange is not null)
+        {
+            throw new InvalidOperationException("佐證文件版本不可覆寫或刪除；替換時必須建立新版本。");
         }
 
         foreach (var entry in ChangeTracker.Entries<IOrganizationOwned>()
