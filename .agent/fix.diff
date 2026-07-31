@@ -1,0 +1,13 @@
+diff --git a/src/CarbonFootprint.Domain/Modules/Calculations/CalculationEngine.cs b/src/CarbonFootprint.Domain/Modules/Calculations/CalculationEngine.cs
+--- a/src/CarbonFootprint.Domain/Modules/Calculations/CalculationEngine.cs
++++ b/src/CarbonFootprint.Domain/Modules/Calculations/CalculationEngine.cs
+@@ -151,7 +151,8 @@ public sealed class CalculationEngine
+             activity.FactorVersion.NumeratorUnitCode,
+             FactorBasedFormula.ImplementationIdentifier,
+             DateTimeOffset.UnixEpoch,
+-            "system");
++            "system",
++            DateTimeOffset.UnixEpoch);
+     }
+ 
+     private static IReadOnlyDictionary<string, FormulaValue> BuildFormulaValues(
