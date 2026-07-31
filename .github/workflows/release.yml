@@ -96,10 +96,10 @@ jobs:
           awk '
             /^## / {
               if (found) exit
-              if ($2 == version || $2 == version_date) found=1
+              if ($2 == version) found=1
             }
             found { print }
-          ' version="$version" version_date="$version" CHANGELOG.md > RELEASE_NOTES.md
+          ' version="$version" CHANGELOG.md > RELEASE_NOTES.md
           if [[ ! -s RELEASE_NOTES.md ]]; then
             printf 'Carbon Balance %s\n' "$version" > RELEASE_NOTES.md
           fi
@@ -107,6 +107,7 @@ jobs:
         if: steps.existing.outputs.exists != 'true'
         shell: bash
         run: |
+          set -euo pipefail
           version="${{ steps.version.outputs.version }}"
           tag="${{ steps.version.outputs.tag }}"
           archive="carbon-balance-${version}.tar.gz"
@@ -115,5 +116,4 @@ jobs:
             "${archive}.sha256" \
             --target "$GITHUB_SHA" \
             --title "Carbon Balance ${version}" \
-            --notes-file RELEASE_NOTES.md \
-            --verify-tag=false
+            --notes-file RELEASE_NOTES.md
