@@ -13,6 +13,11 @@ public sealed class OrganizationAuthorizationTests
     [InlineData(OrganizationRole.Reviewer, OrganizationPermission.CreateCalculationRun, true)]
     [InlineData(OrganizationRole.Viewer, OrganizationPermission.CreateCalculationRun, false)]
     [InlineData(OrganizationRole.Viewer, OrganizationPermission.ViewInventory, true)]
+    [InlineData(OrganizationRole.Owner, OrganizationPermission.ManageGovernance, true)]
+    [InlineData(OrganizationRole.Contributor, OrganizationPermission.ManageGovernance, false)]
+    [InlineData(OrganizationRole.Verifier, OrganizationPermission.VerifyInventory, true)]
+    [InlineData(OrganizationRole.Reviewer, OrganizationPermission.VerifyInventory, false)]
+    [InlineData(OrganizationRole.Administrator, OrganizationPermission.ReviewInventory, true)]
     public void PermissionMatrix_IsExplicit(
         OrganizationRole role,
         OrganizationPermission permission,

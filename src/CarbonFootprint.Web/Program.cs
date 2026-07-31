@@ -4,8 +4,10 @@ using CarbonFootprint.Domain.Modules.Calculations;
 using CarbonFootprint.Infrastructure;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Persistence;
+using CarbonFootprint.Web;
 using CarbonFootprint.Web.Security;
 using CarbonFootprint.Web.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -28,6 +30,7 @@ builder.Services.AddHttpClient<IMoenvFactorSource, MoenvFactorClient>(client =>
 builder.Services.AddScoped<MoenvFactorSynchronizationService>();
 builder.Services.AddScoped<IAuthorizationHandler, OrganizationPermissionHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, MfaEnabledHandler>();
+builder.Services.AddScoped<GovernanceAccessService>();
 builder.Services.AddRazorPages();
 builder.Services.AddProblemDetails();
 var dataProtectionPath = builder.Configuration["DataProtection:KeyPath"];
@@ -174,12 +177,6 @@ var disabledIdentityPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase
     "/Identity/Account/ResetPasswordConfirmation",
     "/Identity/Account/ConfirmEmailChange",
     "/Identity/Account/ExternalLogin",
-    "/Identity/Account/LoginWith2fa",
-    "/Identity/Account/LoginWithRecoveryCode",
-    "/Identity/Account/Manage/TwoFactorAuthentication",
-    "/Identity/Account/Manage/EnableAuthenticator",
-    "/Identity/Account/Manage/ResetAuthenticator",
-    "/Identity/Account/Manage/GenerateRecoveryCodes",
     "/Identity/Account/Manage/ExternalLogins"
 };
 
@@ -199,11 +196,27 @@ app.UseStaticFiles();
 app.UseRateLimiter();
 app.UseRouting();
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/Identity/Account/LoginWith2fa")
+        || context.Request.Path.StartsWithSegments("/Identity/Account/LoginWithRecoveryCode"))
+    {
+        var twoFactorIdentity = await context.AuthenticateAsync(IdentityConstants.TwoFactorUserIdScheme);
+        if (!twoFactorIdentity.Succeeded)
+        {
+            context.Response.Redirect("/Identity/Account/Login");
+            return;
+        }
+    }
+
+    await next(context);
+});
 app.UseAuthorization();
 app.MapStaticAssets();
 app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
 app.MapHealthChecks("/health/ready");
 app.MapRazorPages().WithStaticAssets();
+app.MapGovernanceApi();
 app.Run();
 
 public partial class Program;

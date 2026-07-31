@@ -1,4 +1,5 @@
 using CarbonFootprint.Domain.Modules.Factors;
+using CarbonFootprint.Domain.Modules.Formulas;
 
 namespace CarbonFootprint.Domain.Modules.Inventories;
 
@@ -53,7 +54,13 @@ public sealed record ActivityDataSnapshot(
     string DataSourceType = "",
     string DataProvider = "",
     string CollectionMethod = "",
-    string SourceReference = "");
+    string SourceReference = "",
+    ActivityFormulaDefinitionVersion? EmissionFormula = null,
+    string EmissionFormulaValuesJson = "{}",
+    string DataQualityAssessmentJson = "{}",
+    string AllocationTraceJson = "{}",
+    string TransportTraceJson = "{}",
+    string EvidenceIndexJson = "[]");
 
 public sealed record InventoryProjectSnapshot(
     Guid OrganizationId,
@@ -77,7 +84,8 @@ public sealed record InventoryProjectSnapshot(
     string EstimationReason = "",
     decimal CutoffThresholdPercent = 0m,
     int RoundingDecimalPlaces = 3,
-    string ReportingRequirements = "");
+    string ReportingRequirements = "",
+    string GovernanceSnapshotJson = "{}");
 
 public static class ActivityKindRules
 {

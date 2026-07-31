@@ -1,5 +1,6 @@
 using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Infrastructure.Identity;
+using CarbonFootprint.Infrastructure.Governance;
 using CarbonFootprint.Infrastructure.Evidence;
 using CarbonFootprint.Infrastructure.Organizations;
 using CarbonFootprint.Infrastructure.Persistence;
@@ -28,6 +29,7 @@ public static class DependencyInjection
         services.Configure<MalwareScannerOptions>(configuration.GetSection(MalwareScannerOptions.SectionName));
         services.AddScoped<ClamAvMalwareScanner>();
         services.AddScoped<EvidenceStorageService>();
+        services.AddScoped<GovernanceWorkspaceService>();
         services.Configure<MailOptions>(configuration.GetSection(MailOptions.SectionName));
         services.AddScoped<SmtpEmailSender>();
         services.AddScoped<IEmailSender<ApplicationUser>>(provider => provider.GetRequiredService<SmtpEmailSender>());

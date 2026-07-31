@@ -91,6 +91,40 @@ public sealed class EvidenceStorageService
             MalwareScanStatus.Clean);
     }
 
+
+    public async Task<byte[]> ReadAsync(string objectKey, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(objectKey))
+        {
+            throw new ArgumentException("Object key is required.", nameof(objectKey));
+        }
+
+        using var minioClient = CreateMinioClient();
+        await using var content = new MemoryStream();
+        await minioClient.GetObjectAsync(
+            new GetObjectArgs()
+                .WithBucket(_options.Bucket)
+                .WithObject(objectKey)
+                .WithCallbackStream(stream => stream.CopyTo(content)),
+            cancellationToken);
+        return content.ToArray();
+    }
+
+    public async Task DeleteAsync(string objectKey, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(objectKey))
+        {
+            return;
+        }
+
+        using var minioClient = CreateMinioClient();
+        await minioClient.RemoveObjectAsync(
+            new RemoveObjectArgs()
+                .WithBucket(_options.Bucket)
+                .WithObject(objectKey),
+            cancellationToken);
+    }
+
     private IMinioClient CreateMinioClient()
     {
         if (string.IsNullOrWhiteSpace(_options.AccessKey) || string.IsNullOrWhiteSpace(_options.SecretKey))

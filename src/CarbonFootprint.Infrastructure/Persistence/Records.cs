@@ -101,6 +101,7 @@ public sealed class InventoryProjectVersionRecord : IOrganizationOwned
     public required string PcrVersion { get; set; }
     public required string WorkflowStatus { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+    public Guid? CreatedBy { get; set; }
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? ReviewedAt { get; set; }
     public Guid? ReviewedBy { get; set; }
@@ -243,7 +244,14 @@ public sealed class ActivityDataRecord : IOrganizationOwned
     public required string FormulaInputsJson { get; set; }
     public DateOnly PeriodStart { get; set; }
     public DateOnly PeriodEnd { get; set; }
-    public Guid FactorVersionId { get; set; }
+    public Guid? FactorVersionId { get; set; }
+    public Guid? GlobalFactorDefinitionVersionId { get; set; }
+    public Guid? FormulaDefinitionVersionId { get; set; }
+    public Guid? DataQualityGovernanceRecordId { get; set; }
+    public Guid? AllocationGovernanceRecordId { get; set; }
+    public Guid? TransportGovernanceRecordId { get; set; }
+    public string FormulaTraceJson { get; set; } = "{}";
+    public string GovernanceTraceJson { get; set; } = "{}";
     public decimal AllocationFactor { get; set; }
     public bool IsEstimated { get; set; }
     public string EstimationReason { get; set; } = string.Empty;
@@ -296,6 +304,9 @@ public sealed class CalculationLineRecord : IOrganizationOwned
     public decimal CanonicalActivityValue { get; set; }
     public required string ActivityUnitCode { get; set; }
     public Guid FactorVersionId { get; set; }
+    public Guid? FormulaDefinitionVersionId { get; set; }
+    public string FormulaTraceJson { get; set; } = "{}";
+    public string GovernanceTraceJson { get; set; } = "{}";
     public decimal FactorValue { get; set; }
     public required string FactorUnit { get; set; }
     public decimal AllocationFactor { get; set; }

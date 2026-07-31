@@ -1,0 +1,94 @@
+name: Agent source bridge
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/agent-bridge.yml
+      - .agent/patch.ready
+      - .agent/fix.diff
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-source-bridge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/complete-issues-21-30-v1.0.0
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        if: hashFiles('.agent/patch.ready') != ''
+        with:
+          dotnet-version: 10.0.302
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Detect patch mode
+        id: mode
+        shell: bash
+        run: |
+          if [[ -f .agent/patch.ready ]]; then
+            echo 'patch=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'patch=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Apply and validate patch
+        if: steps.mode.outputs.patch == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .agent/patch.part-* | base64 --decode | gunzip > .agent/patch.diff
+          git apply --check .agent/patch.diff
+          git apply .agent/patch.diff
+          if [[ -f .agent/fix.diff ]]; then
+            git apply --check .agent/fix.diff
+            git apply .agent/fix.diff
+          fi
+          rm -f .agent/patch.diff .agent/fix.diff .agent/patch.ready .agent/patch.part-*
+          dotnet tool restore
+          dotnet restore --locked-mode
+          dotnet format --no-restore
+          dotnet build --configuration Release --no-restore
+          if ! dotnet ef migrations has-pending-model-changes \
+            --project src/CarbonFootprint.Infrastructure \
+            --startup-project src/CarbonFootprint.Web \
+            --configuration Release \
+            --no-build; then
+            migration_name="CompleteGovernance$(date -u +%Y%m%d%H%M%S)"
+            dotnet ef migrations add "$migration_name" \
+              --project src/CarbonFootprint.Infrastructure \
+              --startup-project src/CarbonFootprint.Web \
+              --configuration Release \
+              --no-build \
+              --output-dir Persistence/Migrations
+            dotnet format --no-restore
+            dotnet build --configuration Release --no-restore
+          fi
+          git add -A
+          git config user.name 'carbon-balance-agent'
+          git config user.email 'actions@users.noreply.github.com'
+          git commit -m 'feat: complete governance issues 21-30'
+          git fetch origin agent/complete-issues-21-30-v1.0.0
+          git rebase origin/agent/complete-issues-21-30-v1.0.0
+          git push origin HEAD:agent/complete-issues-21-30-v1.0.0
+      - name: Package branch source
+        if: steps.mode.outputs.patch != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=.git -czf /tmp/source-bridge.tar.gz .
+      - name: Upload branch source
+        if: steps.mode.outputs.patch != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: carbon-balance-source
+          path: /tmp/source-bridge.tar.gz
+          retention-days: 1

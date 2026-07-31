@@ -34,6 +34,11 @@ public static class CanonicalManifest
             writer.WriteString("gwpVersion", snapshot.GwpVersion);
             writer.WriteString("unitCatalogueVersion", snapshot.UnitCatalogueVersion);
             writer.WriteString("engineBuild", engineBuild);
+            writer.WritePropertyName("governance");
+            using (var governance = JsonDocument.Parse(snapshot.GovernanceSnapshotJson))
+            {
+                governance.RootElement.WriteTo(writer);
+            }
             writer.WriteStartArray("stages");
             foreach (var stage in snapshot.Stages.OrderBy(item => item.Stage))
             {
@@ -88,6 +93,64 @@ public static class CanonicalManifest
                 writer.WriteBoolean("isEstimated", activity.IsEstimated);
                 writer.WriteString("estimationReason", activity.EstimationReason);
                 writer.WriteString("dataQuality", activity.DataQuality);
+                writer.WritePropertyName("dataQualityAssessment");
+                using (var quality = JsonDocument.Parse(activity.DataQualityAssessmentJson))
+                {
+                    quality.RootElement.WriteTo(writer);
+                }
+                writer.WritePropertyName("allocationTrace");
+                using (var allocation = JsonDocument.Parse(activity.AllocationTraceJson))
+                {
+                    allocation.RootElement.WriteTo(writer);
+                }
+                writer.WritePropertyName("transportTrace");
+                using (var transport = JsonDocument.Parse(activity.TransportTraceJson))
+                {
+                    transport.RootElement.WriteTo(writer);
+                }
+                writer.WritePropertyName("evidenceIndex");
+                using (var evidenceIndex = JsonDocument.Parse(activity.EvidenceIndexJson))
+                {
+                    evidenceIndex.RootElement.WriteTo(writer);
+                }
+                if (activity.EmissionFormula is null)
+                {
+                    writer.WriteNull("emissionFormula");
+                }
+                else
+                {
+                    writer.WriteStartObject("emissionFormula");
+                    writer.WriteString("id", activity.EmissionFormula.Id);
+                    writer.WriteString("formulaId", activity.EmissionFormula.FormulaId);
+                    writer.WriteNumber("versionNumber", activity.EmissionFormula.VersionNumber);
+                    writer.WriteString("code", activity.EmissionFormula.Code);
+                    writer.WriteString("category", activity.EmissionFormula.Category.ToString());
+                    writer.WriteString("strategy", activity.EmissionFormula.Strategy.ToString());
+                    writer.WriteString("status", activity.EmissionFormula.Status.ToString());
+                    writer.WriteString("outputDimension", activity.EmissionFormula.OutputDimension);
+                    writer.WriteString("outputUnit", activity.EmissionFormula.OutputUnit);
+                    writer.WriteString("implementationKey", activity.EmissionFormula.ImplementationKey);
+                    writer.WriteStartArray("inputs");
+                    foreach (var input in activity.EmissionFormula.Inputs.OrderBy(item => item.Key, StringComparer.Ordinal))
+                    {
+                        writer.WriteStartObject();
+                        writer.WriteString("key", input.Key);
+                        writer.WriteString("displayName", input.DisplayName);
+                        writer.WriteString("dimension", input.Dimension);
+                        writer.WriteString("canonicalUnit", input.CanonicalUnit);
+                        writer.WriteBoolean("isRequired", input.IsRequired);
+                        if (input.Minimum is null) writer.WriteNull("minimum"); else writer.WriteNumber("minimum", input.Minimum.Value);
+                        if (input.Maximum is null) writer.WriteNull("maximum"); else writer.WriteNumber("maximum", input.Maximum.Value);
+                        writer.WriteEndObject();
+                    }
+                    writer.WriteEndArray();
+                    writer.WriteEndObject();
+                }
+                writer.WritePropertyName("emissionFormulaValues");
+                using (var emissionFormulaValues = JsonDocument.Parse(activity.EmissionFormulaValuesJson))
+                {
+                    emissionFormulaValues.RootElement.WriteTo(writer);
+                }
                 if (activity.EvidenceSha256 is null)
                 {
                     writer.WriteNull("evidenceSha256");

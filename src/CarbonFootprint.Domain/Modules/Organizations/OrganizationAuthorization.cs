@@ -6,7 +6,8 @@ public enum OrganizationRole
     Administrator = 2,
     Contributor = 3,
     Reviewer = 4,
-    Viewer = 5
+    Viewer = 5,
+    Verifier = 6
 }
 
 public enum OrganizationPermission
@@ -16,7 +17,9 @@ public enum OrganizationPermission
     ManageFactors = 3,
     CreateCalculationRun = 4,
     ReviewInventory = 5,
-    ViewInventory = 6
+    ViewInventory = 6,
+    ManageGovernance = 7,
+    VerifyInventory = 8
 }
 
 public static class OrganizationPermissions
@@ -27,8 +30,10 @@ public static class OrganizationPermissions
         OrganizationPermission.EditInventory => role is OrganizationRole.Owner or OrganizationRole.Administrator or OrganizationRole.Contributor,
         OrganizationPermission.ManageFactors => role is OrganizationRole.Owner or OrganizationRole.Administrator,
         OrganizationPermission.CreateCalculationRun => role is not OrganizationRole.Viewer,
-        OrganizationPermission.ReviewInventory => role is OrganizationRole.Owner or OrganizationRole.Reviewer,
+        OrganizationPermission.ReviewInventory => role is OrganizationRole.Owner or OrganizationRole.Administrator or OrganizationRole.Reviewer,
         OrganizationPermission.ViewInventory => true,
+        OrganizationPermission.ManageGovernance => role is OrganizationRole.Owner or OrganizationRole.Administrator,
+        OrganizationPermission.VerifyInventory => role is OrganizationRole.Owner or OrganizationRole.Administrator or OrganizationRole.Verifier,
         _ => false
     };
 }

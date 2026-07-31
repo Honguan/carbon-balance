@@ -691,6 +691,186 @@ public sealed class PostgreSqlPersistenceTests
         Assert.Null(await verification.PcrStageRules.SingleOrDefaultAsync(item => item.PcrVersionId == pcrB.Id));
     }
 
+
+    [Fact]
+    public async Task GovernanceRecords_AreTenantScoped_AndImmutableVersionsCannotBeOverwritten()
+    {
+        var organizationA = Guid.NewGuid();
+        var organizationB = Guid.NewGuid();
+        var projectA = await SeedGovernanceProjectAsync(organizationA, "A");
+        var projectB = await SeedGovernanceProjectAsync(organizationB, "B");
+        var recordAId = Guid.NewGuid();
+        var recordBId = Guid.NewGuid();
+
+        await using (var context = CreateContext(organizationA))
+        {
+            context.ProjectGovernanceRecords.Add(new ProjectGovernanceRecord
+            {
+                Id = recordAId,
+                OrganizationId = organizationA,
+                ProjectVersionId = projectA,
+                TargetEntityId = projectA,
+                RecordType = GovernanceRecordTypes.ReadinessReport,
+                StableKey = "latest",
+                VersionNumber = 1,
+                Status = "Passed",
+                PayloadJson = "{}",
+                CanonicalSha256 = new string('a', 64),
+                IsImmutable = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                LockedAt = DateTimeOffset.UtcNow,
+                LockReason = "integration-test"
+            });
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = CreateContext(organizationB))
+        {
+            context.ProjectGovernanceRecords.Add(new ProjectGovernanceRecord
+            {
+                Id = recordBId,
+                OrganizationId = organizationB,
+                ProjectVersionId = projectB,
+                TargetEntityId = projectB,
+                RecordType = GovernanceRecordTypes.ReadinessReport,
+                StableKey = "latest",
+                VersionNumber = 1,
+                Status = "Passed",
+                PayloadJson = "{}",
+                CanonicalSha256 = new string('b', 64),
+                IsImmutable = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+                LockedAt = DateTimeOffset.UtcNow,
+                LockReason = "integration-test"
+            });
+            await context.SaveChangesAsync();
+        }
+
+        await using (var verification = CreateContext(organizationA))
+        {
+            Assert.Equal([recordAId], await verification.ProjectGovernanceRecords.Select(item => item.Id).ToArrayAsync());
+            Assert.Null(await verification.ProjectGovernanceRecords.SingleOrDefaultAsync(item => item.Id == recordBId));
+
+            var immutable = await verification.ProjectGovernanceRecords.SingleAsync(item => item.Id == recordAId);
+            immutable.PayloadJson = "{\"changed\":true}";
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => verification.SaveChangesAsync());
+            Assert.Contains("不可修改", exception.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task PublishedGovernanceDefinition_IsVersionLocked_AndGlobalDefinitionsRemainReadable()
+    {
+        var organizationId = Guid.NewGuid();
+        var organizationDefinitionKey = $"org-formula-{Guid.NewGuid():N}";
+        var globalDefinitionKey = $"global-{Guid.NewGuid():N}";
+        await using (var context = CreateContext(organizationId))
+        {
+            context.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationId,
+                Name = "Governance definition organization",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            context.GovernanceDefinitions.AddRange(
+                new GovernanceDefinitionRecord
+                {
+                    Id = Guid.NewGuid(),
+                    DefinitionId = Guid.NewGuid(),
+                    OrganizationId = organizationId,
+                    DefinitionType = GovernanceDefinitionTypes.ActivityFormula,
+                    StableKey = organizationDefinitionKey,
+                    VersionNumber = 1,
+                    Name = "Organization formula",
+                    PublicationStatus = "Published",
+                    PayloadJson = "{}",
+                    CanonicalSha256 = new string('c', 64),
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    PublishedAt = DateTimeOffset.UtcNow
+                },
+                new GovernanceDefinitionRecord
+                {
+                    Id = Guid.NewGuid(),
+                    DefinitionId = Guid.NewGuid(),
+                    OrganizationId = null,
+                    DefinitionType = GovernanceDefinitionTypes.GlobalEmissionFactor,
+                    StableKey = globalDefinitionKey,
+                    VersionNumber = 1,
+                    Name = "Global factor",
+                    PublicationStatus = "Published",
+                    PayloadJson = "{}",
+                    CanonicalSha256 = new string('d', 64),
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    PublishedAt = DateTimeOffset.UtcNow
+                });
+            await context.SaveChangesAsync();
+        }
+
+        await using var verification = CreateContext(organizationId);
+        var visibleDefinitionKeys = await verification.GovernanceDefinitions
+            .Where(item => item.StableKey == organizationDefinitionKey || item.StableKey == globalDefinitionKey)
+            .Select(item => item.StableKey)
+            .OrderBy(item => item)
+            .ToArrayAsync();
+        Assert.Equal(
+            new[] { globalDefinitionKey, organizationDefinitionKey }.OrderBy(item => item),
+            visibleDefinitionKeys);
+        var definition = await verification.GovernanceDefinitions
+            .SingleAsync(item => item.StableKey == organizationDefinitionKey);
+        definition.Name = "Illegal overwrite";
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => verification.SaveChangesAsync());
+        Assert.Contains("請建立新版本", exception.Message, StringComparison.Ordinal);
+    }
+
+
+    private static async Task<Guid> SeedGovernanceProjectAsync(Guid organizationId, string suffix)
+    {
+        var productId = Guid.NewGuid();
+        var productVersionId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
+        await using var context = CreateContext(organizationId);
+        context.Organizations.Add(new OrganizationRecord
+        {
+            Id = organizationId,
+            Name = $"Governance organization {suffix}",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        context.Products.Add(new ProductRecord
+        {
+            Id = productId,
+            OrganizationId = organizationId,
+            Name = $"Governance product {suffix}",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        context.ProductVersions.Add(new ProductVersionRecord
+        {
+            Id = productVersionId,
+            OrganizationId = organizationId,
+            ProductId = productId,
+            VersionNumber = 1,
+            NameZhTw = $"治理產品 {suffix}",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        context.InventoryProjectVersions.Add(new InventoryProjectVersionRecord
+        {
+            Id = projectId,
+            OrganizationId = organizationId,
+            ProductVersionId = productVersionId,
+            VersionNumber = 1,
+            PeriodStart = new DateOnly(2026, 1, 1),
+            PeriodEnd = new DateOnly(2026, 12, 31),
+            FunctionalUnit = "1 item",
+            DeclaredUnit = "piece",
+            SystemBoundary = "cradle-to-grave",
+            AllocationMethod = "mass",
+            PcrVersion = "integration",
+            WorkflowStatus = "Draft",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await context.SaveChangesAsync();
+        return projectId;
+    }
+
     private static CarbonFootprintDbContext CreateContext(Guid organizationId)
         => CreateContext(new TestOrganizationScope(organizationId));
 

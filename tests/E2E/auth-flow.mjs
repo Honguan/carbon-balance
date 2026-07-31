@@ -407,6 +407,13 @@ try {
 
     }
 
+    response = await page.goto(`${baseUrl}/Governance`, { waitUntil: "networkidle" });
+    assert(response?.status() === 200, `Governance console returned ${response?.status()}.`);
+    await page.getByRole("heading", { name: "治理與查驗控制台" }).waitFor({ state: "visible" });
+    await expectSelectOptions(page.locator("#projectVersionId"), 1, "Governance project-version select is unusable");
+    const antiforgeryResponse = await context.request.get(`${baseUrl}/api/governance/antiforgery`);
+    assert(antiforgeryResponse.status() === 200, `Governance antiforgery endpoint returned ${antiforgeryResponse.status()}.`);
+
     await page.goto(`${baseUrl}/Identity/Account/Login`, { waitUntil: "domcontentloaded" });
     await expectUrl(page, "/Identity/Account/Login", "Explicit login page visit redirected into the app");
     await page.getByText("已清除原有登入狀態").waitFor({ state: "visible" });
