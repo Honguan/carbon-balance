@@ -7,6 +7,12 @@ on:
     paths:
       - .github/workflows/agent-bridge.yml
       - .agent/patch.diff
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/agent-bridge.yml
+      - .agent/patch.diff
 
 permissions:
   contents: write
@@ -29,7 +35,7 @@ jobs:
             echo 'patch=false' >> "$GITHUB_OUTPUT"
           fi
       - name: Apply verified patch
-        if: steps.mode.outputs.patch == 'true'
+        if: github.event_name == 'push' && steps.mode.outputs.patch == 'true'
         shell: bash
         run: |
           set -euo pipefail
