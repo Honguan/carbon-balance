@@ -20,11 +20,17 @@ permissions:
 jobs:
   bridge:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        if: github.event_name == 'push'
+        with:
+          dotnet-version: 10.0.302
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
       - name: Detect patch mode
         id: mode
         shell: bash
@@ -34,7 +40,7 @@ jobs:
           else
             echo 'patch=false' >> "$GITHUB_OUTPUT"
           fi
-      - name: Apply verified patch
+      - name: Apply and validate patch
         if: github.event_name == 'push' && steps.mode.outputs.patch == 'true'
         shell: bash
         run: |
@@ -42,6 +48,27 @@ jobs:
           git apply --check .agent/patch.diff
           git apply .agent/patch.diff
           rm -f .agent/patch.diff
+          dotnet tool restore
+          dotnet restore --locked-mode
+          dotnet format --no-restore
+          dotnet build --configuration Release --no-restore
+          if dotnet ef migrations has-pending-model-changes \
+            --project src/CarbonFootprint.Infrastructure \
+            --startup-project src/CarbonFootprint.Web \
+            --configuration Release \
+            --no-build; then
+            echo 'EF model is already synchronized.'
+          else
+            migration_name="CompleteGovernance$(date -u +%Y%m%d%H%M%S)"
+            dotnet ef migrations add "$migration_name" \
+              --project src/CarbonFootprint.Infrastructure \
+              --startup-project src/CarbonFootprint.Web \
+              --configuration Release \
+              --no-build \
+              --output-dir Persistence/Migrations
+            dotnet format --no-restore
+            dotnet build --configuration Release --no-restore
+          fi
           git add -A
           git config user.name 'carbon-balance-agent'
           git config user.email 'actions@users.noreply.github.com'
