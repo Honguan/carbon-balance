@@ -144,7 +144,7 @@ public sealed class ActivityFormulaRegistry
         if (!_definitions.TryGetValue(definition.Id, out var registered)
             || registered != definition)
         {
-            errors.Add(new("FORMULA-NOT-REGISTERED", string.Empty, "Formula definition version is not registered."));
+            errors.Add(new("FORMULA-NOT-REGISTERED", string.Empty, "Unsupported PCR formula rule set: formula definition version is not registered."));
             return errors;
         }
 
