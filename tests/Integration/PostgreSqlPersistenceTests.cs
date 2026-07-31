@@ -762,6 +762,8 @@ public sealed class PostgreSqlPersistenceTests
     public async Task PublishedGovernanceDefinition_IsVersionLocked_AndGlobalDefinitionsRemainReadable()
     {
         var organizationId = Guid.NewGuid();
+        var organizationDefinitionKey = $"org-formula-{Guid.NewGuid():N}";
+        var globalDefinitionKey = $"global-{Guid.NewGuid():N}";
         await using (var context = CreateContext(organizationId))
         {
             context.Organizations.Add(new OrganizationRecord
@@ -777,7 +779,7 @@ public sealed class PostgreSqlPersistenceTests
                     DefinitionId = Guid.NewGuid(),
                     OrganizationId = organizationId,
                     DefinitionType = GovernanceDefinitionTypes.ActivityFormula,
-                    StableKey = "org-formula",
+                    StableKey = organizationDefinitionKey,
                     VersionNumber = 1,
                     Name = "Organization formula",
                     PublicationStatus = "Published",
@@ -792,7 +794,7 @@ public sealed class PostgreSqlPersistenceTests
                     DefinitionId = Guid.NewGuid(),
                     OrganizationId = null,
                     DefinitionType = GovernanceDefinitionTypes.GlobalEmissionFactor,
-                    StableKey = $"global-{Guid.NewGuid():N}",
+                    StableKey = globalDefinitionKey,
                     VersionNumber = 1,
                     Name = "Global factor",
                     PublicationStatus = "Published",
@@ -805,8 +807,16 @@ public sealed class PostgreSqlPersistenceTests
         }
 
         await using var verification = CreateContext(organizationId);
-        Assert.Equal(2, await verification.GovernanceDefinitions.CountAsync());
-        var definition = await verification.GovernanceDefinitions.SingleAsync(item => item.StableKey == "org-formula");
+        var visibleDefinitionKeys = await verification.GovernanceDefinitions
+            .Where(item => item.StableKey == organizationDefinitionKey || item.StableKey == globalDefinitionKey)
+            .Select(item => item.StableKey)
+            .OrderBy(item => item)
+            .ToArrayAsync();
+        Assert.Equal(
+            new[] { globalDefinitionKey, organizationDefinitionKey }.OrderBy(item => item),
+            visibleDefinitionKeys);
+        var definition = await verification.GovernanceDefinitions
+            .SingleAsync(item => item.StableKey == organizationDefinitionKey);
         definition.Name = "Illegal overwrite";
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => verification.SaveChangesAsync());
         Assert.Contains("請建立新版本", exception.Message, StringComparison.Ordinal);
