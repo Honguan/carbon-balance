@@ -7,6 +7,7 @@ using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Web;
 using CarbonFootprint.Web.Security;
 using CarbonFootprint.Web.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -195,6 +196,21 @@ app.UseStaticFiles();
 app.UseRateLimiter();
 app.UseRouting();
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/Identity/Account/LoginWith2fa")
+        || context.Request.Path.StartsWithSegments("/Identity/Account/LoginWithRecoveryCode"))
+    {
+        var twoFactorIdentity = await context.AuthenticateAsync(IdentityConstants.TwoFactorUserIdScheme);
+        if (!twoFactorIdentity.Succeeded)
+        {
+            context.Response.Redirect("/Identity/Account/Login");
+            return;
+        }
+    }
+
+    await next(context);
+});
 app.UseAuthorization();
 app.MapStaticAssets();
 app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
