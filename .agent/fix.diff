@@ -1,7 +1,7 @@
 diff --git a/src/CarbonFootprint.Domain/Modules/Calculations/CalculationEngine.cs b/src/CarbonFootprint.Domain/Modules/Calculations/CalculationEngine.cs
 --- a/src/CarbonFootprint.Domain/Modules/Calculations/CalculationEngine.cs
 +++ b/src/CarbonFootprint.Domain/Modules/Calculations/CalculationEngine.cs
-@@ -151,7 +151,8 @@ public sealed class CalculationEngine
+@@ -151,7 +151,8 @@
              activity.FactorVersion.NumeratorUnitCode,
              FactorBasedFormula.ImplementationIdentifier,
              DateTimeOffset.UnixEpoch,
@@ -11,3 +11,51 @@ diff --git a/src/CarbonFootprint.Domain/Modules/Calculations/CalculationEngine.c
      }
  
      private static IReadOnlyDictionary<string, FormulaValue> BuildFormulaValues(
+diff --git a/src/CarbonFootprint.Web/Pages/Workspace.cshtml b/src/CarbonFootprint.Web/Pages/Workspace.cshtml
+--- a/src/CarbonFootprint.Web/Pages/Workspace.cshtml
++++ b/src/CarbonFootprint.Web/Pages/Workspace.cshtml
+@@ -674,12 +674,12 @@
+                         @foreach (var stageSection in activeLifecycleSections)
+                         {
+                             var stageActivities = Model.Activities.Where(item => item.InventoryProjectVersionId == Model.ProjectVersionId && item.LifecycleStage == (int)stageSection.Stage).ToArray();
+-                            var stageHasMissingFactor = stageActivities.Any(activity => !factorsById.ContainsKey(activity.FactorVersionId));
++                            var stageHasMissingFactor = stageActivities.Any(activity => !factorsById.ContainsKey(activity.FactorVersionId ?? Guid.Empty));
+                             var stageEmissions = stageHasMissingFactor
+                                 ? (decimal?)null
+                                 : stageActivities.Sum(activity => ActivityEmissionFormula.Calculate(
+                                     activity.CanonicalValue,
+-                                    factorsById[activity.FactorVersionId].Value,
++                                    factorsById[activity.FactorVersionId ?? Guid.Empty].Value,
+                                     activity.AllocationFactor));
+                             <section class="lifecycle-input-section" id="@stageSection.Slug">
+                                 <header>
+@@ -933,7 +933,7 @@
+                                             @foreach (var activity in stageActivities)
+                                             {
+                                                 var evidence = Model.EvidenceFiles.SingleOrDefault(item => item.ActivityDataId == activity.Id);
+-                                                factorsById.TryGetValue(activity.FactorVersionId, out var activityFactor);
++                                                factorsById.TryGetValue(activity.FactorVersionId ?? Guid.Empty, out var activityFactor);
+                                                 <li>
+                                                     <strong>@activity.Name</strong>
+                                                     <span>@ActivityKindName(Enum.Parse<ActivityDataKind>(activity.ActivityKind))／@activity.CanonicalValue @activity.CanonicalUnitCode／分配 @activity.AllocationFactor</span>
+diff --git a/src/CarbonFootprint.Web/Pages/Workspace.cshtml.cs b/src/CarbonFootprint.Web/Pages/Workspace.cshtml.cs
+--- a/src/CarbonFootprint.Web/Pages/Workspace.cshtml.cs
++++ b/src/CarbonFootprint.Web/Pages/Workspace.cshtml.cs
+@@ -1889,7 +1889,7 @@
+         };
+         activityRows.AddRange(activities.Select(activity =>
+         {
+-            factorById.TryGetValue(activity.FactorVersionId, out var factor);
++            factorById.TryGetValue(activity.FactorVersionId ?? Guid.Empty, out var factor);
+             return (IReadOnlyList<object?>)new object?[]
+             {
+                 LifecycleStageDisplayName((LifecycleStage)activity.LifecycleStage),
+@@ -2067,7 +2067,7 @@
+                 string.IsNullOrWhiteSpace(item.Reason) ? null : item.Reason)).ToArray(),
+             activities.Select(activity =>
+             {
+-                var factor = factorRecords[activity.FactorVersionId];
++                var factor = factorRecords[activity.FactorVersionId ?? throw new InvalidOperationException("Activity factor version is required for calculation.")];
+                 return new ActivityDataSnapshot(
+                     activity.Id,
+                     activity.OrganizationId,
