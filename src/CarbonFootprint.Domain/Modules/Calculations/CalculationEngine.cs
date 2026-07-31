@@ -33,7 +33,7 @@ public sealed class CalculationEngine
         var lines = snapshot.Activities
             .OrderBy(activity => activity.Stage)
             .ThenBy(activity => activity.Id)
-            .Select(activity => CalculateLine(activity, formulaRegistry))
+            .Select(activity => CalculateLine(activity, formulaRegistry, snapshot.RuleSetVersion))
             .ToArray();
 
         var summaries = Enum.GetValues<LifecycleStage>()
@@ -88,7 +88,8 @@ public sealed class CalculationEngine
 
     private static CalculationLineItem CalculateLine(
         ActivityDataSnapshot activity,
-        ActivityFormulaRegistry registry)
+        ActivityFormulaRegistry registry,
+        string ruleSetVersion)
     {
         var definition = ResolveFormulaDefinition(activity);
         var values = BuildFormulaValues(activity, definition);
@@ -106,10 +107,14 @@ public sealed class CalculationEngine
             evidence = JsonDocument.Parse(activity.EvidenceIndexJson).RootElement
         });
 
+        var formulaId = activity.EmissionFormula is null
+            ? ActivityEmissionFormula.Resolve(ruleSetVersion, activity.Kind).Id
+            : $"{definition.Code}@{definition.VersionNumber}";
+
         return new CalculationLineItem(
             activity.Id,
             activity.Stage,
-            $"{definition.Code}@{definition.VersionNumber}",
+            formulaId,
             activity.CanonicalValue,
             activity.CanonicalUnitCode,
             activity.FactorVersion.Id,
