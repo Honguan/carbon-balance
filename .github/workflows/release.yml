@@ -1,0 +1,119 @@
+name: Verified release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - VERSION
+      - CHANGELOG.md
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: verified-release
+  cancel-in-progress: false
+
+jobs:
+  verify-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_DB: carbon_footprint_release
+          POSTGRES_USER: carbon_release
+          POSTGRES_PASSWORD: release-ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U carbon_release -d carbon_footprint_release"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      ConnectionStrings__Database: Host=127.0.0.1;Port=5432;Database=carbon_footprint_release;Username=carbon_release;Password=release-ci-only-password;SSL Mode=Disable;GSS Encryption Mode=Disable
+      CARBON_TEST_DB_CONNECTION: Host=127.0.0.1;Port=5432;Database=carbon_footprint_release;Username=carbon_release;Password=release-ci-only-password;SSL Mode=Disable;GSS Encryption Mode=Disable
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.302
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid semantic version: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+      - name: Skip existing release
+        id: existing
+        shell: bash
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Restore tools and locked packages
+        if: steps.existing.outputs.exists != 'true'
+        run: |
+          dotnet tool restore
+          dotnet restore --locked-mode
+      - name: Verify formatting
+        if: steps.existing.outputs.exists != 'true'
+        run: dotnet format --verify-no-changes --no-restore
+      - name: Build release
+        if: steps.existing.outputs.exists != 'true'
+        run: dotnet build --configuration Release --no-restore -p:Version=${{ steps.version.outputs.version }}
+      - name: Apply migrations to empty PostgreSQL
+        if: steps.existing.outputs.exists != 'true'
+        run: dotnet run --project src/CarbonFootprint.Web --configuration Release --no-build -- --migrate
+      - name: Run complete test suite
+        if: steps.existing.outputs.exists != 'true'
+        run: dotnet test --configuration Release --no-build
+      - name: Create release archive
+        if: steps.existing.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          archive="carbon-balance-${version}.tar.gz"
+          git archive --format=tar.gz --prefix="carbon-balance-${version}/" --output="$archive" HEAD
+          sha256sum "$archive" > "${archive}.sha256"
+          awk '
+            /^## / {
+              if (found) exit
+              if ($2 == version || $2 == version_date) found=1
+            }
+            found { print }
+          ' version="$version" version_date="$version" CHANGELOG.md > RELEASE_NOTES.md
+          if [[ ! -s RELEASE_NOTES.md ]]; then
+            printf 'Carbon Balance %s\n' "$version" > RELEASE_NOTES.md
+          fi
+      - name: Publish GitHub release
+        if: steps.existing.outputs.exists != 'true'
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          tag="${{ steps.version.outputs.tag }}"
+          archive="carbon-balance-${version}.tar.gz"
+          gh release create "$tag" \
+            "$archive" \
+            "${archive}.sha256" \
+            --target "$GITHUB_SHA" \
+            --title "Carbon Balance ${version}" \
+            --notes-file RELEASE_NOTES.md \
+            --verify-tag=false
