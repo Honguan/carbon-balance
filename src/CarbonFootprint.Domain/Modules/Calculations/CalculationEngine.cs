@@ -27,7 +27,7 @@ public sealed class CalculationEngine
         var formulaDefinitions = snapshot.Activities
             .Select(ResolveFormulaDefinition)
             .GroupBy(definition => definition.Id)
-            .Select(group => group.Single())
+            .Select(group => group.First())
             .ToArray();
         var formulaRegistry = new ActivityFormulaRegistry(Implementations, formulaDefinitions);
         var lines = snapshot.Activities
