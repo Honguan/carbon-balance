@@ -12,6 +12,7 @@ on:
       - main
     paths:
       - .github/workflows/agent-bridge.yml
+      - .agent/patch.ready
 
 permissions:
   contents: write
@@ -23,9 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: agent/complete-issues-21-30-v1.0.0
           fetch-depth: 0
       - uses: actions/setup-dotnet@v6
-        if: github.event_name == 'push' && hashFiles('.agent/patch.ready') != ''
+        if: hashFiles('.agent/patch.ready') != ''
         with:
           dotnet-version: 10.0.302
           cache: true
@@ -40,7 +42,7 @@ jobs:
             echo 'patch=false' >> "$GITHUB_OUTPUT"
           fi
       - name: Apply and validate patch
-        if: github.event_name == 'push' && steps.mode.outputs.patch == 'true'
+        if: steps.mode.outputs.patch == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -73,7 +75,7 @@ jobs:
           git config user.name 'carbon-balance-agent'
           git config user.email 'actions@users.noreply.github.com'
           git commit -m 'feat: complete governance issues 21-30'
-          git push origin HEAD:${GITHUB_REF_NAME}
+          git push origin HEAD:agent/complete-issues-21-30-v1.0.0
       - name: Package branch source
         if: steps.mode.outputs.patch != 'true'
         shell: bash
