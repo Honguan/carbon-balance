@@ -146,7 +146,7 @@ public sealed class AdvancedInventoryGovernanceTests
             [Input("activityAmount", "kWh"), Input("emissionFactor", "kgCO2e/kWh"), Input("allocationFactor", "ratio", false)],
             "emissions",
             "kgCO2e",
-            FactorBasedFormula.Key,
+            FactorBasedFormula.ImplementationIdentifier,
             DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
             "admin",
             DateTimeOffset.Parse("2026-01-02T00:00:00Z"));

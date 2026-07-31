@@ -1,7 +1,0 @@
-[extend]
-useDefault = true
-
-[[allowlists]]
-description = "Fixed non-secret formula implementation identifiers"
-paths = ['''src/CarbonFootprint\.Domain/Modules/Formulas/ActivityFormulaFramework\.cs''']
-regexes = ['''(?:direct-amount|factor-based|mass-balance|energy-balance)-v1''']

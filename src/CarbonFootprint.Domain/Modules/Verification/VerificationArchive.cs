@@ -316,7 +316,7 @@ public static class ProjectVersionComparisonService
             var previousEmissions = before?.Emissions ?? 0m;
             var currentEmissions = after?.Emissions ?? 0m;
             var delta = currentEmissions - previousEmissions;
-            var percentage = previousEmissions == 0m
+            decimal? percentage = previousEmissions == 0m
                 ? null
                 : delta / previousEmissions;
 
@@ -336,7 +336,7 @@ public static class ProjectVersionComparisonService
         var previousTotal = previous.Sum(item => item.Emissions);
         var currentTotal = current.Sum(item => item.Emissions);
         var totalDelta = currentTotal - previousTotal;
-        var totalPercentage = previousTotal == 0m ? null : totalDelta / previousTotal;
+        decimal? totalPercentage = previousTotal == 0m ? null : totalDelta / previousTotal;
         var hotspots = changes
             .Where(change => change.ChangeType != ProjectChangeType.Unchanged)
             .OrderByDescending(change => Math.Abs(change.AbsoluteDelta))

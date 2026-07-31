@@ -203,9 +203,9 @@ public sealed class ActivityFormulaRegistry
 
 public sealed class DirectAmountFormula : IActivityFormulaImplementation
 {
-    public const string Key = "direct-amount-v1";
+    public const string ImplementationIdentifier = "direct-amount-v1";
 
-    public string ImplementationKey => Key;
+    public string ImplementationKey => ImplementationIdentifier;
 
     public FormulaExecutionResult Execute(FormulaExecutionContext context)
     {
@@ -255,9 +255,9 @@ public sealed class DirectAmountFormula : IActivityFormulaImplementation
 
 public sealed class FactorBasedFormula : IActivityFormulaImplementation
 {
-    public const string Key = "factor-based-v1";
+    public const string ImplementationIdentifier = "factor-based-v1";
 
-    public string ImplementationKey => Key;
+    public string ImplementationKey => ImplementationIdentifier;
 
     public FormulaExecutionResult Execute(FormulaExecutionContext context)
     {
@@ -288,9 +288,9 @@ public sealed class FactorBasedFormula : IActivityFormulaImplementation
 
 public sealed class MassBalanceFormula : IActivityFormulaImplementation
 {
-    public const string Key = "mass-balance-v1";
+    public const string ImplementationIdentifier = "mass-balance-v1";
 
-    public string ImplementationKey => Key;
+    public string ImplementationKey => ImplementationIdentifier;
 
     public FormulaExecutionResult Execute(FormulaExecutionContext context)
     {
@@ -323,9 +323,9 @@ public sealed class MassBalanceFormula : IActivityFormulaImplementation
 
 public sealed class EnergyBalanceFormula : IActivityFormulaImplementation
 {
-    public const string Key = "energy-balance-v1";
+    public const string ImplementationIdentifier = "energy-balance-v1";
 
-    public string ImplementationKey => Key;
+    public string ImplementationKey => ImplementationIdentifier;
 
     public FormulaExecutionResult Execute(FormulaExecutionContext context)
     {
