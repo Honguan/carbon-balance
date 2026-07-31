@@ -6,13 +6,12 @@ on:
       - agent/complete-issues-21-30-v1.0.0
     paths:
       - .github/workflows/agent-bridge.yml
-      - .agent/patch.diff
+      - .agent/patch.ready
   pull_request:
     branches:
       - main
     paths:
       - .github/workflows/agent-bridge.yml
-      - .agent/patch.diff
 
 permissions:
   contents: write
@@ -26,7 +25,7 @@ jobs:
         with:
           fetch-depth: 0
       - uses: actions/setup-dotnet@v6
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && hashFiles('.agent/patch.ready') != ''
         with:
           dotnet-version: 10.0.302
           cache: true
@@ -35,7 +34,7 @@ jobs:
         id: mode
         shell: bash
         run: |
-          if [[ -f .agent/patch.diff ]]; then
+          if [[ -f .agent/patch.ready ]]; then
             echo 'patch=true' >> "$GITHUB_OUTPUT"
           else
             echo 'patch=false' >> "$GITHUB_OUTPUT"
@@ -45,9 +44,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cat .agent/patch.part-* | base64 --decode | gunzip > .agent/patch.diff
           git apply --check .agent/patch.diff
           git apply .agent/patch.diff
-          rm -f .agent/patch.diff
+          rm -f .agent/patch.diff .agent/patch.ready .agent/patch.part-*
           dotnet tool restore
           dotnet restore --locked-mode
           dotnet format --no-restore
