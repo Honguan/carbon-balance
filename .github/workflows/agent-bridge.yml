@@ -1,13 +1,6 @@
 name: Agent source bridge
 
 on:
-  push:
-    branches:
-      - agent/complete-issues-21-30-v1.0.0
-    paths:
-      - .github/workflows/agent-bridge.yml
-      - .agent/patch.ready
-      - .agent/fix.diff
   pull_request:
     branches:
       - main
@@ -18,6 +11,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: agent-source-bridge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   bridge:
@@ -60,13 +57,11 @@ jobs:
           dotnet restore --locked-mode
           dotnet format --no-restore
           dotnet build --configuration Release --no-restore
-          if dotnet ef migrations has-pending-model-changes \
+          if ! dotnet ef migrations has-pending-model-changes \
             --project src/CarbonFootprint.Infrastructure \
             --startup-project src/CarbonFootprint.Web \
             --configuration Release \
             --no-build; then
-            echo 'EF model is already synchronized.'
-          else
             migration_name="CompleteGovernance$(date -u +%Y%m%d%H%M%S)"
             dotnet ef migrations add "$migration_name" \
               --project src/CarbonFootprint.Infrastructure \
@@ -81,6 +76,8 @@ jobs:
           git config user.name 'carbon-balance-agent'
           git config user.email 'actions@users.noreply.github.com'
           git commit -m 'feat: complete governance issues 21-30'
+          git fetch origin agent/complete-issues-21-30-v1.0.0
+          git rebase origin/agent/complete-issues-21-30-v1.0.0
           git push origin HEAD:agent/complete-issues-21-30-v1.0.0
       - name: Package branch source
         if: steps.mode.outputs.patch != 'true'
