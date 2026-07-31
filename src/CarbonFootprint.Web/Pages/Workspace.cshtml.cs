@@ -614,7 +614,7 @@ public sealed class WorkspaceModel : PageModel
                 allocationMethod.Trim(),
                 defaultStageApplicability,
                 [],
-                exclusions.Trim()),
+                exclusions?.Trim() ?? string.Empty),
             requireCompleteInventory: false);
         if (pcrViolations.Count > 0)
         {
