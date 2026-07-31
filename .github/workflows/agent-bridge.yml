@@ -7,12 +7,14 @@ on:
     paths:
       - .github/workflows/agent-bridge.yml
       - .agent/patch.ready
+      - .agent/fix.diff
   pull_request:
     branches:
       - main
     paths:
       - .github/workflows/agent-bridge.yml
       - .agent/patch.ready
+      - .agent/fix.diff
 
 permissions:
   contents: write
@@ -49,7 +51,11 @@ jobs:
           cat .agent/patch.part-* | base64 --decode | gunzip > .agent/patch.diff
           git apply --check .agent/patch.diff
           git apply .agent/patch.diff
-          rm -f .agent/patch.diff .agent/patch.ready .agent/patch.part-*
+          if [[ -f .agent/fix.diff ]]; then
+            git apply --check .agent/fix.diff
+            git apply .agent/fix.diff
+          fi
+          rm -f .agent/patch.diff .agent/fix.diff .agent/patch.ready .agent/patch.part-*
           dotnet tool restore
           dotnet restore --locked-mode
           dotnet format --no-restore
