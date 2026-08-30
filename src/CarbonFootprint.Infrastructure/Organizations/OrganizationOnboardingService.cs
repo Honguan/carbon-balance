@@ -1,8 +1,8 @@
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Domain.Modules.Organizations;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace CarbonFootprint.Infrastructure.Organizations;
 
@@ -24,8 +24,8 @@ public sealed class OrganizationOnboardingService
         var organizationId = Guid.NewGuid();
         await using (var dbContext = new CarbonFootprintDbContext(_options, new ExplicitOrganizationScope(organizationId)))
         {
-            if (await dbContext.UserClaims.AnyAsync(
-                    claim => claim.UserId == user.Id && claim.ClaimType == "organization_id",
+            if (await dbContext.OrganizationMemberships.IgnoreQueryFilters().AnyAsync(
+                    membership => membership.UserId == user.Id && membership.RevokedAt == null,
                     cancellationToken))
             {
                 throw new InvalidOperationException("此帳號已有目前組織；P0 onboarding 不允許重複建立。");
@@ -59,13 +59,14 @@ public sealed class OrganizationOnboardingService
                 CorrelationId = organizationId.ToString("N"),
                 MetadataJson = "{}"
             });
-            dbContext.UserClaims.Add(new IdentityUserClaim<Guid>
+            try
             {
-                UserId = user.Id,
-                ClaimType = "organization_id",
-                ClaimValue = organizationId.ToString()
-            });
-            await dbContext.SaveChangesAsync(cancellationToken);
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (IsActiveMembershipConflict(exception))
+            {
+                throw new InvalidOperationException("此帳號已有目前組織；P0 onboarding 不允許重複建立。", exception);
+            }
         }
 
         return organizationId;
@@ -75,4 +76,12 @@ public sealed class OrganizationOnboardingService
     {
         public Guid? OrganizationId => Value;
     }
+
+    private static bool IsActiveMembershipConflict(DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+        } postgresException
+        && postgresException.ConstraintName is "ux_organization_memberships_active_user"
+            or "ix_organization_memberships_organization_id_user_id";
 }

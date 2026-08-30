@@ -31,9 +31,12 @@ public sealed class OrganizationPermissionHandler : AuthorizationHandler<Organiz
             return;
         }
 
+        var organizationId = _organizationScope.OrganizationId.Value;
         var roleName = await _dbContext.OrganizationMemberships
             .AsNoTracking()
-            .Where(item => item.UserId == userId && item.RevokedAt == null)
+            .Where(item => item.OrganizationId == organizationId
+                && item.UserId == userId
+                && item.RevokedAt == null)
             .Select(item => item.Role)
             .SingleOrDefaultAsync();
         if (Enum.TryParse<OrganizationRole>(roleName, out var role) &&
