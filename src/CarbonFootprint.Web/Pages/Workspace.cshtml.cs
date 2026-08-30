@@ -209,7 +209,7 @@ public sealed class WorkspaceModel : PageModel
         string fromName,
         CancellationToken cancellationToken)
     {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization))
+        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
         {
             return Forbid();
         }
@@ -289,7 +289,7 @@ public sealed class WorkspaceModel : PageModel
 
     public async Task<IActionResult> OnPostTestMailAsync(string recipient, CancellationToken cancellationToken)
     {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization))
+        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
         {
             return Forbid();
         }
@@ -1193,7 +1193,7 @@ public sealed class WorkspaceModel : PageModel
 
     public async Task<IActionResult> OnPostSyncMoenvFactorsAsync(CancellationToken cancellationToken)
     {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
+        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
         {
             return Forbid();
         }
@@ -1683,7 +1683,7 @@ public sealed class WorkspaceModel : PageModel
 
     public async Task<IActionResult> OnPostSubmitInventoryAsync(Guid inventoryProjectVersionId, CancellationToken cancellationToken)
     {
-        if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
+        if (!await IsAllowedAsync(OrganizationPermission.EditInventory) || !await IsMfaEnabledAsync())
         {
             return Forbid();
         }
@@ -1811,7 +1811,7 @@ public sealed class WorkspaceModel : PageModel
         Guid projectVersionId,
         CancellationToken cancellationToken)
     {
-        if (!await IsAllowedAsync(OrganizationPermission.ViewInventory))
+        if (!await IsAllowedAsync(OrganizationPermission.ViewInventory) || !await IsMfaEnabledAsync())
         {
             return Forbid();
         }

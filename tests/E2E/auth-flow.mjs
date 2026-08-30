@@ -1,6 +1,7 @@
 import { chromium } from "playwright";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { totp } from "./totp.mjs";
 
 const baseUrl = process.env.CARBON_E2E_BASE_URL ?? "http://127.0.0.1:18088";
 const mailpitUrl = process.env.CARBON_E2E_MAILPIT_URL ?? "http://127.0.0.1:8025";
@@ -15,6 +16,22 @@ function assert(condition, message) {
     if (!condition) {
         throw new Error(message);
     }
+}
+
+async function completeTotpLogin(page, sharedKey, testInvalidCode = false) {
+    await expectUrl(page, "/Identity/Account/LoginWith2fa", "Password login bypassed the TOTP challenge");
+    const codeInput = page.locator('input[name="Input.TwoFactorCode"]');
+    if (testInvalidCode) {
+        const currentCode = totp(sharedKey);
+        await codeInput.fill(currentCode === "000000" ? "111111" : "000000");
+        await page.locator("form button[type=submit]").click();
+        await expectUrl(page, "/Identity/Account/LoginWith2fa", "Invalid TOTP escaped the challenge");
+        await page.getByText(/Invalid authenticator code/i).waitFor({ state: "visible" });
+        await page.goto(`${baseUrl}/Identity/Account/LoginWith2fa?returnUrl=%2FWorkspace`, { waitUntil: "domcontentloaded" });
+    }
+    await codeInput.fill(totp(sharedKey));
+    await page.locator("form button[type=submit]").click();
+    await expectUrl(page, "/Workspace", "Valid TOTP did not complete login");
 }
 
 async function expectUrl(page, suffix, message) {
@@ -94,15 +111,15 @@ async function expectSelectOptions(select, minimumOptions, message) {
     assert(optionCount >= minimumOptions, `${message}: expected at least ${minimumOptions} options, got ${optionCount}.`);
 }
 
-async function waitForLatestConfirmationLink(mailPage) {
+async function waitForLatestMailLink(mailPage, name) {
     for (let attempt = 1; attempt <= 30; attempt += 1) {
         const response = await mailPage.goto(`${mailpitUrl}/view/latest.html`, {
             waitUntil: "domcontentloaded"
         });
         if (response?.ok()) {
-            const confirmationLink = mailPage.getByRole("link", { name: "確認帳號" });
-            if (await confirmationLink.count()) {
-                const href = await confirmationLink.first().getAttribute("href");
+            const link = mailPage.getByRole("link", { name });
+            if (await link.count()) {
+                const href = await link.first().getAttribute("href");
                 if (href) {
                     return href;
                 }
@@ -111,7 +128,7 @@ async function waitForLatestConfirmationLink(mailPage) {
         await mailPage.waitForTimeout(1_000);
     }
 
-    throw new Error("Mailpit did not receive a usable confirmation email within 30 seconds.");
+    throw new Error(`Mailpit did not receive a usable ${name} email within 30 seconds.`);
 }
 
 const browser = await chromium.launch({ headless: true });
@@ -201,12 +218,35 @@ try {
     await page.getByText("確認信已寄出").waitFor({ state: "visible" });
 
     const mailPage = await context.newPage();
-    const confirmationHref = await waitForLatestConfirmationLink(mailPage);
+    const confirmationHref = await waitForLatestMailLink(mailPage, "確認帳號");
     await page.goto(confirmationHref, { waitUntil: "domcontentloaded" });
     await page.getByRole("heading", { name: "Email 已確認" }).waitFor({ state: "visible" });
     await page.getByRole("link", { name: /前往登入/ }).click();
     await expectUrl(page, "/Identity/Account/Login", "Confirmation page did not return to login");
     await mailPage.close();
+
+    // Forgot-password responses are identical for unknown and existing accounts.
+    await page.goto(`${baseUrl}/Identity/Account/ForgotPassword`, { waitUntil: "domcontentloaded" });
+    await page.locator('input[name="Input.Email"]').fill(`unknown-${Date.now()}@example.test`);
+    await page.locator("form button[type=submit]").click();
+    await expectUrl(page, "/Identity/Account/ForgotPasswordConfirmation", "Unknown account exposed a distinct reset response");
+    await page.goto(`${baseUrl}/Identity/Account/ForgotPassword`, { waitUntil: "domcontentloaded" });
+    await page.locator('input[name="Input.Email"]').fill(testEmail);
+    await page.locator("form button[type=submit]").click();
+    await expectUrl(page, "/Identity/Account/ForgotPasswordConfirmation", "Existing account did not use the generic reset response");
+    const resetMailPage = await context.newPage();
+    const resetHref = await waitForLatestMailLink(resetMailPage, "重設密碼");
+    await page.goto(resetHref, { waitUntil: "domcontentloaded" });
+    const resetEmail = page.locator('input[name="Input.Email"]');
+    if (await resetEmail.count()) {
+        await resetEmail.fill(testEmail);
+    }
+    await page.locator('input[name="Input.Password"]').fill(testPassword);
+    await page.locator('input[name="Input.ConfirmPassword"]').fill(testPassword);
+    await page.locator("form button[type=submit]").click();
+    await expectUrl(page, "/Identity/Account/ResetPasswordConfirmation", "Password reset did not complete");
+    await resetMailPage.close();
+    await page.goto(`${baseUrl}/Identity/Account/Login`, { waitUntil: "domcontentloaded" });
 
     await page.locator('input[name="Input.Identifier"]').fill(testEmail);
     await page.locator('input[name="Input.Password"]').fill(testPassword);
@@ -228,6 +268,71 @@ try {
     await expectUrl(page, "/Workspace", "Organization creation left the workspace");
     await page.getByText("組織已建立。").waitFor({ state: "visible" });
     await page.getByText("目前組織", { exact: true }).waitFor({ state: "visible" });
+
+    // A password-only application cookie must not authorize governance operations.
+    await page.locator("#invitationEmail").fill(`password-only-${Date.now()}@example.test`);
+    const forbiddenInvitePromise = page.waitForResponse(
+        (candidate) => candidate.url().includes("handler=InviteMember") && candidate.request().method() === "POST"
+    );
+    await page.getByRole("button", { name: "寄送邀請" }).click();
+    const forbiddenInvite = await forbiddenInvitePromise;
+    assert(
+        forbiddenInvite.status() === 302
+            && forbiddenInvite.headers().location?.includes("/Identity/Account/AccessDenied"),
+        `Password-only governance action was not rejected: ${forbiddenInvite.status()} ${forbiddenInvite.headers().location ?? ""}.`
+    );
+
+    // Enroll the built-in authenticator flow and retain one recovery code for one-time-use coverage.
+    await page.goto(`${baseUrl}/Identity/Account/Manage/TwoFactorAuthentication`, { waitUntil: "domcontentloaded" });
+    await page.locator('a[href*="EnableAuthenticator"]').click();
+    await expectUrl(page, "/Identity/Account/Manage/EnableAuthenticator", "Authenticator enrollment did not open");
+    const sharedKey = (await page.locator("kbd").first().textContent())?.replace(/\s/g, "") ?? "";
+    assert(sharedKey.length > 0, "Authenticator enrollment did not expose a shared key.");
+    await page.locator('input[name="Input.Code"]').fill(totp(sharedKey));
+    await page.getByRole("button", { name: "Verify", exact: true }).click();
+    await expectUrl(page, "/Identity/Account/Manage/ShowRecoveryCodes", "Authenticator enrollment did not issue recovery codes");
+    const recoveryCodes = (await page.locator("code").allTextContents()).map((code) => code.trim()).filter(Boolean);
+    assert(recoveryCodes.length > 0, "Authenticator enrollment did not issue recovery codes.");
+
+    await page.getByRole("button", { name: "登出" }).click();
+    await expectUrl(page, "/", "Post-enrollment logout did not return home");
+    await page.goto(`${baseUrl}/Identity/Account/Login`, { waitUntil: "domcontentloaded" });
+    await page.locator('input[name="Input.Identifier"]').fill(testEmail);
+    await page.locator('input[name="Input.Password"]').fill(testPassword);
+    await page.getByRole("checkbox", { name: "在這台裝置保持登入 30 天" }).check();
+    await page.getByRole("button", { name: "登入碳足跡系統" }).click();
+    const passwordOnlyCookie = (await context.cookies(baseUrl)).find((cookie) => cookie.name.includes("Identity.Application"));
+    assert(!passwordOnlyCookie, "Password-only 2FA login created an application cookie.");
+    await completeTotpLogin(page, sharedKey, true);
+
+    await page.locator("#invitationEmail").fill(`mfa-verified-${Date.now()}@example.test`);
+    await page.getByRole("button", { name: "寄送邀請" }).click();
+    await page.getByText("組織邀請已寄出。").waitFor({ state: "visible" });
+
+    // Recovery codes create an MFA session once and are consumed on first use.
+    await page.getByRole("button", { name: "登出" }).click();
+    await page.goto(`${baseUrl}/Identity/Account/Login`, { waitUntil: "domcontentloaded" });
+    await page.locator('input[name="Input.Identifier"]').fill(testEmail);
+    await page.locator('input[name="Input.Password"]').fill(testPassword);
+    await page.getByRole("button", { name: "登入碳足跡系統" }).click();
+    await page.locator('a[href*="LoginWithRecoveryCode"]').click();
+    await page.locator('input[name="Input.RecoveryCode"]').fill(recoveryCodes[0]);
+    await page.locator("form button[type=submit]").click();
+    await expectUrl(page, "/Workspace", "Recovery code did not complete login");
+    await page.getByRole("button", { name: "登出" }).click();
+    await page.goto(`${baseUrl}/Identity/Account/Login`, { waitUntil: "domcontentloaded" });
+    await page.locator('input[name="Input.Identifier"]').fill(testEmail);
+    await page.locator('input[name="Input.Password"]').fill(testPassword);
+    await page.getByRole("button", { name: "登入碳足跡系統" }).click();
+    await page.locator('a[href*="LoginWithRecoveryCode"]').click();
+    await page.locator('input[name="Input.RecoveryCode"]').fill(recoveryCodes[0]);
+    await page.locator("form button[type=submit]").click();
+    await expectUrl(page, "/Identity/Account/LoginWithRecoveryCode", "Consumed recovery code was accepted twice");
+    await page.getByText(/Invalid recovery code/i).waitFor({ state: "visible" });
+    await page.goto(`${baseUrl}/Identity/Account/LoginWith2fa?returnUrl=%2FWorkspace`, { waitUntil: "domcontentloaded" });
+    await page.locator('input[name="Input.TwoFactorCode"]').fill(totp(sharedKey));
+    await page.locator("form button[type=submit]").click();
+    await expectUrl(page, "/Workspace", "TOTP did not restore the browser flow after recovery-code rejection");
 
 
     if (postgresUrl) {
@@ -420,7 +525,7 @@ try {
     await page.locator('input[name="Input.Identifier"]').fill(testEmail);
     await page.locator('input[name="Input.Password"]').fill(testPassword);
     await page.getByRole("button", { name: "登入碳足跡系統" }).click();
-    await expectUrl(page, "/Workspace", "Session login did not reach the workspace");
+    await completeTotpLogin(page, sharedKey);
     const sessionCookie = (await context.cookies(baseUrl)).find((cookie) => cookie.name.includes("Identity.Application"));
     assert(sessionCookie, "Session authentication cookie was not created.");
     assert(sessionCookie.expires === -1, `Unchecked remember-me created a persistent cookie: ${sessionCookie.expires}.`);

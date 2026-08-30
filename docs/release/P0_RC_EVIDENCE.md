@@ -6,8 +6,8 @@
 | 閘門 | 實際結果 |
 |---|---|
 | Release build | 0 warning、0 error |
-| 自動測試 | 44/44 通過：Unit 30、Golden 4、Architecture 2、Contract 1、Integration 5、Security 2；已產生 6 份 Cobertura coverage artifact |
-| E2E | 註冊、Email 確認、TOTP MFA、PCR／因子發布、五階段活動、證據掃描與儲存、重算、送審、核准、CSV／manifest 匯出通過 |
+| 自動測試 | 96/96 通過：Unit 61、Golden 4、Architecture 2、Contract 1、Integration 22、Security 6；CI 產生各測試專案 coverage artifact |
+| E2E | PR 工作流驗證註冊、Email 確認、列舉防護密碼重設、TOTP 註冊與挑戰、錯誤 TOTP、一次性 recovery code、password-only／stale MFA 拒絕，以及既有 Workspace 治理流程 |
 | 計算一致性 | 產品總額 7 kgCO2e；相同輸入 hash 相同；supersedes lineage 正確 |
 | 空庫遷移 | 11 個 EF migrations，建立 28 張 app／identity／staging 資料表 |
 | 前版升級 | 從 `20260718100827_AddLifecycleActivityGovernance` 升級到目前 schema，28 張表，通過 |

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading.RateLimiting;
 using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Domain.Modules.Calculations;
@@ -6,6 +7,7 @@ using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Web.Security;
 using CarbonFootprint.Web.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -25,8 +27,38 @@ if (!builder.Environment.IsDevelopment()
 }
 
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton(TimeProvider.System);
+var mfaFreshness = builder.Configuration.GetValue<TimeSpan?>("Security:MfaFreshness")
+    ?? MfaAuthentication.DefaultFreshness;
+if (mfaFreshness <= TimeSpan.Zero)
+{
+    throw new InvalidOperationException("Security:MfaFreshness 必須大於零。");
+}
+builder.Services.AddSingleton(new MfaAuthenticationSettings(mfaFreshness));
 builder.Services.AddScoped<IOrganizationScope, HttpOrganizationScope>();
 builder.Services.AddCarbonFootprintInfrastructure(builder.Configuration);
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    var previousOnSigningIn = options.Events.OnSigningIn;
+    options.Events.OnSigningIn = async context =>
+    {
+        await previousOnSigningIn(context);
+        if (context.Principal?.HasClaim(claim => claim.Type == "amr" && claim.Value is "pwd" or "mfa") == true)
+        {
+            var authenticatedAt = context.HttpContext.RequestServices.GetRequiredService<TimeProvider>()
+                .GetUtcNow()
+                .ToUnixTimeSeconds()
+                .ToString(CultureInfo.InvariantCulture);
+            context.Properties.Items.TryAdd(MfaAuthentication.AuthenticatedAtProperty, authenticatedAt);
+            if (context.Principal.HasClaim("amr", "mfa"))
+            {
+                context.Properties.Items.TryAdd(
+                    MfaAuthentication.VerifiedAtProperty,
+                    authenticatedAt);
+            }
+        }
+    };
+});
 builder.Services.AddSingleton<CalculationEngine>();
 builder.Services.AddScoped<CalculateInventoryHandler>();
 builder.Services.Configure<MoenvFactorSourceOptions>(
@@ -49,6 +81,11 @@ else if (!builder.Environment.IsDevelopment())
         "正式環境必須設定 DataProtection:KeyPath，才能持久化組織 SMTP 密碼的加密金鑰。");
 }
 builder.Services.AddHealthChecks().AddDbContextCheck<CarbonFootprintDbContext>("postgresql");
+var rateLimitPermitCount = builder.Configuration.GetValue("RateLimiting:PermitLimit", 120);
+if (rateLimitPermitCount <= 0)
+{
+    throw new InvalidOperationException("RateLimiting:PermitLimit 必須大於零。");
+}
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -57,7 +94,7 @@ builder.Services.AddRateLimiter(options =>
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 120,
+                PermitLimit = rateLimitPermitCount,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
@@ -176,18 +213,8 @@ app.Use(async (context, next) =>
 
 var disabledIdentityPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
-    "/Identity/Account/ForgotPassword",
-    "/Identity/Account/ForgotPasswordConfirmation",
-    "/Identity/Account/ResetPassword",
-    "/Identity/Account/ResetPasswordConfirmation",
     "/Identity/Account/ConfirmEmailChange",
     "/Identity/Account/ExternalLogin",
-    "/Identity/Account/LoginWith2fa",
-    "/Identity/Account/LoginWithRecoveryCode",
-    "/Identity/Account/Manage/TwoFactorAuthentication",
-    "/Identity/Account/Manage/EnableAuthenticator",
-    "/Identity/Account/Manage/ResetAuthenticator",
-    "/Identity/Account/Manage/GenerateRecoveryCodes",
     "/Identity/Account/Manage/ExternalLogins"
 };
 
@@ -207,6 +234,34 @@ app.UseStaticFiles();
 app.UseRateLimiter();
 app.UseRouting();
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    if ((context.Request.Path.Equals("/Identity/Account/LoginWith2fa")
+            || context.Request.Path.Equals("/Identity/Account/LoginWithRecoveryCode"))
+        && !(await context.AuthenticateAsync(IdentityConstants.TwoFactorUserIdScheme)).Succeeded)
+    {
+        context.Response.Redirect("/Identity/Account/Login");
+        return;
+    }
+
+    if (context.Request.Path.StartsWithSegments("/Identity/Account/Manage"))
+    {
+        var authentication = await context.AuthenticateAsync(IdentityConstants.ApplicationScheme);
+        if (!MfaAuthentication.IsFresh(
+            authentication,
+            context.User,
+            context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow(),
+            context.RequestServices.GetRequiredService<MfaAuthenticationSettings>().Freshness,
+            requireMfa: false))
+        {
+            var returnUrl = Uri.EscapeDataString(context.Request.Path + context.Request.QueryString);
+            context.Response.Redirect($"/Identity/Account/Login?returnUrl={returnUrl}");
+            return;
+        }
+    }
+
+    await next(context);
+});
 app.UseAuthorization();
 app.MapStaticAssets();
 app.MapHealthChecks("/health/live", new() { Predicate = _ => false });

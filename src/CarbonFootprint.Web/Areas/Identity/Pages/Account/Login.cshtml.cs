@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using CarbonFootprint.Infrastructure.Identity;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -70,10 +69,20 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
-        var passwordResult = await _signInManager.CheckPasswordSignInAsync(
+        await _signInManager.ForgetTwoFactorClientAsync();
+        var passwordResult = await _signInManager.PasswordSignInAsync(
             user,
             Input.Password,
+            Input.RememberMe,
             lockoutOnFailure: true);
+
+        if (passwordResult.RequiresTwoFactor)
+        {
+            var returnUrl = !string.IsNullOrWhiteSpace(ReturnUrl) && Url.IsLocalUrl(ReturnUrl)
+                ? ReturnUrl
+                : "/Workspace";
+            return RedirectToPage("./LoginWith2fa", new { ReturnUrl = returnUrl, RememberMe = Input.RememberMe });
+        }
 
         if (passwordResult.IsLockedOut)
         {
@@ -92,18 +101,6 @@ public sealed class LoginModel : PageModel
             ModelState.AddModelError(string.Empty, "帳號或密碼不正確。");
             return Page();
         }
-
-        var authenticationProperties = new AuthenticationProperties
-        {
-            IsPersistent = Input.RememberMe,
-            AllowRefresh = true
-        };
-        if (Input.RememberMe)
-        {
-            authenticationProperties.ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30);
-        }
-
-        await _signInManager.SignInAsync(user, authenticationProperties);
 
         if (!string.IsNullOrWhiteSpace(ReturnUrl) && Url.IsLocalUrl(ReturnUrl))
         {

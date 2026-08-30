@@ -229,6 +229,7 @@ jobs:
             --env OBJECTSTORAGE__SECRETKEY=auth-e2e-minio-password \
             --env MALWARESCANNER__HOST=127.0.0.1 \
             --env MALWARESCANNER__PORT=3310 \
+            --env RateLimiting__PermitLimit=300 \
             --env DataProtection__KeyPath=/tmp/data-protection-keys \
             --env AdministratorBootstrap__Token=ci-only-administrator-bootstrap-token-43 \
             carbon-footprint-auth-e2e:${{ github.sha }}
@@ -257,9 +258,86 @@ jobs:
             --env "CARBON_E2E_PG_URL=${E2E_PG_URL}" \
             mcr.microsoft.com/playwright:v1.55.0-noble \
             bash -lc 'npm install --no-save --no-package-lock playwright@1.55.0 pg@8.13.1 >/tmp/playwright-npm.log && node auth-flow.mjs'
+      - name: Verify password reset during an SMTP outage
+        run: |
+          docker run --detach \
+            --name carbon-auth-mail-outage-e2e \
+            --network host \
+            --env ASPNETCORE_ENVIRONMENT=Development \
+            --env ASPNETCORE_URLS=http://0.0.0.0:18090 \
+            --env "ConnectionStrings__Database=${E2E_DATABASE}" \
+            --env MAIL__HOST=127.0.0.1 \
+            --env MAIL__PORT=1 \
+            --env RateLimiting__PermitLimit=300 \
+            carbon-footprint-auth-e2e:${{ github.sha }}
+
+          for attempt in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:18090/health/ready >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 40 ]; then
+              docker logs carbon-auth-mail-outage-e2e
+              exit 1
+            fi
+            sleep 2
+          done
+
+          docker run --rm \
+            --network host \
+            --volume "$PWD/tests/E2E:/work" \
+            --workdir /work \
+            --env CARBON_E2E_BASE_URL=http://127.0.0.1:18090 \
+            --env "CARBON_E2E_PG_URL=${E2E_PG_URL}" \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-save --no-package-lock playwright@1.55.0 pg@8.13.1 >/tmp/playwright-npm.log && node password-reset-outage.mjs'
+      - name: Start short-lived MFA freshness application
+        run: |
+          docker run --detach \
+            --name carbon-auth-stale-e2e \
+            --network host \
+            --env ASPNETCORE_ENVIRONMENT=Development \
+            --env ASPNETCORE_URLS=http://0.0.0.0:18089 \
+            --env "ConnectionStrings__Database=${E2E_DATABASE}" \
+            --env MAIL__HOST=127.0.0.1 \
+            --env MAIL__PORT=1025 \
+            --env OBJECTSTORAGE__ENDPOINT=http://127.0.0.1:9000 \
+            --env OBJECTSTORAGE__BUCKET=carbon-e2e-evidence \
+            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_minio \
+            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-minio-password \
+            --env MALWARESCANNER__HOST=127.0.0.1 \
+            --env MALWARESCANNER__PORT=3310 \
+            --env RateLimiting__PermitLimit=300 \
+            --env Security__MfaFreshness=00:00:10 \
+            --env DataProtection__KeyPath=/tmp/data-protection-keys \
+            --env AdministratorBootstrap__Token=ci-only-administrator-bootstrap-token-43 \
+            carbon-footprint-auth-e2e:${{ github.sha }}
+
+          for attempt in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:18089/health/ready >/dev/null; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 40 ]; then
+              docker logs carbon-auth-stale-e2e
+              exit 1
+            fi
+            sleep 2
+          done
+      - name: Verify stale MFA browser rejection
+        run: |
+          docker run --rm \
+            --network host \
+            --volume "$PWD/tests/E2E:/work" \
+            --workdir /work \
+            --env CARBON_E2E_BASE_URL=http://127.0.0.1:18089 \
+            --env "CARBON_E2E_PG_URL=${E2E_PG_URL}" \
+            mcr.microsoft.com/playwright:v1.55.0-noble \
+            bash -lc 'npm install --no-save --no-package-lock playwright@1.55.0 pg@8.13.1 >/tmp/playwright-npm.log && node stale-mfa.mjs'
       - name: Show application logs
         if: always()
-        run: docker logs carbon-auth-e2e || true
+        run: |
+          docker logs carbon-auth-e2e || true
+          docker logs carbon-auth-mail-outage-e2e || true
+          docker logs carbon-auth-stale-e2e || true
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -271,6 +349,8 @@ jobs:
         if: always()
         run: |
           docker rm --force carbon-auth-e2e >/dev/null 2>&1 || true
+          docker rm --force carbon-auth-mail-outage-e2e >/dev/null 2>&1 || true
+          docker rm --force carbon-auth-stale-e2e >/dev/null 2>&1 || true
           docker rm --force carbon-minio-e2e >/dev/null 2>&1 || true
           docker rm --force carbon-clamav-e2e >/dev/null 2>&1 || true
 
@@ -352,7 +432,7 @@ jobs:
           forgot_status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18088/Identity/Account/ForgotPassword)"
           mfa_status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18088/Identity/Account/LoginWith2fa)"
           confirm_status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18088/Identity/Account/ConfirmEmail)"
-          test "$forgot_status" = '302'
+          test "$forgot_status" = '200'
           test "$mfa_status" = '302'
           test "$confirm_status" = '200'
 
