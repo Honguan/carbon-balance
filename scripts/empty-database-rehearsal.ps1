@@ -26,5 +26,10 @@ $tableCount = docker exec $Container psql --username=$DatabaseUser --dbname=$Tar
 if ($LASTEXITCODE -ne 0 -or [int]$tableCount -lt 1) {
     throw "Empty database validation failed."
 }
+$bootstrapClaimCount = docker exec $Container psql --username=$DatabaseUser --dbname=$TargetDatabase --tuples-only --no-align --command="SELECT count(*) FROM identity.administrator_bootstrap;"
+if ($LASTEXITCODE -ne 0 -or [int]$bootstrapClaimCount -ne 0) {
+    throw "Fresh database Administrator bootstrap must remain unclaimed."
+}
 Write-Output "EMPTY_DATABASE_REHEARSAL=PASS"
 Write-Output "MIGRATED_TABLES=$tableCount"
+Write-Output "ADMINISTRATOR_BOOTSTRAP_CLAIMS=$bootstrapClaimCount"

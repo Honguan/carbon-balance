@@ -181,6 +181,10 @@ try {
     await page.locator('input[name="Input.Email"]').fill(testEmail);
     await page.locator('input[name="Input.Password"]').fill(testPassword);
     await page.locator('input[name="Input.ConfirmPassword"]').fill(testPassword);
+    const bootstrapToken = page.locator('input[name="Input.BootstrapToken"]');
+    if (await bootstrapToken.count()) {
+        await bootstrapToken.fill("ci-only-administrator-bootstrap-token-43");
+    }
     await page.getByRole("button", { name: "建立帳號並寄送確認信" }).click();
     await expectUrl(page, "/Identity/Account/Login", "Registration did not return to login");
     await page.getByText(/(初始管理者|帳號)已建立/).waitFor({ state: "visible" });

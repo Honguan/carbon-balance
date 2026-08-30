@@ -37,6 +37,8 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
     public DbSet<CalculationStageSummaryRecord> CalculationStageSummaries => Set<CalculationStageSummaryRecord>();
     public DbSet<CalculationWarningRecord> CalculationWarnings => Set<CalculationWarningRecord>();
     public DbSet<AuditEventRecord> AuditEvents => Set<AuditEventRecord>();
+    public DbSet<AdministratorBootstrapRecord> AdministratorBootstrap => Set<AdministratorBootstrapRecord>();
+    public DbSet<SystemAuditEventRecord> SystemAuditEvents => Set<SystemAuditEventRecord>();
     public DbSet<LegacyImportBatchRecord> LegacyImportBatches => Set<LegacyImportBatchRecord>();
     public DbSet<LegacyStagingRowRecord> LegacyStagingRows => Set<LegacyStagingRowRecord>();
     public DbSet<LegacyImportConflictRecord> LegacyImportConflicts => Set<LegacyImportConflictRecord>();
@@ -52,6 +54,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         ConfigureUnitsAndFactors(builder);
         ConfigureCalculations(builder);
         ConfigureAudit(builder);
+        ConfigureIdentityGovernance(builder);
         ConfigureLegacyStaging(builder);
         ConfigureTenantFilters(builder);
     }
@@ -382,6 +385,32 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         });
     }
 
+    private static void ConfigureIdentityGovernance(ModelBuilder builder)
+    {
+        builder.Entity<AdministratorBootstrapRecord>(entity =>
+        {
+            entity.ToTable("administrator_bootstrap", "identity");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Id).ValueGeneratedNever();
+            entity.Property(item => item.Source).HasMaxLength(100);
+            entity.Property(item => item.CorrelationId).HasMaxLength(100);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "ck_administrator_bootstrap_singleton",
+                "id = 1"));
+        });
+        builder.Entity<SystemAuditEventRecord>(entity =>
+        {
+            entity.ToTable("system_audit_events", "identity");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Action).HasMaxLength(150);
+            entity.Property(item => item.ResourceType).HasMaxLength(100);
+            entity.Property(item => item.Source).HasMaxLength(100);
+            entity.Property(item => item.CorrelationId).HasMaxLength(100);
+            entity.Property(item => item.MetadataJson).HasColumnType("jsonb");
+            entity.HasIndex(item => item.Timestamp);
+        });
+    }
+
     private static void ConfigureLegacyStaging(ModelBuilder builder)
     {
         builder.Entity<LegacyImportBatchRecord>(entity =>
@@ -446,6 +475,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         {
             typeof(CalculationRunRecord), typeof(CalculationLineRecord),
             typeof(CalculationStageSummaryRecord), typeof(CalculationWarningRecord), typeof(AuditEventRecord),
+            typeof(AdministratorBootstrapRecord), typeof(SystemAuditEventRecord),
             typeof(LegacyImportBatchRecord), typeof(LegacyStagingRowRecord), typeof(LegacyImportConflictRecord)
         };
         var immutableChange = ChangeTracker.Entries().FirstOrDefault(entry =>

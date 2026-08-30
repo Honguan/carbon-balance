@@ -16,6 +16,14 @@ using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var administratorBootstrapToken = builder.Configuration[$"{AdministratorBootstrapOptions.SectionName}:Token"];
+if (!builder.Environment.IsDevelopment()
+    && !AdministratorBootstrapOptions.IsValidProductionToken(administratorBootstrapToken))
+{
+    throw new InvalidOperationException(
+        "正式環境必須設定 32 至 128 個字元的 AdministratorBootstrap:Token。");
+}
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IOrganizationScope, HttpOrganizationScope>();
 builder.Services.AddCarbonFootprintInfrastructure(builder.Configuration);

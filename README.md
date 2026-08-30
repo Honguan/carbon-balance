@@ -56,15 +56,16 @@ web        Up (healthy)
 
 1. 開啟系統：`http://127.0.0.1:8088`
 2. 選擇「建立帳號」。
-3. 輸入顯示名稱、Email 與至少 6 個字元的密碼。
+3. 從本機 `.env` 取得 `ADMIN_BOOTSTRAP_TOKEN`，連同顯示名稱、Email 與密碼建立初始管理者。
 4. 開啟 Mailpit：`http://127.0.0.1:8025`
 5. 開啟確認信並點擊「確認帳號」。
 6. 回到系統登入。
 
 角色規則：
 
-- 系統尚無管理者時，第一個完成註冊的帳號取得 `Administrator`。
-- 已有管理者時，新帳號預設為 `Viewer`。
+- 只有持有一次性 bootstrap token 的註冊可以取得初始 `Administrator`；成功後資料庫會永久關閉 bootstrap。
+- 未提供 token 的一般註冊一律取得 `Viewer`，不會因註冊順序升級權限。
+- 後續系統管理者只能由已登入的 `Administrator` 在 `/Administration/Users` 指派，並留下全域安全稽核事件。
 - 登入時可勾選「在這台裝置保持登入 30 天」。
 
 ## 服務網址
@@ -78,6 +79,8 @@ web        Up (healthy)
 | 健康狀態 | `http://127.0.0.1:8088/health/ready` |
 
 MinIO 帳號與密碼位於 `.env`。
+
+正式環境必須由 secrets provider 設定 32 至 128 個字元的 `AdministratorBootstrap:Token`；不要使用本機 token、提交 token，或透過公開管道傳送。bootstrap 成功後，即使相同 token 仍在設定中也無法再次取得管理者權限。
 
 ## 環境部係數同步
 

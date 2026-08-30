@@ -13,34 +13,32 @@ namespace CarbonFootprint.Web.Areas.Identity.Pages.Account;
 public sealed class RegisterModel : PageModel
 {
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly RoleManager<IdentityRole<Guid>> _roleManager;
+    private readonly SystemAdministratorService _systemAdministratorService;
     private readonly IEmailSender<ApplicationUser> _emailSender;
 
     public RegisterModel(
         UserManager<ApplicationUser> userManager,
-        RoleManager<IdentityRole<Guid>> roleManager,
+        SystemAdministratorService systemAdministratorService,
         IEmailSender<ApplicationUser> emailSender)
     {
         _userManager = userManager;
-        _roleManager = roleManager;
+        _systemAdministratorService = systemAdministratorService;
         _emailSender = emailSender;
     }
 
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
-    public bool CreatesAdministrator { get; private set; }
+    public bool BootstrapOpen { get; private set; }
 
     public async Task OnGetAsync()
     {
-        await EnsureRolesAsync();
-        CreatesAdministrator = !await HasConfirmedAdministratorAsync();
+        BootstrapOpen = await _systemAdministratorService.IsBootstrapOpenAsync(HttpContext.RequestAborted);
     }
 
-    public async Task<IActionResult> OnPostAsync()
+    public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
     {
-        await EnsureRolesAsync();
-        CreatesAdministrator = !await HasConfirmedAdministratorAsync();
+        BootstrapOpen = await _systemAdministratorService.IsBootstrapOpenAsync(cancellationToken);
 
         if (!ModelState.IsValid)
         {
@@ -50,25 +48,34 @@ public sealed class RegisterModel : PageModel
         var email = Input.Email.Trim();
         var user = new ApplicationUser
         {
+            Id = Guid.NewGuid(),
             UserName = email,
             Email = email,
             EmailConfirmed = false,
             DisplayName = Input.DisplayName.Trim()
         };
 
-        var createResult = await _userManager.CreateAsync(user, Input.Password);
-        if (!createResult.Succeeded)
+        var registration = await _systemAdministratorService.RegisterAsync(
+            user,
+            Input.Password,
+            Input.BootstrapToken,
+            HttpContext.TraceIdentifier,
+            cancellationToken);
+        if (!registration.Succeeded)
         {
-            AddIdentityErrors(createResult);
-            return Page();
-        }
-
-        var assignedRole = CreatesAdministrator ? SystemRoles.Administrator : SystemRoles.Viewer;
-        var roleAssignment = await _userManager.AddToRoleAsync(user, assignedRole);
-        if (!roleAssignment.Succeeded)
-        {
-            AddIdentityErrors(roleAssignment);
-            await _userManager.DeleteAsync(user);
+            if (registration.Outcome == AccountRegistrationOutcome.InvalidBootstrapToken)
+            {
+                ModelState.AddModelError(nameof(Input.BootstrapToken), "Bootstrap token 無效。");
+            }
+            else if (registration.Outcome == AccountRegistrationOutcome.BootstrapClosed)
+            {
+                BootstrapOpen = false;
+                ModelState.AddModelError(nameof(Input.BootstrapToken), "初始管理者 bootstrap 已永久關閉。");
+            }
+            else
+            {
+                AddIdentityErrors(IdentityResult.Failed(registration.Errors.ToArray()));
+            }
             return Page();
         }
 
@@ -89,7 +96,7 @@ public sealed class RegisterModel : PageModel
         try
         {
             await _emailSender.SendConfirmationLinkAsync(user, email, confirmationLink);
-            TempData["AccountMessage"] = CreatesAdministrator
+            TempData["AccountMessage"] = registration.IsAdministrator
                 ? "初始管理者已建立。請先至信箱完成 Email 確認，再登入系統。"
                 : "帳號已建立。請先至信箱完成 Email 確認，再登入系統。";
         }
@@ -99,29 +106,6 @@ public sealed class RegisterModel : PageModel
         }
 
         return RedirectToPage("./Login");
-    }
-
-    private async Task EnsureRolesAsync()
-    {
-        foreach (var roleName in SystemRoles.All)
-        {
-            if (await _roleManager.RoleExistsAsync(roleName))
-            {
-                continue;
-            }
-
-            var roleResult = await _roleManager.CreateAsync(new IdentityRole<Guid>(roleName));
-            if (!roleResult.Succeeded)
-            {
-                throw new InvalidOperationException(string.Join(", ", roleResult.Errors.Select(error => error.Description)));
-            }
-        }
-    }
-
-    private async Task<bool> HasConfirmedAdministratorAsync()
-    {
-        var administrators = await _userManager.GetUsersInRoleAsync(SystemRoles.Administrator);
-        return administrators.Any(user => user.EmailConfirmed);
     }
 
     private void AddIdentityErrors(IdentityResult result)
@@ -161,5 +145,10 @@ public sealed class RegisterModel : PageModel
         [Compare(nameof(Password), ErrorMessage = "兩次輸入的密碼不相同。")]
         [Display(Name = "確認密碼")]
         public string ConfirmPassword { get; set; } = string.Empty;
+
+        [StringLength(128, ErrorMessage = "Bootstrap token 不可超過 128 個字元。")]
+        [DataType(DataType.Password)]
+        [Display(Name = "初始管理者 Bootstrap token（選填）")]
+        public string? BootstrapToken { get; set; }
     }
 }
