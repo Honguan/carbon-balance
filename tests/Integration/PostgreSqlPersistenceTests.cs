@@ -7,6 +7,7 @@ using CarbonFootprint.Infrastructure.Organizations;
 using CarbonFootprint.Domain.Modules.Organizations;
 using CarbonFootprint.Domain.Modules.Standards;
 using CarbonFootprint.Web.Services;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 
 namespace CarbonFootprint.Integration.Tests;
@@ -589,7 +590,57 @@ public sealed class PostgreSqlPersistenceTests
         Assert.Equal(OrganizationRole.Contributor.ToString(), membership.Role);
         Assert.NotNull((await verification.OrganizationInvitations.SingleAsync()).AcceptedAt);
         Assert.False(await verification.UserClaims.AnyAsync(item =>
-            item.UserId == inviteeId && item.ClaimType == OrganizationClaimsPrincipalFactory.OrganizationClaimType));
+            item.UserId == inviteeId && item.ClaimType == OrganizationClaimsTransformation.OrganizationClaimType));
+    }
+
+    [Fact]
+    public async Task OrganizationClaimsTransformation_RebuildsCurrentMembershipWithoutDuplicates()
+    {
+        var organizationId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        await using var context = CreateContext(organizationId);
+        context.Users.Add(new ApplicationUser
+        {
+            Id = userId,
+            UserName = $"claims-{userId:N}@example.test",
+            NormalizedUserName = $"CLAIMS-{userId:N}@EXAMPLE.TEST"
+        });
+        context.Organizations.Add(new OrganizationRecord
+        {
+            Id = organizationId,
+            Name = "Claims transformation organization",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        var membership = new OrganizationMembershipRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            UserId = userId,
+            Role = OrganizationRole.Owner.ToString(),
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        context.OrganizationMemberships.Add(membership);
+        await context.SaveChangesAsync();
+
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim(OrganizationClaimsTransformation.OrganizationClaimType, Guid.NewGuid().ToString())
+        ], "test"));
+        var transformation = new OrganizationClaimsTransformation(context);
+
+        await transformation.TransformAsync(principal);
+        await transformation.TransformAsync(principal);
+
+        Assert.Equal(
+            organizationId.ToString(),
+            Assert.Single(principal.FindAll(OrganizationClaimsTransformation.OrganizationClaimType)).Value);
+
+        membership.RevokedAt = DateTimeOffset.UtcNow;
+        await context.SaveChangesAsync();
+        await transformation.TransformAsync(principal);
+
+        Assert.Empty(principal.FindAll(OrganizationClaimsTransformation.OrganizationClaimType));
     }
 
     [Fact]

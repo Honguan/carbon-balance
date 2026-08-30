@@ -3,6 +3,7 @@ using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Evidence;
 using CarbonFootprint.Infrastructure.Organizations;
 using CarbonFootprint.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -50,7 +51,7 @@ public static class DependencyInjection
             })
             .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<CarbonFootprintDbContext>();
-        services.AddScoped<IUserClaimsPrincipalFactory<ApplicationUser>, OrganizationClaimsPrincipalFactory>();
+        services.AddScoped<IClaimsTransformation, OrganizationClaimsTransformation>();
         services.ConfigureApplicationCookie(options =>
         {
             options.Cookie.HttpOnly = true;
@@ -61,8 +62,6 @@ public static class DependencyInjection
             options.ExpireTimeSpan = TimeSpan.FromDays(30);
             options.SlidingExpiration = true;
         });
-        services.Configure<SecurityStampValidatorOptions>(options =>
-            options.ValidationInterval = TimeSpan.Zero);
         return services;
     }
 }

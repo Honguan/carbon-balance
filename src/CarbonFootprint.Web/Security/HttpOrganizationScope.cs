@@ -17,7 +17,7 @@ public sealed class HttpOrganizationScope : IOrganizationScope
         get
         {
             var claims = _httpContextAccessor.HttpContext?.User
-                .FindAll(OrganizationClaimsPrincipalFactory.OrganizationClaimType)
+                .FindAll(OrganizationClaimsTransformation.OrganizationClaimType)
                 .ToArray() ?? [];
             return claims.Length == 1
                 && Guid.TryParse(claims[0].Value, out var organizationId)

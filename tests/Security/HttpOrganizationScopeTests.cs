@@ -30,6 +30,6 @@ public sealed class HttpOrganizationScopeTests
     private static ClaimsPrincipal CreatePrincipal(params string[] organizationIds) =>
         new(new ClaimsIdentity(
             organizationIds.Select(value =>
-                new Claim(OrganizationClaimsPrincipalFactory.OrganizationClaimType, value)),
+                new Claim(OrganizationClaimsTransformation.OrganizationClaimType, value)),
             "test"));
 }

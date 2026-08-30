@@ -3,9 +3,9 @@
 ## 決策
 
 - P0 每位使用者同時只能有一筆未撤銷的組織 membership；PostgreSQL 部分唯一索引強制此不變量。
-- `organization_id` 不再保存於通用 Identity user claims。驗證 cookie 時由未撤銷 membership 重新產生唯一 claim。
-- 每次請求執行 Identity security-stamp 驗證；無 membership、無效 claim 或多個 claim 均不解析組織上下文。
-- P0 不支援組織切換。撤銷 membership 會更新 security stamp，使既有 session 失效。
+- `organization_id` 不再保存於通用 Identity user claims。每次已驗證請求由 claims transformation 依未撤銷 membership 重建唯一 claim。
+- 無 membership、無效 claim 或多個 claim 均不解析組織上下文；Identity security stamp 保留框架預設驗證週期。
+- P0 不支援組織切換。撤銷 membership 後，下一個請求即失去組織上下文，並更新 security stamp 使既有 session 失效。
 
 ## 結果
 
