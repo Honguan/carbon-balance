@@ -1,4 +1,5 @@
 using CarbonFootprint.Infrastructure.Identity;
+using CarbonFootprint.Web.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -12,13 +13,16 @@ public sealed class UsersModel : PageModel
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SystemAdministratorService _systemAdministratorService;
+    private readonly IAuthorizationService _authorizationService;
 
     public UsersModel(
         UserManager<ApplicationUser> userManager,
-        SystemAdministratorService systemAdministratorService)
+        SystemAdministratorService systemAdministratorService,
+        IAuthorizationService authorizationService)
     {
         _userManager = userManager;
         _systemAdministratorService = systemAdministratorService;
+        _authorizationService = authorizationService;
     }
 
     public IReadOnlyList<ApplicationUser> Users { get; private set; } = [];
@@ -38,7 +42,11 @@ public sealed class UsersModel : PageModel
         Guid userId,
         CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(_userManager.GetUserId(User), out var actorId))
+        var mfa = await _authorizationService.AuthorizeAsync(
+            User,
+            resource: null,
+            new MfaEnabledRequirement());
+        if (!mfa.Succeeded || !Guid.TryParse(_userManager.GetUserId(User), out var actorId))
         {
             return Forbid();
         }

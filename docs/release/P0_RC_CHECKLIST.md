@@ -2,7 +2,7 @@
 
 - [x] Release 建置零警告、格式檢查通過
 - [x] Unit、Integration、Architecture、Contract、Security、Golden Case 全數通過
-- [x] 真實註冊、Email 確認、TOTP MFA、五階段盤查、證據、審查與報表 E2E 通過
+- [x] 真實註冊、Email 確認、密碼重設、TOTP／recovery code、password-only／stale MFA 負向案例及 Workspace E2E 通過
 - [x] 空資料庫遷移及前一版 schema 升級通過
 - [x] 備份、隔離還原及資料表／證據雜湊抽查通過
 - [x] Golden Case、報表總額、manifest hash 與 run lineage 一致

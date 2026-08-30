@@ -20,6 +20,7 @@
             <small>@roleLabel</small>
         </span>
     </div>
+    <a class="nav-link" asp-area="Identity" asp-page="/Account/Manage/TwoFactorAuthentication">安全設定</a>
     <form asp-area="Identity" asp-page="/Account/Logout" asp-route-returnUrl="@Url.Page("/Index", new { area = "" })">
         <button type="submit" class="nav-logout">登出</button>
     </form>

@@ -8,7 +8,7 @@
 | SQL injection | EF 參數化查詢；匯入資料只寫 staging，不組合 SQL |
 | 惡意檔案上傳 | 大小限制、ClamAV INSTREAM、Clean 後才存 MinIO、SHA-256 稽核 |
 | 暴力登入／資源耗盡 | Identity lockout 與全域固定視窗 rate limit |
-| 工作階段竊取 | HttpOnly、Secure、SameSite cookie；Data Protection key 持久化；敏感操作要求 MFA |
+| 工作階段竊取 | HttpOnly、Secure、SameSite cookie；Data Protection key 持久化；敏感操作要求受保護 `amr=mfa` ticket，預設 15 分鐘 freshness（`Security:MfaFreshness`） |
 | 敏感紀錄外洩 | 結構化 correlation ID；不記錄 token、密碼、連線字串及證據內容 |
 | 祕密外洩 | 環境／祕密管理服務注入、Gitleaks、範例值不可用於正式環境 |
 | 供應鏈漏洞 | locked restore、NuGet audit、Trivy 檔案系統與映像掃描、SBOM |
