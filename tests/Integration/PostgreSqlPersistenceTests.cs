@@ -588,8 +588,173 @@ public sealed class PostgreSqlPersistenceTests
         var membership = await verification.OrganizationMemberships.SingleAsync(item => item.UserId == inviteeId);
         Assert.Equal(OrganizationRole.Contributor.ToString(), membership.Role);
         Assert.NotNull((await verification.OrganizationInvitations.SingleAsync()).AcceptedAt);
-        Assert.True(await verification.UserClaims.AnyAsync(item =>
-            item.UserId == inviteeId && item.ClaimType == "organization_id" && item.ClaimValue == organizationId.ToString()));
+        Assert.False(await verification.UserClaims.AnyAsync(item =>
+            item.UserId == inviteeId && item.ClaimType == OrganizationClaimsPrincipalFactory.OrganizationClaimType));
+    }
+
+    [Fact]
+    public async Task ConcurrentInvitations_CreateExactlyOneActiveOrganizationContext()
+    {
+        var organizationA = Guid.NewGuid();
+        var organizationB = Guid.NewGuid();
+        var ownerA = Guid.NewGuid();
+        var ownerB = Guid.NewGuid();
+        var inviteeId = Guid.NewGuid();
+        var inviteeEmail = $"concurrent-{inviteeId:N}@example.test";
+        await using (var context = CreateContext(organizationA))
+        {
+            context.Users.AddRange(
+                new ApplicationUser { Id = ownerA, UserName = $"owner-{ownerA:N}", NormalizedUserName = $"OWNER-{ownerA:N}" },
+                new ApplicationUser
+                {
+                    Id = inviteeId,
+                    UserName = inviteeEmail,
+                    NormalizedUserName = inviteeEmail.ToUpperInvariant(),
+                    Email = inviteeEmail,
+                    NormalizedEmail = inviteeEmail.ToUpperInvariant()
+                });
+            context.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationA,
+                Name = "Concurrent invitation A",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+        await using (var context = CreateContext(organizationB))
+        {
+            context.Users.Add(new ApplicationUser
+            {
+                Id = ownerB,
+                UserName = $"owner-{ownerB:N}",
+                NormalizedUserName = $"OWNER-{ownerB:N}"
+            });
+            context.Organizations.Add(new OrganizationRecord
+            {
+                Id = organizationB,
+                Name = "Concurrent invitation B",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var service = new OrganizationInvitationService(CreateOptions());
+        var tokenA = await service.CreateAsync(
+            organizationA, ownerA, inviteeEmail, OrganizationRole.Contributor, CancellationToken.None);
+        var tokenB = await service.CreateAsync(
+            organizationB, ownerB, inviteeEmail, OrganizationRole.Reviewer, CancellationToken.None);
+        var invitee = new ApplicationUser
+        {
+            Id = inviteeId,
+            Email = inviteeEmail,
+            NormalizedEmail = inviteeEmail.ToUpperInvariant()
+        };
+
+        var results = await Task.WhenAll(new[] { tokenA, tokenB }.Select(async token =>
+        {
+            try
+            {
+                return (Succeeded: true, OrganizationId: await service.AcceptAsync(invitee, token, CancellationToken.None));
+            }
+            catch (InvalidOperationException)
+            {
+                return (Succeeded: false, OrganizationId: Guid.Empty);
+            }
+        }));
+
+        Assert.Single(results, item => item.Succeeded);
+        await using var verification = CreateContext(organizationA);
+        Assert.Single(await verification.OrganizationMemberships
+            .IgnoreQueryFilters()
+            .Where(item => item.UserId == inviteeId && item.RevokedAt == null)
+            .ToArrayAsync());
+        Assert.Single(await verification.OrganizationInvitations
+            .IgnoreQueryFilters()
+            .Where(item => (item.OrganizationId == organizationA || item.OrganizationId == organizationB)
+                && item.AcceptedAt != null)
+            .ToArrayAsync());
+
+        var sameTokenInviteeId = Guid.NewGuid();
+        var sameTokenEmail = $"same-token-{sameTokenInviteeId:N}@example.test";
+        await using (var context = CreateContext(organizationA))
+        {
+            context.Users.Add(new ApplicationUser
+            {
+                Id = sameTokenInviteeId,
+                UserName = sameTokenEmail,
+                NormalizedUserName = sameTokenEmail.ToUpperInvariant(),
+                Email = sameTokenEmail,
+                NormalizedEmail = sameTokenEmail.ToUpperInvariant()
+            });
+            await context.SaveChangesAsync();
+        }
+        var sameToken = await service.CreateAsync(
+            organizationA, ownerA, sameTokenEmail, OrganizationRole.Contributor, CancellationToken.None);
+        var sameTokenInvitee = new ApplicationUser
+        {
+            Id = sameTokenInviteeId,
+            Email = sameTokenEmail,
+            NormalizedEmail = sameTokenEmail.ToUpperInvariant()
+        };
+        var sameTokenResults = await Task.WhenAll(Enumerable.Range(0, 2).Select(async _ =>
+        {
+            try
+            {
+                await service.AcceptAsync(sameTokenInvitee, sameToken, CancellationToken.None);
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }));
+        Assert.Single(sameTokenResults, succeeded => succeeded);
+    }
+
+    [Fact]
+    public async Task ConcurrentOnboarding_CreatesExactlyOneActiveOrganizationContext()
+    {
+        var userId = Guid.NewGuid();
+        var user = new ApplicationUser
+        {
+            Id = userId,
+            UserName = $"onboarding-{userId:N}@example.test",
+            NormalizedUserName = $"ONBOARDING-{userId:N}@EXAMPLE.TEST"
+        };
+        await using (var context = CreateContext(Guid.NewGuid()))
+        {
+            context.Users.Add(user);
+            await context.SaveChangesAsync();
+        }
+
+        var service = new OrganizationOnboardingService(CreateOptions());
+        var organizationNames = new[]
+        {
+            $"Concurrent onboarding A {userId:N}",
+            $"Concurrent onboarding B {userId:N}"
+        };
+        var results = await Task.WhenAll(organizationNames.Select(async name =>
+        {
+            try
+            {
+                return (Succeeded: true, OrganizationId: await service.CreateAsync(user, name, CancellationToken.None));
+            }
+            catch (InvalidOperationException)
+            {
+                return (Succeeded: false, OrganizationId: Guid.Empty);
+            }
+        }));
+
+        var success = Assert.Single(results, item => item.Succeeded);
+        await using var verification = CreateContext(success.OrganizationId);
+        Assert.Single(await verification.OrganizationMemberships
+            .IgnoreQueryFilters()
+            .Where(item => item.UserId == userId && item.RevokedAt == null)
+            .ToArrayAsync());
+        Assert.Single(await verification.Organizations
+            .IgnoreQueryFilters()
+            .Where(item => organizationNames.Contains(item.Name))
+            .ToArrayAsync());
     }
 
     [Fact]

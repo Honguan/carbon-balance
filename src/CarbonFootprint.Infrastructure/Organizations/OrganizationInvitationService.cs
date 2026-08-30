@@ -4,8 +4,8 @@ using System.Text;
 using CarbonFootprint.Domain.Modules.Organizations;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Persistence;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace CarbonFootprint.Infrastructure.Organizations;
 
@@ -106,7 +106,9 @@ public sealed class OrganizationInvitationService
         {
             throw new InvalidOperationException("登入帳號與受邀 Email 不一致。");
         }
-        if (await context.UserClaims.AnyAsync(item => item.UserId == user.Id && item.ClaimType == "organization_id", cancellationToken))
+        if (await context.OrganizationMemberships.IgnoreQueryFilters().AnyAsync(
+                item => item.UserId == user.Id && item.RevokedAt == null,
+                cancellationToken))
         {
             throw new InvalidOperationException("此帳號已加入其他組織。");
         }
@@ -120,12 +122,6 @@ public sealed class OrganizationInvitationService
             Role = invitation.Role,
             CreatedAt = now
         });
-        context.UserClaims.Add(new IdentityUserClaim<Guid>
-        {
-            UserId = user.Id,
-            ClaimType = "organization_id",
-            ClaimValue = organizationId.ToString()
-        });
         context.AuditEvents.Add(new AuditEventRecord
         {
             Id = Guid.NewGuid(),
@@ -138,7 +134,14 @@ public sealed class OrganizationInvitationService
             CorrelationId = invitation.Id.ToString("N"),
             MetadataJson = "{}"
         });
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (IsActiveMembershipConflict(exception))
+        {
+            throw new InvalidOperationException("此帳號已加入其他組織。", exception);
+        }
         return organizationId;
     }
 
@@ -147,6 +150,14 @@ public sealed class OrganizationInvitationService
 
     private static string Sha256(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+
+    private static bool IsActiveMembershipConflict(DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+        } postgresException
+        && postgresException.ConstraintName is "ux_organization_memberships_active_user"
+            or "ix_organization_memberships_organization_id_user_id";
 
     private sealed record ExplicitOrganizationScope(Guid Value) : IOrganizationScope
     {

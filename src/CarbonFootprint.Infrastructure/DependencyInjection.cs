@@ -50,6 +50,7 @@ public static class DependencyInjection
             })
             .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<CarbonFootprintDbContext>();
+        services.AddScoped<IUserClaimsPrincipalFactory<ApplicationUser>, OrganizationClaimsPrincipalFactory>();
         services.ConfigureApplicationCookie(options =>
         {
             options.Cookie.HttpOnly = true;
@@ -61,7 +62,7 @@ public static class DependencyInjection
             options.SlidingExpiration = true;
         });
         services.Configure<SecurityStampValidatorOptions>(options =>
-            options.ValidationInterval = TimeSpan.FromMinutes(15));
+            options.ValidationInterval = TimeSpan.Zero);
         return services;
     }
 }

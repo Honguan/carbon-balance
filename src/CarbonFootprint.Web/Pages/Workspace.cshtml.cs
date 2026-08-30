@@ -456,10 +456,6 @@ public sealed class WorkspaceModel : PageModel
         }
 
         membership.RevokedAt = DateTimeOffset.UtcNow;
-        var claims = await _dbContext.UserClaims
-            .Where(item => item.UserId == membership.UserId && item.ClaimType == "organization_id")
-            .ToArrayAsync(cancellationToken);
-        _dbContext.UserClaims.RemoveRange(claims);
         AddAudit("organization.membership.revoked", "OrganizationMembership", membership.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         var revokedUser = await _userManager.FindByIdAsync(membership.UserId.ToString());

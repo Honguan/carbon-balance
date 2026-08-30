@@ -113,6 +113,10 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Role).HasMaxLength(50);
             entity.HasIndex(item => new { item.OrganizationId, item.UserId }).IsUnique();
+            entity.HasIndex(item => item.UserId)
+                .IsUnique()
+                .HasFilter("revoked_at IS NULL")
+                .HasDatabaseName("ux_organization_memberships_active_user");
             entity.HasOne<ApplicationUser>().WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<OrganizationRecord>().WithMany().HasForeignKey(item => item.OrganizationId).OnDelete(DeleteBehavior.Restrict);
         });
