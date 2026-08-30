@@ -1,6 +1,6 @@
 param(
     [string]$TargetDatabase = "carbon_footprint_restore_upgrade",
-    [string]$PreviousMigration = "20260718100827_AddLifecycleActivityGovernance",
+    [string]$PreviousMigration = "20260730153000_AddVersionedPcrRules",
     [string]$Container = "carbon-footprint-postgres-1",
     [string]$DatabaseUser = "carbon_app",
     [string]$DatabasePassword = "change-this-local-password"
@@ -22,6 +22,23 @@ $env:CARBON_DB_CONNECTION = $connectionString
 $env:ConnectionStrings__Database = $connectionString
 & $dotnet ef database update $PreviousMigration --project src/CarbonFootprint.Infrastructure --startup-project src/CarbonFootprint.Web --configuration Release --no-build
 if ($LASTEXITCODE -ne 0) { throw "Unable to build previous schema." }
+
+$seedAdministrator = @"
+INSERT INTO identity.roles (id, name, normalized_name, concurrency_stamp)
+VALUES ('43000000-0000-0000-0000-000000000001', 'Administrator', 'ADMINISTRATOR', 'migration-rehearsal-role');
+INSERT INTO identity.users
+    (id, display_name, user_name, normalized_user_name, email, normalized_email,
+     email_confirmed, phone_number_confirmed, two_factor_enabled, lockout_enabled, access_failed_count)
+VALUES
+    ('43000000-0000-0000-0000-000000000002', 'Existing Administrator',
+     'existing@example.test', 'EXISTING@EXAMPLE.TEST', 'existing@example.test', 'EXISTING@EXAMPLE.TEST',
+     true, false, false, true, 0);
+INSERT INTO identity.user_roles (user_id, role_id)
+VALUES ('43000000-0000-0000-0000-000000000002', '43000000-0000-0000-0000-000000000001');
+"@
+docker exec $Container psql --username=$DatabaseUser --dbname=$TargetDatabase --set=ON_ERROR_STOP=1 --command=$seedAdministrator
+if ($LASTEXITCODE -ne 0) { throw "Unable to seed the previous schema Administrator." }
+
 & $dotnet ef database update --project src/CarbonFootprint.Infrastructure --startup-project src/CarbonFootprint.Web --configuration Release --no-build
 if ($LASTEXITCODE -ne 0) { throw "Unable to upgrade previous schema to current." }
 
@@ -29,5 +46,10 @@ $tableCount = docker exec $Container psql --username=$DatabaseUser --dbname=$Tar
 if ($LASTEXITCODE -ne 0 -or [int]$tableCount -lt 1) {
     throw "Upgrade rehearsal validation failed."
 }
+$bootstrapClosureCount = docker exec $Container psql --username=$DatabaseUser --dbname=$TargetDatabase --tuples-only --no-align --command="SELECT count(*) FROM identity.administrator_bootstrap WHERE id = 1 AND claimed_by_user_id = '43000000-0000-0000-0000-000000000002' AND source = 'migration-existing-administrator';"
+if ($LASTEXITCODE -ne 0 -or [int]$bootstrapClosureCount -ne 1) {
+    throw "Upgrade reopened Administrator bootstrap for an existing installation."
+}
 Write-Output "MIGRATION_UPGRADE_REHEARSAL=PASS"
 Write-Output "UPGRADED_TABLES=$tableCount"
+Write-Output "ADMINISTRATOR_BOOTSTRAP_CLOSED=$bootstrapClosureCount"

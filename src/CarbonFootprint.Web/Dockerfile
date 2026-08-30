@@ -15,7 +15,7 @@ RUN dotnet publish src/CarbonFootprint.Web/CarbonFootprint.Web.csproj \
     --output /app/publish \
     /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.10 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.11 AS runtime
 WORKDIR /app
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl libgssapi-krb5-2 \

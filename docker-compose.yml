@@ -67,6 +67,7 @@ services:
       ConnectionStrings__Database: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-carbon_footprint};Username=${POSTGRES_USER:-carbon_app};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required; run the local setup script or create .env}"
       EXTERNALFACTORSOURCES__MOENV__APIKEY: ${MOENV_API_KEY:-}
       EXTERNALFACTORSOURCES__MOENV__IMPORTONDEPLOYMENT: ${MOENV_IMPORT_ON_DEPLOYMENT:-true}
+      ADMINISTRATORBOOTSTRAP__TOKEN: ${ADMIN_BOOTSTRAP_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,6 +90,7 @@ services:
       MAIL__HOST: mailpit
       MAIL__PORT: 1025
       EXTERNALFACTORSOURCES__MOENV__APIKEY: ${MOENV_API_KEY:-}
+      ADMINISTRATORBOOTSTRAP__TOKEN: ${ADMIN_BOOTSTRAP_TOKEN:-}
     ports:
       - "8088:8080"
     volumes:

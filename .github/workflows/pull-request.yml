@@ -230,6 +230,7 @@ jobs:
             --env MALWARESCANNER__HOST=127.0.0.1 \
             --env MALWARESCANNER__PORT=3310 \
             --env DataProtection__KeyPath=/tmp/data-protection-keys \
+            --env AdministratorBootstrap__Token=ci-only-administrator-bootstrap-token-43 \
             carbon-footprint-auth-e2e:${{ github.sha }}
 
           for attempt in {1..40}; do

@@ -336,6 +336,28 @@ public sealed class AuditEventRecord : IOrganizationOwned
     public required string MetadataJson { get; set; }
 }
 
+public sealed class AdministratorBootstrapRecord
+{
+    public int Id { get; set; }
+    public Guid ClaimedByUserId { get; set; }
+    public DateTimeOffset ClaimedAt { get; set; }
+    public required string Source { get; set; }
+    public required string CorrelationId { get; set; }
+}
+
+public sealed class SystemAuditEventRecord
+{
+    public Guid Id { get; set; }
+    public DateTimeOffset Timestamp { get; set; }
+    public Guid? ActorId { get; set; }
+    public required string Action { get; set; }
+    public required string ResourceType { get; set; }
+    public Guid ResourceId { get; set; }
+    public required string Source { get; set; }
+    public required string CorrelationId { get; set; }
+    public required string MetadataJson { get; set; }
+}
+
 public sealed class LegacyImportBatchRecord : IOrganizationOwned
 {
     public Guid Id { get; set; }

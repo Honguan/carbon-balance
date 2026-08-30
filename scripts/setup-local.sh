@@ -140,6 +140,7 @@ EOF
         postgres_password="$(new_password)"
         minio_password="$(new_password)"
     fi
+    administrator_bootstrap_token="$(new_password)"
 
     if [ "$postgres_password" = "$minio_password" ]; then
         echo 'PostgreSQL and MinIO must use different passwords.' >&2
@@ -154,6 +155,7 @@ POSTGRES_USER=carbon_app
 POSTGRES_PASSWORD=$postgres_password
 MINIO_ROOT_USER=carbon_minio
 MINIO_ROOT_PASSWORD=$minio_password
+ADMIN_BOOTSTRAP_TOKEN=$administrator_bootstrap_token
 OBJECTSTORAGE__ENDPOINT=http://minio:9000
 OBJECTSTORAGE__BUCKET=carbon-evidence
 MAIL__HOST=mailpit
@@ -169,6 +171,7 @@ Created .env with these local credentials:
   PostgreSQL password: $postgres_password
   MinIO user: carbon_minio
   MinIO password: $minio_password
+  Administrator bootstrap token: $administrator_bootstrap_token
   Settings file: $env_path
 
 Keep .env private. Do not commit it, paste it into chat, or share it.
@@ -179,6 +182,13 @@ fi
 
 postgres_password="$(get_env_value POSTGRES_PASSWORD)"
 minio_password="$(get_env_value MINIO_ROOT_PASSWORD)"
+administrator_bootstrap_token="$(get_env_value ADMIN_BOOTSTRAP_TOKEN)"
+
+if [ -z "$administrator_bootstrap_token" ]; then
+    administrator_bootstrap_token="$(new_password)"
+    printf '\nADMIN_BOOTSTRAP_TOKEN=%s\n' "$administrator_bootstrap_token" >> "$env_path"
+    echo "Added local Administrator bootstrap token: $administrator_bootstrap_token"
+fi
 
 case "$postgres_password" in
     ''|*change-this*|*replace-with*)
@@ -196,6 +206,11 @@ esac
 
 if [ "$postgres_password" = "$minio_password" ]; then
     echo 'POSTGRES_PASSWORD and MINIO_ROOT_PASSWORD must be different.' >&2
+    exit 1
+fi
+
+if ! validate_manual_password "$administrator_bootstrap_token"; then
+    echo 'ADMIN_BOOTSTRAP_TOKEN must be 16-128 characters and use only letters, numbers, dot, underscore, or hyphen.' >&2
     exit 1
 fi
 

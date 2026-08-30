@@ -24,6 +24,9 @@ public static class DependencyInjection
         services.AddScoped<ICalculationRunStore, CalculationRunStore>();
         services.AddScoped<OrganizationOnboardingService>();
         services.AddScoped<OrganizationInvitationService>();
+        services.Configure<AdministratorBootstrapOptions>(
+            configuration.GetSection(AdministratorBootstrapOptions.SectionName));
+        services.AddScoped<SystemAdministratorService>();
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.SectionName));
         services.Configure<MalwareScannerOptions>(configuration.GetSection(MalwareScannerOptions.SectionName));
         services.AddScoped<ClamAvMalwareScanner>();

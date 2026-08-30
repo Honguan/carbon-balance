@@ -1,7 +1,7 @@
 @page
 @model CarbonFootprint.Web.Areas.Identity.Pages.Account.RegisterModel
 @{
-    ViewData["Title"] = Model.CreatesAdministrator ? "建立初始管理者" : "建立帳號";
+    ViewData["Title"] = "建立帳號";
     ViewData["BodyClass"] = "auth-page";
 }
 
@@ -19,18 +19,9 @@
 
     <div class="auth-panel">
         <div class="auth-card">
-            @if (Model.CreatesAdministrator)
-            {
-                <span class="eyebrow">首次設定</span>
-                <h2 id="setup-title">建立初始管理者</h2>
-                <p class="auth-card__intro">目前尚無已確認的系統管理者，此帳號完成 Email 確認後會取得管理者角色。</p>
-            }
-            else
-            {
-                <span class="eyebrow">帳號註冊</span>
-                <h2 id="setup-title">建立新帳號</h2>
-                <p class="auth-card__intro">新帳號預設為檢視者，完成 Email 確認後即可登入。</p>
-            }
+            <span class="eyebrow">帳號註冊</span>
+            <h2 id="setup-title">建立新帳號</h2>
+            <p class="auth-card__intro">一般新帳號固定為檢視者，完成 Email 確認後即可登入。</p>
 
             <form method="post" asp-antiforgery="true" class="auth-form" novalidate>
                 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
@@ -73,6 +64,18 @@
                         <span asp-validation-for="Input.ConfirmPassword" class="field-error"></span>
                     </div>
                 </div>
+
+                @if (Model.BootstrapOpen)
+                {
+                    <div class="field-group">
+                        <label asp-for="Input.BootstrapToken"></label>
+                        <div class="field-control">
+                            <input asp-for="Input.BootstrapToken" autocomplete="off" />
+                        </div>
+                        <span asp-validation-for="Input.BootstrapToken" class="field-error"></span>
+                        <p class="field-help">只有部署人員持有的一次性 token 能建立初始系統管理者；留空即建立一般檢視者。</p>
+                    </div>
+                }
 
                 <button type="submit" class="btn-carbon btn-carbon--wide">
                     建立帳號並寄送確認信

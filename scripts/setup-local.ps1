@@ -118,6 +118,7 @@ Restore the original .env, or delete disposable local data with:
             $postgresPassword = New-LocalPassword
             $minioPassword = New-LocalPassword
         }
+        $administratorBootstrapToken = New-LocalPassword
 
         if ($postgresPassword -eq $minioPassword) {
             throw 'PostgreSQL and MinIO must use different passwords.'
@@ -130,6 +131,7 @@ POSTGRES_USER=carbon_app
 POSTGRES_PASSWORD=$postgresPassword
 MINIO_ROOT_USER=carbon_minio
 MINIO_ROOT_PASSWORD=$minioPassword
+ADMIN_BOOTSTRAP_TOKEN=$administratorBootstrapToken
 OBJECTSTORAGE__ENDPOINT=http://minio:9000
 OBJECTSTORAGE__BUCKET=carbon-evidence
 MAIL__HOST=mailpit
@@ -148,6 +150,7 @@ MAIL__PORT=1025
         Write-Host "  PostgreSQL password: $postgresPassword"
         Write-Host '  MinIO user: carbon_minio'
         Write-Host "  MinIO password: $minioPassword"
+        Write-Host "  Administrator bootstrap token: $administratorBootstrapToken"
         Write-Host "  Settings file: $envPath"
         Write-Warning 'Keep .env private. Do not commit it, paste it into chat, or share it.'
     }
@@ -157,6 +160,16 @@ MAIL__PORT=1025
 
     $postgresPassword = Get-EnvValue 'POSTGRES_PASSWORD'
     $minioPassword = Get-EnvValue 'MINIO_ROOT_PASSWORD'
+    $administratorBootstrapToken = Get-EnvValue 'ADMIN_BOOTSTRAP_TOKEN'
+
+    if ([string]::IsNullOrWhiteSpace($administratorBootstrapToken)) {
+        $administratorBootstrapToken = New-LocalPassword
+        [IO.File]::AppendAllText(
+            $envPath,
+            "ADMIN_BOOTSTRAP_TOKEN=$administratorBootstrapToken`n",
+            [Text.UTF8Encoding]::new($false))
+        Write-Host "Added local Administrator bootstrap token: $administratorBootstrapToken" -ForegroundColor Green
+    }
 
     if ([string]::IsNullOrWhiteSpace($postgresPassword) -or
         $postgresPassword -match 'change-this|replace-with') {
@@ -170,6 +183,7 @@ MAIL__PORT=1025
 
     Assert-LocalPassword -Password $postgresPassword -Name 'POSTGRES_PASSWORD'
     Assert-LocalPassword -Password $minioPassword -Name 'MINIO_ROOT_PASSWORD'
+    Assert-LocalPassword -Password $administratorBootstrapToken -Name 'ADMIN_BOOTSTRAP_TOKEN'
 
     if ($postgresPassword -eq $minioPassword) {
         throw 'POSTGRES_PASSWORD and MINIO_ROOT_PASSWORD must be different.'
