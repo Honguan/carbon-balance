@@ -18,6 +18,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
+DeploymentSecurity.Validate(builder.Configuration, builder.Environment.EnvironmentName);
 
 var administratorBootstrapToken = builder.Configuration[$"{AdministratorBootstrapOptions.SectionName}:Token"];
 if (!builder.Environment.IsDevelopment()
@@ -223,6 +224,7 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
     app.UseHsts();
+    app.UseHttpsRedirection();
 }
 
 app.UseStatusCodePages(async statusCodeContext =>

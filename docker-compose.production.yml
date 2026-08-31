@@ -1,0 +1,53 @@
+name: carbon-footprint-production
+
+x-app-environment: &app-environment
+  ASPNETCORE_ENVIRONMENT: Production
+  ASPNETCORE_HTTPS_PORT: "443"
+  DEPLOYMENT__HARDENED: "true"
+  DEPLOYMENT__SECRETPROVIDER: "${SECRET_PROVIDER:?SECRET_PROVIDER is required}"
+  ALLOWEDHOSTS: "${ALLOWED_HOSTS:?ALLOWED_HOSTS is required}"
+  ConnectionStrings__Database: "${DATABASE_CONNECTION_STRING:?DATABASE_CONNECTION_STRING is required}"
+  DATAPROTECTION__KEYPATH: /keys
+  SECURITY__REQUIREHTTPSCOOKIES: "true"
+  SECURITY__TRUSTEDPROXIES__0: "${TRUSTED_PROXY_IP:?TRUSTED_PROXY_IP is required}"
+  ADMINISTRATORBOOTSTRAP__TOKEN: "${ADMIN_BOOTSTRAP_TOKEN:?ADMIN_BOOTSTRAP_TOKEN is required}"
+  OBJECTSTORAGE__ENDPOINT: "${OBJECT_STORAGE_ENDPOINT:?OBJECT_STORAGE_ENDPOINT is required}"
+  OBJECTSTORAGE__BUCKET: "${OBJECT_STORAGE_BUCKET:?OBJECT_STORAGE_BUCKET is required}"
+  OBJECTSTORAGE__ACCESSKEY: "${OBJECT_STORAGE_ACCESS_KEY:?OBJECT_STORAGE_ACCESS_KEY is required}"
+  OBJECTSTORAGE__SECRETKEY: "${OBJECT_STORAGE_SECRET_KEY:?OBJECT_STORAGE_SECRET_KEY is required}"
+  MALWARESCANNER__HOST: "${MALWARE_SCANNER_HOST:?MALWARE_SCANNER_HOST is required}"
+  MALWARESCANNER__PORT: "${MALWARE_SCANNER_PORT:-3310}"
+  MAIL__HOST: "${SMTP_HOST:?SMTP_HOST is required}"
+  MAIL__PORT: "${SMTP_PORT:-587}"
+  MAIL__ENABLESSL: "true"
+  MAIL__USERNAME: "${SMTP_USERNAME:-}"
+  MAIL__PASSWORD: "${SMTP_PASSWORD:-}"
+  MAIL__FROMADDRESS: "${SMTP_FROM_ADDRESS:?SMTP_FROM_ADDRESS is required}"
+
+services:
+  migrate:
+    image: "${CARBON_APP_IMAGE:?CARBON_APP_IMAGE is required}"
+    command: ["--migrate"]
+    environment: *app-environment
+    volumes:
+      - data-protection-keys:/keys
+    restart: "no"
+
+  web:
+    image: "${CARBON_APP_IMAGE:?CARBON_APP_IMAGE is required}"
+    environment: *app-environment
+    ports:
+      - "127.0.0.1:${APP_HOST_PORT:-8080}:8080"
+    volumes:
+      - data-protection-keys:/keys
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  data-protection-keys:

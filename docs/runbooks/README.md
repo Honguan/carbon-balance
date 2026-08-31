@@ -4,6 +4,22 @@
 
 正式部署前必須依 [驗證與工作階段政策](../security/AUTHENTICATION_POLICY.md) 設定實際 trusted proxy IP；直接對外時保持空清單，不得信任任意 forwarded header。
 
+## 部署 Profile 與網路邊界
+
+`docker-compose.yml` 只供本機開發，所有 published ports 均綁定 `127.0.0.1`。`docker-compose.production.yml` 是 hardened production 範例，只包含 `migrate` 與 `web`；PostgreSQL、物件儲存管理介面、Mailpit 與 ClamAV 不得由此 profile 對外發布。
+
+| 服務 | 開發環境 | 正式環境 |
+| --- | --- | --- |
+| Web | `127.0.0.1:8088` | `127.0.0.1:${APP_HOST_PORT}`，僅供同機 reverse proxy |
+| PostgreSQL | `127.0.0.1:${POSTGRES_HOST_PORT}` | 外部受管服務／私有網路，不發布 |
+| MinIO API／Console | `127.0.0.1:9000`／`127.0.0.1:9001` | HTTPS 物件儲存；管理介面不發布 |
+| Mailpit SMTP／UI | `127.0.0.1:1025`／`127.0.0.1:8025` | 不部署；SMTP 必須啟用 TLS |
+| ClamAV | 僅 Compose 私有網路 | 私有隔離網路或同 pod TLS sidecar，不發布 |
+
+正式環境以 `docker compose -f docker-compose.production.yml config` 預檢。必須提供 immutable `CARBON_APP_IMAGE`、`ALLOWED_HOSTS`、`SECRET_PROVIDER` 與所有 `${...:?}` 變數；實值由已核准的 secret provider 注入，不使用 production `.env`。PostgreSQL 連線必須為 `SSL Mode=VerifyFull`，物件儲存必須為 HTTPS，SMTP 必須啟用 TLS，Data Protection `/keys` volume 必須持久化並納入備份。
+
+Reverse proxy 必須終止公開 HTTPS 並傳送 `X-Forwarded-Proto`；`TRUSTED_PROXY_IP` 必須填入應用程式容器實際看到的單一 proxy 來源 IP，不能假設 Docker NAT 後仍為 `127.0.0.1`。若 proxy 不在同機，平台必須改用私有 ingress、限制 web ingress 來源，並在 proxy 到應用程式間重新加密；不得把應用程式或基礎服務改成 wildcard host binding。
+
 ## 部署與資料庫遷移
 
 1. 確認映像 digest、SBOM、測試與 Critical/High 掃描均通過。
