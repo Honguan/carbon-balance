@@ -18,6 +18,7 @@ public sealed class CanonicalManifestContractTests
 
         var requiredFields = new[]
         {
+            "manifestSchemaVersion", "archiveFormatVersion", "applicationVersion", "sourceRevision",
             "organizationId", "projectVersionId", "productVersionId", "periodStart", "periodEnd",
             "pcrVersion", "ruleSetVersion", "gwpVersion", "unitCatalogueVersion", "engineBuild",
             "activities", "factorVersionId", "factorValue"
@@ -43,4 +44,3 @@ public sealed class CanonicalManifestContractTests
         return directory?.FullName ?? throw new DirectoryNotFoundException("找不到 repository root。");
     }
 }
-

@@ -40,6 +40,7 @@ public sealed class WorkspaceModel : PageModel
     private readonly EvidenceStorageService _evidenceStorageService;
     private readonly MoenvFactorSynchronizationService _moenvFactorSynchronizationService;
     private readonly IDataProtector _mailPasswordProtector;
+    private readonly CalculationBuildProvenance _buildProvenance;
 
     public WorkspaceModel(
         CarbonFootprintDbContext dbContext,
@@ -53,7 +54,8 @@ public sealed class WorkspaceModel : PageModel
         IAuthorizationService authorizationService,
         EvidenceStorageService evidenceStorageService,
         MoenvFactorSynchronizationService moenvFactorSynchronizationService,
-        IDataProtectionProvider dataProtectionProvider)
+        IDataProtectionProvider dataProtectionProvider,
+        CalculationBuildProvenance buildProvenance)
     {
         _dbContext = dbContext;
         _organizationScope = organizationScope;
@@ -67,6 +69,7 @@ public sealed class WorkspaceModel : PageModel
         _evidenceStorageService = evidenceStorageService;
         _moenvFactorSynchronizationService = moenvFactorSynchronizationService;
         _mailPasswordProtector = dataProtectionProvider.CreateProtector("CarbonFootprint.OrganizationMailSettings.v1");
+        _buildProvenance = buildProvenance;
     }
 
     public Guid? OrganizationId => _organizationScope.OrganizationId;
@@ -1730,8 +1733,21 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
+        if (!CanonicalManifest.TryReadBuildProvenance(
+                latestRun.CanonicalInputManifest,
+                out var buildProvenance)
+            || !buildProvenance.IsVerifiable)
+        {
+            ModelState.AddModelError("review", "計算版本缺少可追溯的 build provenance，不可送審。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
         var currentSnapshot = await BuildSnapshotAsync(project, cancellationToken);
-        if (!CanonicalManifest.Matches(currentSnapshot, latestRun.EngineBuild, latestRun.InputSha256))
+        if (!CanonicalManifest.Matches(
+                currentSnapshot,
+                latestRun.CanonicalInputManifest,
+                latestRun.InputSha256))
         {
             ModelState.AddModelError("review", "盤查資料已在最近一次計算後變更，請重新計算再提交。");
             await LoadAsync(cancellationToken);
@@ -2021,14 +2037,13 @@ public sealed class WorkspaceModel : PageModel
         {
             var snapshot = await BuildSnapshotAsync(project, cancellationToken);
 
-            var engineBuild = typeof(WorkspaceModel).Assembly.GetName().Version?.ToString() ?? "dev";
             var supersedesRunId = await _dbContext.CalculationRuns
                 .Where(item => item.ProjectVersionId == project.Id)
                 .OrderByDescending(item => item.CreatedAt)
                 .Select(item => (Guid?)item.Id)
                 .FirstOrDefaultAsync(cancellationToken);
             await _calculateHandler.HandleAsync(
-                new CalculateInventoryCommand(Guid.NewGuid(), snapshot, engineBuild, supersedesRunId),
+                new CalculateInventoryCommand(Guid.NewGuid(), snapshot, _buildProvenance, supersedesRunId),
                 cancellationToken);
             StatusMessage = "不可變計算版本已建立。";
             return RedirectToPage(new { section = Section, projectVersionId = project.Id });
@@ -2208,7 +2223,7 @@ public sealed class WorkspaceModel : PageModel
                     && !string.Equals(latestRun.RuleSetVersion, PendingStageFormulaRuleSetVersion, StringComparison.Ordinal)
                     && CanonicalManifest.Matches(
                         await BuildSnapshotAsync(project, cancellationToken),
-                        latestRun.EngineBuild,
+                        latestRun.CanonicalInputManifest,
                         latestRun.InputSha256))
                 {
                     currentRunProjectIds.Add(project.Id);
