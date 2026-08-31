@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.Options;
 
 namespace CarbonFootprint.Web.Areas.Identity.Pages.Account;
 
@@ -15,21 +16,25 @@ public sealed class RegisterModel : PageModel
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SystemAdministratorService _systemAdministratorService;
     private readonly IEmailSender<ApplicationUser> _emailSender;
+    private readonly IdentityOptions _identityOptions;
 
     public RegisterModel(
         UserManager<ApplicationUser> userManager,
         SystemAdministratorService systemAdministratorService,
-        IEmailSender<ApplicationUser> emailSender)
+        IEmailSender<ApplicationUser> emailSender,
+        IOptions<IdentityOptions> identityOptions)
     {
         _userManager = userManager;
         _systemAdministratorService = systemAdministratorService;
         _emailSender = emailSender;
+        _identityOptions = identityOptions.Value;
     }
 
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
     public bool BootstrapOpen { get; private set; }
+    public int MinimumPasswordLength => _identityOptions.Password.RequiredLength;
 
     public async Task OnGetAsync()
     {
@@ -115,7 +120,7 @@ public sealed class RegisterModel : PageModel
             var message = error.Code switch
             {
                 "DuplicateUserName" or "DuplicateEmail" => "此 Email 已註冊；若尚未確認，請使用重寄確認信功能。",
-                "PasswordTooShort" => "密碼至少需要 6 個字元。",
+                "PasswordTooShort" => $"密碼至少需要 {MinimumPasswordLength} 個字元。",
                 _ => error.Description
             };
             ModelState.AddModelError(string.Empty, message);
@@ -135,7 +140,7 @@ public sealed class RegisterModel : PageModel
         public string Email { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "請輸入密碼。")]
-        [StringLength(128, MinimumLength = 6, ErrorMessage = "密碼至少需要 6 個字元。")]
+        [StringLength(128, ErrorMessage = "密碼不可超過 128 個字元。")]
         [DataType(DataType.Password)]
         [Display(Name = "密碼")]
         public string Password { get; set; } = string.Empty;

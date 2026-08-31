@@ -44,6 +44,13 @@ public sealed class AcceptInvitationModel : PageModel
             return Challenge();
         }
 
+        var stampResult = await _userManager.UpdateSecurityStampAsync(user);
+        if (!stampResult.Succeeded)
+        {
+            ModelState.AddModelError(string.Empty, "無法更新登入安全狀態，請稍後再試。");
+            return Page();
+        }
+
         try
         {
             await _invitationService.AcceptAsync(user, Token, cancellationToken);
@@ -52,6 +59,7 @@ public sealed class AcceptInvitationModel : PageModel
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
+            await _signInManager.RefreshSignInAsync(user);
             ModelState.AddModelError(string.Empty, exception.Message);
             return Page();
         }

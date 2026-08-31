@@ -184,6 +184,13 @@ public sealed class WorkspaceModel : PageModel
     {
         var user = await _userManager.GetUserAsync(User)
             ?? throw new InvalidOperationException("找不到目前使用者。");
+        var stampResult = await _userManager.UpdateSecurityStampAsync(user);
+        if (!stampResult.Succeeded)
+        {
+            ModelState.AddModelError(string.Empty, "無法更新登入安全狀態，請稍後再試。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
         try
         {
             await _onboardingService.CreateAsync(user, organizationName, cancellationToken);
@@ -193,6 +200,7 @@ public sealed class WorkspaceModel : PageModel
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
+            await _signInManager.RefreshSignInAsync(user);
             ModelState.AddModelError("organizationName", exception.Message);
             await LoadAsync(cancellationToken);
             return Page();
@@ -455,14 +463,22 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
+        var revokedUser = await _userManager.FindByIdAsync(membership.UserId.ToString());
+        if (revokedUser is null)
+        {
+            return NotFound();
+        }
+        var stampResult = await _userManager.UpdateSecurityStampAsync(revokedUser);
+        if (!stampResult.Succeeded)
+        {
+            ModelState.AddModelError("membership", "無法更新成員登入安全狀態，請稍後再試。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
         membership.RevokedAt = DateTimeOffset.UtcNow;
         AddAudit("organization.membership.revoked", "OrganizationMembership", membership.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        var revokedUser = await _userManager.FindByIdAsync(membership.UserId.ToString());
-        if (revokedUser is not null)
-        {
-            await _userManager.UpdateSecurityStampAsync(revokedUser);
-        }
         return RedirectToPage(new { section = Section });
     }
 

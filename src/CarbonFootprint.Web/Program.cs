@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -28,6 +29,12 @@ if (!builder.Environment.IsDevelopment()
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton(TimeProvider.System);
+var authenticationSessionSettings = AuthenticationSessionSettings.Create(
+    builder.Configuration,
+    builder.Environment.IsDevelopment());
+builder.Services.AddSingleton(authenticationSessionSettings);
+builder.Services.Configure<SecurityStampValidatorOptions>(options =>
+    options.ValidationInterval = authenticationSessionSettings.SecurityStampValidationInterval);
 var mfaFreshness = builder.Configuration.GetValue<TimeSpan?>("Security:MfaFreshness")
     ?? MfaAuthentication.DefaultFreshness;
 if (mfaFreshness <= TimeSpan.Zero)
@@ -36,19 +43,25 @@ if (mfaFreshness <= TimeSpan.Zero)
 }
 builder.Services.AddSingleton(new MfaAuthenticationSettings(mfaFreshness));
 builder.Services.AddScoped<IOrganizationScope, HttpOrganizationScope>();
-builder.Services.AddCarbonFootprintInfrastructure(builder.Configuration);
+builder.Services.AddCarbonFootprintInfrastructure(
+    builder.Configuration,
+    useDevelopmentAuthenticationPolicy: builder.Environment.IsDevelopment());
 builder.Services.ConfigureApplicationCookie(options =>
 {
+    options.ExpireTimeSpan = authenticationSessionSettings.IdleTimeout;
+    options.SlidingExpiration = true;
     var previousOnSigningIn = options.Events.OnSigningIn;
+    var previousOnValidatePrincipal = options.Events.OnValidatePrincipal;
     options.Events.OnSigningIn = async context =>
     {
         await previousOnSigningIn(context);
+        var authenticatedAt = context.HttpContext.RequestServices.GetRequiredService<TimeProvider>()
+            .GetUtcNow()
+            .ToUnixTimeSeconds()
+            .ToString(CultureInfo.InvariantCulture);
+        context.Properties.Items.TryAdd(AuthenticationSession.StartedAtProperty, authenticatedAt);
         if (context.Principal?.HasClaim(claim => claim.Type == "amr" && claim.Value is "pwd" or "mfa") == true)
         {
-            var authenticatedAt = context.HttpContext.RequestServices.GetRequiredService<TimeProvider>()
-                .GetUtcNow()
-                .ToUnixTimeSeconds()
-                .ToString(CultureInfo.InvariantCulture);
             context.Properties.Items.TryAdd(MfaAuthentication.AuthenticatedAtProperty, authenticatedAt);
             if (context.Principal.HasClaim("amr", "mfa"))
             {
@@ -58,7 +71,25 @@ builder.Services.ConfigureApplicationCookie(options =>
             }
         }
     };
+    options.Events.OnValidatePrincipal = async context =>
+    {
+        var authenticationMethod = context.Principal?.FindFirst("amr")?.Value;
+        await previousOnValidatePrincipal(context);
+        AuthenticationSession.PreserveAuthenticationMethod(context.Principal, authenticationMethod);
+        if (context.Principal is not null
+            && !AuthenticationSession.IsWithinAbsoluteLifetime(
+                context.Properties,
+                context.HttpContext.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow(),
+                authenticationSessionSettings.AbsoluteLifetime))
+        {
+            context.RejectPrincipal();
+            await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
+        }
+    };
 });
+var trustedProxyAddresses = TrustedProxyConfiguration.Parse(builder.Configuration);
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    TrustedProxyConfiguration.Configure(options, trustedProxyAddresses));
 builder.Services.AddSingleton<CalculationEngine>();
 builder.Services.AddScoped<CalculateInventoryHandler>();
 builder.Services.Configure<MoenvFactorSourceOptions>(
@@ -89,7 +120,7 @@ if (rateLimitPermitCount <= 0)
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    var globalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new FixedWindowRateLimiterOptions
@@ -98,6 +129,27 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
+    var authenticationLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        var rule = HttpMethods.IsPost(context.Request.Method)
+            ? AuthenticationRateLimits.FindRule(context.Request.Path)
+            : null;
+        if (rule is null)
+        {
+            return RateLimitPartition.GetNoLimiter("unrestricted");
+        }
+
+        var clientAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            $"{rule.Name}:{clientAddress}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = rule.PermitLimit,
+                Window = rule.Window,
+                QueueLimit = 0
+            });
+    });
+    options.GlobalLimiter = PartitionedRateLimiter.CreateChained(globalLimiter, authenticationLimiter);
 });
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("carbon-footprint-web"))
@@ -164,6 +216,8 @@ if (args.Contains("--migrate", StringComparer.Ordinal))
 
     return;
 }
+
+app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {

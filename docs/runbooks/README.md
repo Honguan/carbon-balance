@@ -2,6 +2,8 @@
 
 本目錄定義 P0 Release Candidate 的部署、回復與事件處理基線。所有正式環境密碼、資料庫連線、物件儲存金鑰與 SMTP 憑證均由祕密管理服務注入，不得寫入版本庫。
 
+正式部署前必須依 [驗證與工作階段政策](../security/AUTHENTICATION_POLICY.md) 設定實際 trusted proxy IP；直接對外時保持空清單，不得信任任意 forwarded header。
+
 ## 部署與資料庫遷移
 
 1. 確認映像 digest、SBOM、測試與 Critical/High 掃描均通過。

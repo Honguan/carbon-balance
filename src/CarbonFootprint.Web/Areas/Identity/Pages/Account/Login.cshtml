@@ -73,14 +73,14 @@
                         <span class="field-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
                         </span>
-                        <input asp-for="Input.Password" autocomplete="current-password" placeholder="至少 6 個字元" />
+                        <input asp-for="Input.Password" autocomplete="current-password" placeholder="輸入目前密碼" />
                     </div>
                     <span asp-validation-for="Input.Password" class="field-error"></span>
                 </div>
 
                 <label class="remember-check">
                     <input asp-for="Input.RememberMe" />
-                    <span>在這台裝置保持登入 30 天</span>
+                    <span>在這台裝置保持登入</span>
                 </label>
 
                 <button type="submit" class="btn-carbon btn-carbon--wide">
@@ -91,7 +91,7 @@
 
             <div class="auth-note">
                 <span class="auth-note__icon" aria-hidden="true">i</span>
-                <p>新帳號需先完成 Email 確認；密碼只需至少 6 個字元。</p>
+                <p>新帳號需先完成 Email 確認；建議使用不重複的長密語。</p>
             </div>
 
             <nav class="auth-account-links" aria-label="帳號操作">
