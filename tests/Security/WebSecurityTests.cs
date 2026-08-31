@@ -360,6 +360,54 @@ public sealed class WebSecurityTests : IClassFixture<WebSecurityTests.Factory>
         Assert.Equal("security-test-correlation", Assert.Single(response.Headers.GetValues("X-Correlation-ID")));
     }
 
+    [Fact]
+    public void HardenedDeployment_RejectsDevelopmentAndInsecureDependencies()
+    {
+        var settings = new Dictionary<string, string?>
+        {
+            ["Deployment:Hardened"] = "true",
+            ["Deployment:SecretProvider"] = "test-provider",
+            ["Security:RequireHttpsCookies"] = "true",
+            ["https_port"] = "443",
+            ["ConnectionStrings:Database"] = "Host=db;Database=carbon;SSL Mode=VerifyFull",
+            ["ObjectStorage:Endpoint"] = "https://objects.example.com",
+            ["Mail:EnableSsl"] = "true"
+        };
+
+        IConfiguration Configuration() => new ConfigurationBuilder()
+            .AddInMemoryCollection(settings)
+            .Build();
+
+        DeploymentSecurity.Validate(Configuration(), "Production");
+        Assert.Throws<InvalidOperationException>(() =>
+            DeploymentSecurity.Validate(Configuration(), "Development"));
+
+        settings["Deployment:Hardened"] = "false";
+        settings["Security:RequireHttpsCookies"] = "false";
+        Assert.Throws<InvalidOperationException>(() =>
+            DeploymentSecurity.Validate(Configuration(), "Staging"));
+        DeploymentSecurity.Validate(Configuration(), "Development");
+        settings["Deployment:Hardened"] = "true";
+        settings["Security:RequireHttpsCookies"] = "true";
+
+        foreach (var key in new[]
+                 {
+                     "Deployment:SecretProvider",
+                     "Security:RequireHttpsCookies",
+                     "https_port",
+                     "ConnectionStrings:Database",
+                     "ObjectStorage:Endpoint",
+                     "Mail:EnableSsl"
+                 })
+        {
+            var value = settings[key];
+            settings[key] = null;
+            Assert.Throws<InvalidOperationException>(() =>
+                DeploymentSecurity.Validate(Configuration(), "Production"));
+            settings[key] = value;
+        }
+    }
+
     public sealed class Factory : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
