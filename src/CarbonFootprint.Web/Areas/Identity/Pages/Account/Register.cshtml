@@ -52,7 +52,7 @@
                     <div class="field-group">
                         <label asp-for="Input.Password"></label>
                         <div class="field-control">
-                            <input asp-for="Input.Password" autocomplete="new-password" placeholder="至少 6 個字元" />
+                            <input asp-for="Input.Password" autocomplete="new-password" placeholder="@($"至少 {Model.MinimumPasswordLength} 個字元")" />
                         </div>
                         <span asp-validation-for="Input.Password" class="field-error"></span>
                     </div>

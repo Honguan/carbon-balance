@@ -250,7 +250,7 @@ try {
 
     await page.locator('input[name="Input.Identifier"]').fill(testEmail);
     await page.locator('input[name="Input.Password"]').fill(testPassword);
-    await page.getByRole("checkbox", { name: "在這台裝置保持登入 30 天" }).check();
+    await page.getByRole("checkbox", { name: "在這台裝置保持登入" }).check();
     await page.getByRole("button", { name: "登入碳足跡系統" }).click();
     await expectUrl(page, "/Workspace", "Confirmed account did not enter the workspace");
     await page.getByText("建立組織").first().waitFor({ state: "visible" });
@@ -268,6 +268,24 @@ try {
     await expectUrl(page, "/Workspace", "Organization creation left the workspace");
     await page.getByText("組織已建立。").waitFor({ state: "visible" });
     await page.getByText("目前組織", { exact: true }).waitFor({ state: "visible" });
+
+    const staleOrganizationContext = await browser.newContext();
+    await staleOrganizationContext.addCookies([persistentCookie]);
+    const staleOrganizationPage = await staleOrganizationContext.newPage();
+    await staleOrganizationPage.waitForTimeout(1_100);
+    await staleOrganizationPage.goto(`${baseUrl}/Workspace`, { waitUntil: "domcontentloaded" });
+    await expectUrl(
+        staleOrganizationPage,
+        "/Identity/Account/Login",
+        "Organization creation did not invalidate the pre-change session"
+    );
+    await staleOrganizationContext.close();
+
+    await page.goto(`${baseUrl}/Identity/Account/Login`, { waitUntil: "domcontentloaded" });
+    await page.locator('input[name="Input.Identifier"]').fill(testEmail);
+    await page.locator('input[name="Input.Password"]').fill(testPassword);
+    await page.getByRole("button", { name: "登入碳足跡系統" }).click();
+    await expectUrl(page, "/Workspace", "Current user could not reauthenticate after the organization security change");
 
     // A password-only application cookie must not authorize governance operations.
     await page.locator("#invitationEmail").fill(`password-only-${Date.now()}@example.test`);
@@ -291,15 +309,38 @@ try {
     await page.locator('input[name="Input.Code"]').fill(totp(sharedKey));
     await page.getByRole("button", { name: "Verify", exact: true }).click();
     await expectUrl(page, "/Identity/Account/Manage/ShowRecoveryCodes", "Authenticator enrollment did not issue recovery codes");
-    const recoveryCodes = (await page.locator("code").allTextContents()).map((code) => code.trim()).filter(Boolean);
+    let recoveryCodes = (await page.locator("code").allTextContents()).map((code) => code.trim()).filter(Boolean);
     assert(recoveryCodes.length > 0, "Authenticator enrollment did not issue recovery codes.");
+
+    const preRecoveryCodeRotationCookie = (await context.cookies(baseUrl))
+        .find((cookie) => cookie.name.includes("Identity.Application"));
+    assert(preRecoveryCodeRotationCookie, "Recovery-code rotation setup did not have an application cookie.");
+    await page.goto(`${baseUrl}/Identity/Account/Manage/GenerateRecoveryCodes`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "產生新的復原碼" }).click();
+    await expectUrl(page, "/Identity/Account/Manage/ShowRecoveryCodes", "Recovery-code rotation did not complete");
+    recoveryCodes = (await page.locator("code").allTextContents()).map((code) => code.trim()).filter(Boolean);
+    assert(recoveryCodes.length > 0, "Recovery-code rotation did not issue replacement codes.");
+
+    const staleRecoveryCodeContext = await browser.newContext();
+    await staleRecoveryCodeContext.addCookies([preRecoveryCodeRotationCookie]);
+    const staleRecoveryCodePage = await staleRecoveryCodeContext.newPage();
+    await staleRecoveryCodePage.waitForTimeout(1_100);
+    await staleRecoveryCodePage.goto(`${baseUrl}/Identity/Account/Manage/TwoFactorAuthentication`, {
+        waitUntil: "domcontentloaded"
+    });
+    await expectUrl(
+        staleRecoveryCodePage,
+        "/Identity/Account/Login",
+        "Recovery-code rotation did not invalidate the pre-change session"
+    );
+    await staleRecoveryCodeContext.close();
 
     await page.getByRole("button", { name: "登出" }).click();
     await expectUrl(page, "/", "Post-enrollment logout did not return home");
     await page.goto(`${baseUrl}/Identity/Account/Login`, { waitUntil: "domcontentloaded" });
     await page.locator('input[name="Input.Identifier"]').fill(testEmail);
     await page.locator('input[name="Input.Password"]').fill(testPassword);
-    await page.getByRole("checkbox", { name: "在這台裝置保持登入 30 天" }).check();
+    await page.getByRole("checkbox", { name: "在這台裝置保持登入" }).check();
     await page.getByRole("button", { name: "登入碳足跡系統" }).click();
     const passwordOnlyCookie = (await context.cookies(baseUrl)).find((cookie) => cookie.name.includes("Identity.Application"));
     assert(!passwordOnlyCookie, "Password-only 2FA login created an application cookie.");

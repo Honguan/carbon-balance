@@ -47,10 +47,11 @@ public sealed class AdministratorBootstrapTests
 
             var target = await RegisterAsync(provider, "grant-target", null, "ordinary-target");
             Assert.True(target.Succeeded);
+            var securityStampBeforeGrant = await GetSecurityStampAsync(provider, target.User!.Id);
             var unauthorized = await GrantAsync(
                 provider,
                 attacker.User.Id,
-                target.User!.Id,
+                target.User.Id,
                 "unauthorized-grant");
             Assert.False(unauthorized.Succeeded);
 
@@ -61,6 +62,14 @@ public sealed class AdministratorBootstrapTests
                 "authorized-grant");
             Assert.True(granted.Succeeded);
             Assert.True(await IsInRoleAsync(provider, target.User.Id, SystemRoles.Administrator));
+            Assert.NotEqual(securityStampBeforeGrant, await GetSecurityStampAsync(provider, target.User.Id));
+
+            var recoveryCode = await GenerateRecoveryCodeAsync(provider, target.User.Id);
+            var stampBeforeRecoveryCodeRedemption = await GetSecurityStampAsync(provider, target.User.Id);
+            Assert.True(await RedeemRecoveryCodeAsync(provider, target.User.Id, recoveryCode));
+            Assert.NotEqual(
+                stampBeforeRecoveryCodeRedemption,
+                await GetSecurityStampAsync(provider, target.User.Id));
 
             await using var verificationScope = provider.CreateAsyncScope();
             var dbContext = verificationScope.ServiceProvider.GetRequiredService<CarbonFootprintDbContext>();
@@ -111,7 +120,7 @@ public sealed class AdministratorBootstrapTests
             .Build();
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddCarbonFootprintInfrastructure(configuration);
+        services.AddCarbonFootprintInfrastructure(configuration, useDevelopmentAuthenticationPolicy: true);
         return services.BuildServiceProvider();
     }
 
@@ -172,6 +181,34 @@ public sealed class AdministratorBootstrapTests
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         var user = await userManager.FindByIdAsync(userId.ToString());
         return user is not null && await userManager.IsInRoleAsync(user, role);
+    }
+
+    private static async Task<string?> GetSecurityStampAsync(ServiceProvider provider, Guid userId)
+    {
+        await using var scope = provider.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        return user is null ? null : await userManager.GetSecurityStampAsync(user);
+    }
+
+    private static async Task<string> GenerateRecoveryCodeAsync(ServiceProvider provider, Guid userId)
+    {
+        await using var scope = provider.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        Assert.IsType<SecurityStampUserManager>(userManager);
+        var user = await userManager.FindByIdAsync(userId.ToString()) ?? throw new InvalidOperationException();
+        return Assert.Single(await userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 1) ?? []);
+    }
+
+    private static async Task<bool> RedeemRecoveryCodeAsync(
+        ServiceProvider provider,
+        Guid userId,
+        string recoveryCode)
+    {
+        await using var scope = provider.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await userManager.FindByIdAsync(userId.ToString()) ?? throw new InvalidOperationException();
+        return (await userManager.RedeemTwoFactorRecoveryCodeAsync(user, recoveryCode)).Succeeded;
     }
 
     private static async Task ResetAsync(ServiceProvider provider)

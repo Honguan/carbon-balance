@@ -6,7 +6,7 @@
 | 閘門 | 實際結果 |
 |---|---|
 | Release build | 0 warning、0 error |
-| 自動測試 | 96/96 通過：Unit 61、Golden 4、Architecture 2、Contract 1、Integration 22、Security 6；CI 產生各測試專案 coverage artifact |
+| 自動測試 | 100/100 通過：Unit 61、Golden 4、Architecture 2、Contract 1、Integration 22、Security 10；CI 產生各測試專案 coverage artifact |
 | E2E | PR 工作流驗證註冊、Email 確認、列舉防護密碼重設、TOTP 註冊與挑戰、錯誤 TOTP、一次性 recovery code、password-only／stale MFA 拒絕，以及既有 Workspace 治理流程 |
 | 計算一致性 | 產品總額 7 kgCO2e；相同輸入 hash 相同；supersedes lineage 正確 |
 | 空庫遷移 | 11 個 EF migrations，建立 28 張 app／identity／staging 資料表 |

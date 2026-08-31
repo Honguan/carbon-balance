@@ -15,7 +15,10 @@ namespace CarbonFootprint.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddCarbonFootprintInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddCarbonFootprintInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        bool useDevelopmentAuthenticationPolicy = false)
     {
         var connectionString = configuration.GetConnectionString("Database")
             ?? throw new InvalidOperationException("缺少 ConnectionStrings:Database 設定。");
@@ -42,7 +45,7 @@ public static class DependencyInjection
                 options.User.RequireUniqueEmail = true;
                 options.Lockout.MaxFailedAccessAttempts = 8;
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
-                options.Password.RequiredLength = 6;
+                options.Password.RequiredLength = useDevelopmentAuthenticationPolicy ? 6 : 12;
                 options.Password.RequiredUniqueChars = 1;
                 options.Password.RequireDigit = false;
                 options.Password.RequireLowercase = false;
@@ -50,7 +53,9 @@ public static class DependencyInjection
                 options.Password.RequireNonAlphanumeric = false;
             })
             .AddRoles<IdentityRole<Guid>>()
-            .AddEntityFrameworkStores<CarbonFootprintDbContext>();
+            .AddEntityFrameworkStores<CarbonFootprintDbContext>()
+            .AddUserManager<SecurityStampUserManager>();
+        services.AddScoped<IPasswordValidator<ApplicationUser>, CompromisedPasswordValidator>();
         services.AddScoped<IClaimsTransformation, OrganizationClaimsTransformation>();
         services.ConfigureApplicationCookie(options =>
         {
@@ -59,8 +64,6 @@ public static class DependencyInjection
             options.Cookie.SecurePolicy = configuration.GetValue<bool>("Security:RequireHttpsCookies")
                 ? CookieSecurePolicy.Always
                 : CookieSecurePolicy.SameAsRequest;
-            options.ExpireTimeSpan = TimeSpan.FromDays(30);
-            options.SlidingExpiration = true;
         });
         return services;
     }

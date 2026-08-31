@@ -230,6 +230,7 @@ jobs:
             --env MALWARESCANNER__HOST=127.0.0.1 \
             --env MALWARESCANNER__PORT=3310 \
             --env RateLimiting__PermitLimit=300 \
+            --env Security__Authentication__SecurityStampValidationInterval=00:00:01 \
             --env DataProtection__KeyPath=/tmp/data-protection-keys \
             --env AdministratorBootstrap__Token=ci-only-administrator-bootstrap-token-43 \
             carbon-footprint-auth-e2e:${{ github.sha }}
@@ -415,7 +416,7 @@ jobs:
           grep --quiet '<html lang="zh-Hant-TW">' /tmp/login.html
           grep --quiet '碳衡產品碳足跡系統' /tmp/login.html
           grep --quiet '登入碳足跡系統' /tmp/login.html
-          grep --quiet '在這台裝置保持登入 30 天' /tmp/login.html
+          grep --quiet '在這台裝置保持登入' /tmp/login.html
           grep --quiet '建立帳號' /tmp/login.html
           grep --quiet '重寄確認信' /tmp/login.html
           grep --quiet '重寄確認信' /tmp/resend.html

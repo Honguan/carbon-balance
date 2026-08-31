@@ -1,0 +1,11 @@
+@page
+@model GenerateRecoveryCodesModel
+@{
+    ViewData["Title"] = "產生新的復原碼";
+}
+
+<h1>@ViewData["Title"]</h1>
+<p>新的復原碼會取代所有舊復原碼，請妥善保存。</p>
+<form method="post">
+    <button class="btn btn-danger" type="submit">產生新的復原碼</button>
+</form>

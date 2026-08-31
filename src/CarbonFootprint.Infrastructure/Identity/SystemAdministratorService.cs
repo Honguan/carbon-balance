@@ -141,6 +141,12 @@ public sealed class SystemAdministratorService
             return result;
         }
 
+        var stampResult = await _userManager.UpdateSecurityStampAsync(target);
+        if (!stampResult.Succeeded)
+        {
+            return stampResult;
+        }
+
         _dbContext.SystemAuditEvents.Add(new SystemAuditEventRecord
         {
             Id = Guid.NewGuid(),

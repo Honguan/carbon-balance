@@ -6,7 +6,7 @@
 |---|---|---|
 | 0 | complete | 規劃基線、舊 ZIP checksum、187 筆唯讀來源清單、ADR 與治理 |
 | 1 | complete | .NET 10 modular monolith、PostgreSQL、EF migrations、Docker Compose、Golden Vertical Slice |
-| 2 | complete | Identity、Email 確認、列舉防護密碼重設、TOTP 註冊／重設／挑戰、一次性 recovery code、15 分鐘敏感操作 MFA freshness、組織與角色治理 |
+| 2 | complete | Identity、12 字元 production 長密語與常見密碼拒絕、列舉防護 recovery、TOTP／recovery code、absolute session、獨立 auth throttling、組織與角色治理 |
 | 3 | complete | 版本化單位/alias/複合單位、PCR 與係數 review/publish/withdraw/supersede/applicability、staging 匯入 |
 | 4 | complete | 五階段活動類型、適用性、供應商/情境、估算、資料品質、Evidence SHA-256/ClamAV/MinIO |
 | 5 | complete | decimal 計算、受控換算、分配、canonical manifest/hash、不可變 run、lineage/diff、警告與品質摘要 |
