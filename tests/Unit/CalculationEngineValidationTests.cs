@@ -6,13 +6,33 @@ namespace CarbonFootprint.Unit.Tests;
 
 public sealed class CalculationEngineValidationTests
 {
+    private static readonly CalculationBuildProvenance TestBuildProvenance =
+        CalculationBuildProvenance.Create("1.0.0-test", new string('a', 40));
+
+    [Fact]
+    public void BuildProvenance_RequiresImmutableRevisionUnlessDevelopmentIsExplicit()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            CalculationBuildProvenance.Create("1.0.0", null));
+        Assert.Throws<InvalidOperationException>(() =>
+            CalculationBuildProvenance.Create("1.0.0", "dev"));
+        Assert.Throws<InvalidOperationException>(() =>
+            CalculationBuildProvenance.Create("dev", new string('a', 40)));
+
+        var development = CalculationBuildProvenance.Create("1.0.0-dev", "dev", allowDevelopment: true);
+
+        Assert.Equal("dev", development.EngineBuild);
+        Assert.False(development.IsVerifiable);
+        Assert.True(TestBuildProvenance.IsVerifiable);
+    }
+
     [Fact]
     public void Calculate_NegativeActivity_IsRejected()
     {
         var snapshot = CreateSnapshot(rawValue: -1m, canonicalValue: -1m);
 
         var exception = Assert.Throws<InvalidOperationException>(
-            () => new CalculationEngine().Calculate(Guid.NewGuid(), snapshot, "engine-test"));
+            () => new CalculationEngine().Calculate(Guid.NewGuid(), snapshot, TestBuildProvenance));
 
         Assert.Contains("不得為負值", exception.Message, StringComparison.Ordinal);
     }
@@ -26,7 +46,7 @@ public sealed class CalculationEngineValidationTests
             status: FactorPublicationStatus.Withdrawn);
 
         var exception = Assert.Throws<InvalidOperationException>(
-            () => new CalculationEngine().Calculate(Guid.NewGuid(), snapshot, "engine-test"));
+            () => new CalculationEngine().Calculate(Guid.NewGuid(), snapshot, TestBuildProvenance));
 
         Assert.Contains("未發布、已撤回或不在有效期", exception.Message, StringComparison.Ordinal);
     }
@@ -35,13 +55,18 @@ public sealed class CalculationEngineValidationTests
     public void CanonicalManifest_MatchesOnlyCurrentSnapshot()
     {
         var snapshot = CreateSnapshot(rawValue: 1m, canonicalValue: 1m);
-        var inputSha256 = CanonicalManifest.Create(snapshot, "engine-test").Sha256;
+        var manifest = CanonicalManifest.Create(snapshot, TestBuildProvenance);
 
-        Assert.True(CanonicalManifest.Matches(snapshot, "engine-test", inputSha256));
-        Assert.False(CanonicalManifest.Matches(snapshot with { FunctionalUnit = "2 units" }, "engine-test", inputSha256));
-        Assert.False(CanonicalManifest.Matches(snapshot with { CutoffThresholdPercent = 1m }, "engine-test", inputSha256));
-        Assert.False(CanonicalManifest.Matches(snapshot with { RoundingDecimalPlaces = 6 }, "engine-test", inputSha256));
-        Assert.False(CanonicalManifest.Matches(snapshot with { ReportingRequirements = "PCR report v2" }, "engine-test", inputSha256));
+        Assert.True(CanonicalManifest.Matches(snapshot, manifest.Json, manifest.Sha256));
+        Assert.False(CanonicalManifest.Matches(snapshot with { FunctionalUnit = "2 units" }, manifest.Json, manifest.Sha256));
+        Assert.False(CanonicalManifest.Matches(snapshot with { CutoffThresholdPercent = 1m }, manifest.Json, manifest.Sha256));
+        Assert.False(CanonicalManifest.Matches(snapshot with { RoundingDecimalPlaces = 6 }, manifest.Json, manifest.Sha256));
+        Assert.False(CanonicalManifest.Matches(snapshot with { ReportingRequirements = "PCR report v2" }, manifest.Json, manifest.Sha256));
+        Assert.NotEqual(
+            manifest.Sha256,
+            CanonicalManifest.Create(
+                snapshot,
+                CalculationBuildProvenance.Create("1.0.0-test", new string('c', 40))).Sha256);
     }
 
     [Fact]
@@ -53,7 +78,7 @@ public sealed class CalculationEngineValidationTests
         };
 
         var exception = Assert.Throws<InvalidOperationException>(
-            () => new CalculationEngine().Calculate(Guid.NewGuid(), snapshot, "engine-test"));
+            () => new CalculationEngine().Calculate(Guid.NewGuid(), snapshot, TestBuildProvenance));
 
         Assert.Contains("Unsupported PCR formula rule set", exception.Message, StringComparison.Ordinal);
     }
@@ -135,7 +160,7 @@ public sealed class CalculationEngineValidationTests
             new CalculationEngine().Calculate(
                 Guid.NewGuid(),
                 snapshot with { Activities = [activity], Stages = stages },
-                "engine-test"));
+                TestBuildProvenance));
 
         Assert.Contains("推導結果不一致", exception.Message, StringComparison.Ordinal);
     }

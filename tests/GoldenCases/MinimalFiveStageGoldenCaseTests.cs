@@ -6,6 +6,9 @@ namespace CarbonFootprint.GoldenCases.Tests;
 
 public sealed class MinimalFiveStageGoldenCaseTests
 {
+    private static readonly CalculationBuildProvenance TestBuildProvenance =
+        CalculationBuildProvenance.Create("1.0.0-golden", new string('b', 40));
+
     [Fact]
     public void Calculate_HandCalculatedFiveStageCase_MatchesEveryLineAndTotal()
     {
@@ -15,7 +18,7 @@ public sealed class MinimalFiveStageGoldenCaseTests
         var run = engine.Calculate(
             Guid.Parse("90000000-0000-0000-0000-000000000001"),
             snapshot,
-            "engine-golden-1");
+            TestBuildProvenance);
 
         Assert.Collection(
             run.LineItems,
@@ -54,12 +57,21 @@ public sealed class MinimalFiveStageGoldenCaseTests
         var snapshot = CreateSnapshot();
         var engine = new CalculationEngine();
 
-        var first = engine.Calculate(Guid.NewGuid(), snapshot, "engine-golden-1");
-        var second = engine.Calculate(Guid.NewGuid(), snapshot, "engine-golden-1");
+        var first = engine.Calculate(Guid.NewGuid(), snapshot, TestBuildProvenance);
+        var second = engine.Calculate(Guid.NewGuid(), snapshot, TestBuildProvenance);
+        var replay = engine.Calculate(
+            Guid.NewGuid(),
+            snapshot,
+            CanonicalManifest.ReadBuildProvenance(first.CanonicalInputManifest));
 
         Assert.Equal(first.InputSha256, second.InputSha256);
+        Assert.Equal(first.InputSha256, replay.InputSha256);
         Assert.Equal(first.ProductTotal, second.ProductTotal);
         Assert.Equal(64, first.InputSha256.Length);
+        Assert.Equal($"git:{new string('b', 40)}", first.EngineBuild);
+        Assert.Contains("\"manifestSchemaVersion\":\"calculation-manifest-v2\"", first.CanonicalInputManifest, StringComparison.Ordinal);
+        Assert.Contains("\"archiveFormatVersion\":\"verification-manifest-v1\"", first.CanonicalInputManifest, StringComparison.Ordinal);
+        Assert.Equal(TestBuildProvenance, CanonicalManifest.ReadBuildProvenance(first.CanonicalInputManifest));
     }
 
     [Fact]
@@ -72,12 +84,12 @@ public sealed class MinimalFiveStageGoldenCaseTests
         var allocated = baseline with { Activities = activities };
         var engine = new CalculationEngine();
 
-        var run = engine.Calculate(Guid.NewGuid(), allocated, "engine-golden-1");
+        var run = engine.Calculate(Guid.NewGuid(), allocated, TestBuildProvenance);
 
         Assert.Equal(1m, run.LineItems[0].Emissions);
         Assert.Equal(6m, run.ProductTotal);
         Assert.Contains("\"allocationFactor\":0.5", run.CanonicalInputManifest, StringComparison.Ordinal);
-        Assert.NotEqual(engine.Calculate(Guid.NewGuid(), baseline, "engine-golden-1").InputSha256, run.InputSha256);
+        Assert.NotEqual(engine.Calculate(Guid.NewGuid(), baseline, TestBuildProvenance).InputSha256, run.InputSha256);
     }
 
     [Fact]
@@ -89,7 +101,7 @@ public sealed class MinimalFiveStageGoldenCaseTests
             .ToArray();
 
         Assert.Throws<InvalidOperationException>(() =>
-            new CalculationEngine().Calculate(Guid.NewGuid(), baseline with { Activities = activities }, "engine-golden-1"));
+            new CalculationEngine().Calculate(Guid.NewGuid(), baseline with { Activities = activities }, TestBuildProvenance));
     }
 
     private static InventoryProjectSnapshot CreateSnapshot()

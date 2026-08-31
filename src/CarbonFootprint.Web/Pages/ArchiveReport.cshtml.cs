@@ -1,3 +1,4 @@
+using CarbonFootprint.Domain.Modules.Calculations;
 using CarbonFootprint.Domain.Modules.Organizations;
 using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Web.Security;
@@ -34,7 +35,13 @@ public sealed class ArchiveReportModel : PageModel
 
     public DateTimeOffset GeneratedAt { get; } = DateTimeOffset.UtcNow;
 
-    public string ApplicationVersion => typeof(ArchiveReportModel).Assembly.GetName().Version?.ToString() ?? "unknown";
+    public string ApplicationVersion { get; private set; } = "legacy-unavailable";
+
+    public string SourceRevision { get; private set; } = "legacy-unavailable";
+
+    public string ManifestSchemaVersion { get; private set; } = "legacy-unavailable";
+
+    public string ArchiveFormatVersion { get; private set; } = "legacy-unavailable";
 
     public string DatasetVersions { get; private set; } = string.Empty;
 
@@ -56,6 +63,13 @@ public sealed class ArchiveReportModel : PageModel
             return NotFound();
         }
         Run = run;
+        if (CanonicalManifest.TryReadBuildProvenance(run.CanonicalInputManifest, out var buildProvenance))
+        {
+            ApplicationVersion = buildProvenance.ApplicationVersion;
+            SourceRevision = buildProvenance.SourceRevision;
+            ManifestSchemaVersion = buildProvenance.ManifestSchemaVersion;
+            ArchiveFormatVersion = buildProvenance.ArchiveFormatVersion;
+        }
         Project = await _dbContext.InventoryProjectVersions.AsNoTracking()
             .SingleAsync(item => item.Id == run.ProjectVersionId, cancellationToken);
         PcrRule = Project.PcrVersionId.HasValue

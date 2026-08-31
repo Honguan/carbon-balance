@@ -6,7 +6,7 @@ namespace CarbonFootprint.Application.Calculations;
 public sealed record CalculateInventoryCommand(
     Guid RunId,
     InventoryProjectSnapshot Snapshot,
-    string EngineBuild,
+    CalculationBuildProvenance BuildProvenance,
     Guid? SupersedesRunId);
 
 public interface ICalculationRunStore
@@ -32,11 +32,10 @@ public sealed class CalculateInventoryHandler
         var run = _engine.Calculate(
             command.RunId,
             command.Snapshot,
-            command.EngineBuild,
+            command.BuildProvenance,
             command.SupersedesRunId);
 
         await _store.SaveAsync(run, cancellationToken);
         return run;
     }
 }
-

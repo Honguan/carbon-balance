@@ -18,6 +18,14 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
+var buildProvenance = ApplicationBuildProvenance.Resolve(
+    typeof(Program).Assembly,
+    builder.Environment.IsDevelopment());
+if (args.Contains("--build-provenance", StringComparer.Ordinal))
+{
+    Console.WriteLine(buildProvenance.SourceRevision);
+    return;
+}
 DeploymentSecurity.Validate(builder.Configuration, builder.Environment.EnvironmentName);
 
 var administratorBootstrapToken = builder.Configuration[$"{AdministratorBootstrapOptions.SectionName}:Token"];
@@ -30,6 +38,7 @@ if (!builder.Environment.IsDevelopment()
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(buildProvenance);
 var authenticationSessionSettings = AuthenticationSessionSettings.Create(
     builder.Configuration,
     builder.Environment.IsDevelopment());

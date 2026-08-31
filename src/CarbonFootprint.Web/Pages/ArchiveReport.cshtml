@@ -49,7 +49,9 @@
 <dl class="row">
     <dt class="col-sm-4">輸出時間／時區</dt><dd class="col-sm-8">@Model.GeneratedAt.ToString("O")／UTC</dd>
     <dt class="col-sm-4">應用程式版本</dt><dd class="col-sm-8">@Model.ApplicationVersion</dd>
+    <dt class="col-sm-4">來源 Commit</dt><dd class="col-sm-8"><code>@Model.SourceRevision</code></dd>
     <dt class="col-sm-4">計算引擎版本</dt><dd class="col-sm-8">@Model.Run.EngineBuild</dd>
+    <dt class="col-sm-4">Manifest／封存格式</dt><dd class="col-sm-8">@Model.ManifestSchemaVersion／@Model.ArchiveFormatVersion</dd>
     <dt class="col-sm-4">資料集版本</dt><dd class="col-sm-8">@Model.DatasetVersions</dd>
     <dt class="col-sm-4">規則／單位／GWP 版本</dt><dd class="col-sm-8">@Model.Run.RuleSetVersion／@Model.Run.UnitCatalogueVersion／@Model.Run.GwpVersion</dd>
     <dt class="col-sm-4">PCR 版本</dt><dd class="col-sm-8">@Model.Run.PcrVersion</dd>

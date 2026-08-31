@@ -8,5 +8,9 @@
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <Deterministic>true</Deterministic>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <SourceRevisionId Condition="'$(SourceRevisionId)' == '' and '$(GITHUB_SHA)' != ''">$(GITHUB_SHA)</SourceRevisionId>
   </PropertyGroup>
+  <ItemGroup Condition="'$(SourceRevisionId)' != ''">
+    <AssemblyMetadata Include="SourceRevisionId" Value="$(SourceRevisionId)" />
+  </ItemGroup>
 </Project>

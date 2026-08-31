@@ -7,11 +7,11 @@ public sealed class CalculationEngine
     public CalculationRun Calculate(
         Guid runId,
         InventoryProjectSnapshot snapshot,
-        string engineBuild,
+        CalculationBuildProvenance buildProvenance,
         Guid? supersedesRunId = null)
     {
         Validate(snapshot);
-        var (manifest, hash) = CanonicalManifest.Create(snapshot, engineBuild);
+        var (manifest, hash) = CanonicalManifest.Create(snapshot, buildProvenance);
         var lines = snapshot.Activities
             .OrderBy(activity => activity.Stage)
             .ThenBy(activity => activity.Id)
@@ -77,7 +77,7 @@ public sealed class CalculationEngine
             supersedesRunId,
             manifest,
             hash,
-            engineBuild,
+            buildProvenance.EngineBuild,
             snapshot.RuleSetVersion,
             snapshot.UnitCatalogueVersion,
             snapshot.GwpVersion,

@@ -48,6 +48,8 @@ jobs:
         run: dotnet format --verify-no-changes --no-restore
       - name: Build Release
         run: dotnet build --configuration Release --no-restore
+      - name: Verify embedded build provenance
+        run: test "$(dotnet run --project src/CarbonFootprint.Web --configuration Release --no-build --no-launch-profile -- --build-provenance)" = "$GITHUB_SHA"
       - name: Apply migrations to empty PostgreSQL
         run: dotnet run --project src/CarbonFootprint.Web --configuration Release --no-build -- --migrate
       - name: Run unit and Golden Case tests
@@ -197,7 +199,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Build browser-test image
-        run: docker build --tag carbon-footprint-auth-e2e:${{ github.sha }} --file src/CarbonFootprint.Web/Dockerfile .
+        run: |
+          docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" --tag carbon-footprint-auth-e2e:${{ github.sha }} --file src/CarbonFootprint.Web/Dockerfile .
+          test "$(docker run --rm carbon-footprint-auth-e2e:${{ github.sha }} --build-provenance)" = "$GITHUB_SHA"
       - name: Apply migrations
         run: |
           docker run --rm --network host \
@@ -394,7 +398,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Build release image
-        run: docker build --quiet --tag carbon-footprint:${{ github.sha }} --file src/CarbonFootprint.Web/Dockerfile .
+        run: |
+          docker build --quiet --build-arg SOURCE_REVISION="$GITHUB_SHA" --tag carbon-footprint:${{ github.sha }} --file src/CarbonFootprint.Web/Dockerfile .
+          test "$(docker run --rm carbon-footprint:${{ github.sha }} --build-provenance)" = "$GITHUB_SHA"
       - name: Verify login, email confirmation routes and rendered static assets
         run: |
           set -euo pipefail

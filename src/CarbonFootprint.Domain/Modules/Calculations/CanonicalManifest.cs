@@ -7,12 +7,19 @@ namespace CarbonFootprint.Domain.Modules.Calculations;
 
 public static class CanonicalManifest
 {
-    public static (string Json, string Sha256) Create(InventoryProjectSnapshot snapshot, string engineBuild)
+    public static (string Json, string Sha256) Create(
+        InventoryProjectSnapshot snapshot,
+        CalculationBuildProvenance buildProvenance)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
         {
             writer.WriteStartObject();
+            writer.WriteString("manifestSchemaVersion", buildProvenance.ManifestSchemaVersion);
+            writer.WriteString("archiveFormatVersion", buildProvenance.ArchiveFormatVersion);
+            writer.WriteString("applicationVersion", buildProvenance.ApplicationVersion);
+            writer.WriteString("sourceRevision", buildProvenance.SourceRevision);
+            writer.WriteString("engineBuild", buildProvenance.EngineBuild);
             writer.WriteString("organizationId", snapshot.OrganizationId);
             writer.WriteString("projectVersionId", snapshot.ProjectVersionId);
             writer.WriteString("productVersionId", snapshot.ProductVersionId);
@@ -33,7 +40,6 @@ public static class CanonicalManifest
             writer.WriteString("reportingRequirements", snapshot.ReportingRequirements);
             writer.WriteString("gwpVersion", snapshot.GwpVersion);
             writer.WriteString("unitCatalogueVersion", snapshot.UnitCatalogueVersion);
-            writer.WriteString("engineBuild", engineBuild);
             writer.WriteStartArray("stages");
             foreach (var stage in snapshot.Stages.OrderBy(item => item.Stage))
             {
@@ -114,6 +120,52 @@ public static class CanonicalManifest
     public static bool HasValidSha256(string canonicalManifest, string expectedSha256) =>
         string.Equals(ComputeSha256(canonicalManifest), expectedSha256, StringComparison.Ordinal);
 
-    public static bool Matches(InventoryProjectSnapshot snapshot, string engineBuild, string expectedSha256) =>
-        string.Equals(Create(snapshot, engineBuild).Sha256, expectedSha256, StringComparison.Ordinal);
+    public static CalculationBuildProvenance ReadBuildProvenance(string canonicalManifest)
+    {
+        if (!TryReadBuildProvenance(canonicalManifest, out var buildProvenance))
+        {
+            throw new InvalidOperationException("Canonical manifest 缺少受支援的 build provenance。");
+        }
+
+        return buildProvenance;
+    }
+
+    public static bool TryReadBuildProvenance(
+        string canonicalManifest,
+        out CalculationBuildProvenance buildProvenance)
+    {
+        buildProvenance = null!;
+        try
+        {
+            using var document = JsonDocument.Parse(canonicalManifest);
+            var root = document.RootElement;
+            if (root.GetProperty("manifestSchemaVersion").GetString()
+                    != CalculationBuildProvenance.CurrentManifestSchemaVersion
+                || root.GetProperty("archiveFormatVersion").GetString()
+                    != CalculationBuildProvenance.CurrentArchiveFormatVersion)
+            {
+                return false;
+            }
+
+            var applicationVersion = root.GetProperty("applicationVersion").GetString();
+            var sourceRevision = root.GetProperty("sourceRevision").GetString();
+            buildProvenance = CalculationBuildProvenance.Create(
+                applicationVersion,
+                sourceRevision,
+                allowDevelopment: sourceRevision == "dev");
+            return root.GetProperty("engineBuild").GetString() == buildProvenance.EngineBuild;
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or KeyNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public static bool Matches(
+        InventoryProjectSnapshot snapshot,
+        string canonicalManifest,
+        string expectedSha256) =>
+        HasValidSha256(canonicalManifest, expectedSha256)
+        && TryReadBuildProvenance(canonicalManifest, out var buildProvenance)
+        && string.Equals(Create(snapshot, buildProvenance).Sha256, expectedSha256, StringComparison.Ordinal);
 }

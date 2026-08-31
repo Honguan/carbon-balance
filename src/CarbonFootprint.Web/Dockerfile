@@ -1,5 +1,6 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0.302 AS build
 WORKDIR /src
+ARG SOURCE_REVISION
 
 COPY global.json Directory.Build.props Directory.Packages.props NuGet.config CarbonFootprint.slnx ./
 COPY src/CarbonFootprint.Domain/CarbonFootprint.Domain.csproj src/CarbonFootprint.Domain/
@@ -13,7 +14,8 @@ RUN dotnet publish src/CarbonFootprint.Web/CarbonFootprint.Web.csproj \
     --configuration Release \
     --no-restore \
     --output /app/publish \
-    /p:UseAppHost=false
+    /p:UseAppHost=false \
+    /p:SourceRevisionId="$SOURCE_REVISION"
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.11 AS runtime
 WORKDIR /app
