@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using Npgsql;
 
 namespace CarbonFootprint.Web.Pages;
 
@@ -76,6 +77,14 @@ public sealed class WorkspaceModel : PageModel
     }
 
     public Guid? OrganizationId => _organizationScope.OrganizationId;
+    public string OrganizationName { get; private set; } = string.Empty;
+    public bool CanEditInventory { get; private set; }
+    public bool CanCalculate { get; private set; }
+    public bool CanReviewInventory { get; private set; }
+    public CanonicalManifest.ReportingRules? LatestReportingRules { get; private set; }
+    public bool CanEditData { get; private set; }
+    public bool CanManageFactors { get; private set; }
+    public bool HasVerifiedMfa { get; private set; }
 
     public IReadOnlyList<ProductVersionRecord> ProductVersions { get; private set; } = [];
 
@@ -100,6 +109,7 @@ public sealed class WorkspaceModel : PageModel
     public bool CanManageOrganization { get; private set; }
 
     public IReadOnlyList<OrganizationMembershipRecord> Memberships { get; private set; } = [];
+    public IReadOnlyDictionary<Guid, string> MemberNames { get; private set; } = new Dictionary<Guid, string>();
 
     public IReadOnlyList<OrganizationInvitationRecord> Invitations { get; private set; } = [];
 
@@ -155,6 +165,11 @@ public sealed class WorkspaceModel : PageModel
     [BindProperty(SupportsGet = true)]
     public Guid? ProjectVersionId { get; set; }
 
+    [BindProperty(SupportsGet = true)]
+    public Guid? ActivityId { get; set; }
+
+    public ActivityDataRecord? EditingActivity { get; private set; }
+
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         Section = NormalizeSection(Section);
@@ -182,7 +197,57 @@ public sealed class WorkspaceModel : PageModel
             Stage = null;
         }
 
+        var requestedProjectId = ProjectVersionId;
         await LoadAsync(cancellationToken);
+        if (requestedProjectId.HasValue && InventoryProjects.All(project => project.Id != requestedProjectId))
+        {
+            return NotFound();
+        }
+        if (ActivityId.HasValue && (Section != "lifecycle" || EditingActivity is null))
+        {
+            return NotFound();
+        }
+        if (EditingActivity is { } activity)
+        {
+            var values = new Dictionary<string, string?>
+            {
+                ["activityId"] = activity.Id.ToString(),
+                ["activityKind"] = activity.ActivityKind,
+                ["activityName"] = "__other__",
+                ["activityNameOther"] = activity.Name,
+                ["equipmentCategory"] = "__other__",
+                ["equipmentCategoryOther"] = activity.EquipmentCategory,
+                ["dataSourceType"] = "__other__",
+                ["dataSourceTypeOther"] = activity.DataSourceType,
+                ["dataProviderType"] = "__other__",
+                ["dataProviderOther"] = activity.DataProvider,
+                ["collectionMethod"] = "__other__",
+                ["collectionMethodOther"] = activity.CollectionMethod,
+                ["supplierOrScenario"] = activity.SupplierOrScenario.Split("計算基礎：", 2, StringSplitOptions.None)[0].TrimEnd('｜'),
+                ["sourceReference"] = activity.SourceReference,
+                ["rawValue"] = activity.RawValue.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["rawUnitCode"] = activity.RawUnitCode,
+                ["canonicalUnitCode"] = activity.CanonicalUnitCode,
+                ["factorVersionId"] = activity.FactorVersionId.ToString(),
+                ["allocationFactor"] = activity.AllocationFactor.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["isEstimated"] = activity.IsEstimated ? "true" : "false",
+                ["activityEstimationReason"] = activity.EstimationReason,
+                ["dataQuality"] = activity.DataQuality
+            };
+            using var inputs = JsonDocument.Parse(activity.FormulaInputsJson);
+            foreach (var (input, field) in new[] { ("distanceKm", "transportDistanceKm"), ("weightKg", "transportWeightKg"),
+                ("lifetime", "useLifetime"), ("frequency", "useFrequency"), ("consumptionPerUse", "useConsumptionPerUse") })
+            {
+                if (inputs.RootElement.TryGetProperty(input, out var value))
+                {
+                    values[field] = value.GetRawText();
+                }
+            }
+            foreach (var (key, value) in values)
+            {
+                ModelState.SetModelValue(key, value, value);
+            }
+        }
         return Page();
     }
 
@@ -202,7 +267,7 @@ public sealed class WorkspaceModel : PageModel
             await _onboardingService.CreateAsync(user, organizationName, cancellationToken);
             await _signInManager.RefreshSignInAsync(user);
             StatusMessage = "組織已建立。";
-            return RedirectToPage(new { section = Section });
+            return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
@@ -298,7 +363,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("organization.mail_settings.updated", "OrganizationMailSettings", settings.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "SMTP 設定已儲存。密碼以資料保護機制加密保存。";
-        return RedirectToPage(new { section = "settings", stage = "mail" });
+        return RedirectToPage(new { section = "settings", stage = "mail", projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostTestMailAsync(string recipient, CancellationToken cancellationToken)
@@ -352,7 +417,7 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
-        return RedirectToPage(new { section = "settings", stage = "mail" });
+        return RedirectToPage(new { section = "settings", stage = "mail", projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostCreateFacilityAsync(
@@ -392,7 +457,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("facility.created", "Facility", facilityId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "廠場已建立。";
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostInviteMemberAsync(
@@ -421,7 +486,7 @@ public sealed class WorkspaceModel : PageModel
                 ?? throw new InvalidOperationException("無法建立邀請連結。");
             await _emailSender.SendOrganizationInvitationAsync(invitationEmail.Trim(), link);
             StatusMessage = "組織邀請已寄出。";
-            return RedirectToPage(new { section = Section });
+            return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
@@ -448,7 +513,7 @@ public sealed class WorkspaceModel : PageModel
             AddAudit("organization.invitation.revoked", "OrganizationInvitation", invitation.Id);
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostRevokeMemberAsync(Guid membershipId, CancellationToken cancellationToken)
@@ -485,7 +550,7 @@ public sealed class WorkspaceModel : PageModel
         membership.RevokedAt = DateTimeOffset.UtcNow;
         AddAudit("organization.membership.revoked", "OrganizationMembership", membership.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostCreateProductAsync(
@@ -544,7 +609,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("product.version.created", "ProductVersion", versionId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "產品與第 1 版已建立。";
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostCreateInventoryAsync(
@@ -644,13 +709,16 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
+        var nextVersion = (await _dbContext.InventoryProjectVersions
+            .Where(item => item.ProductVersionId == productVersionId)
+            .MaxAsync(item => (int?)item.VersionNumber, cancellationToken) ?? 0) + 1;
         var projectId = Guid.NewGuid();
         _dbContext.InventoryProjectVersions.Add(new InventoryProjectVersionRecord
         {
             Id = projectId,
             OrganizationId = organizationId,
             ProductVersionId = productVersionId,
-            VersionNumber = 1,
+            VersionNumber = nextVersion,
             PeriodStart = periodStart,
             PeriodEnd = periodEnd,
             FunctionalUnit = functionalUnit.Trim(),
@@ -677,9 +745,23 @@ public sealed class WorkspaceModel : PageModel
                 Reason = defaultStageApplicability[stage] ? string.Empty : "PCR 規則禁止納入此階段。"
             }));
         AddAudit("inventory.version.created", "InventoryProjectVersion", projectId);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        StatusMessage = "盤查專案第 1 版已建立。";
-        return RedirectToPage(new { section = Section });
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: "ix_inventory_project_versions_product_version_id_version_number"
+        })
+        {
+            _dbContext.ChangeTracker.Clear();
+            ModelState.AddModelError("inventory", "另一位使用者剛建立了此產品的盤查版本，請重新儲存以建立下一版。");
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+        StatusMessage = $"盤查專案第 {nextVersion} 版已建立。";
+        return RedirectToPage(new { section = Section, projectVersionId = projectId });
     }
 
     public async Task<IActionResult> OnPostSetStageApplicabilityAsync(
@@ -728,7 +810,7 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
         if (!isApplicable && await _dbContext.ActivityData.AnyAsync(
-                item => item.InventoryProjectVersionId == project.Id && item.LifecycleStage == declaration.LifecycleStage,
+                item => item.InventoryProjectVersionId == project.Id && item.LifecycleStage == declaration.LifecycleStage && item.RetiredAt == null,
                 cancellationToken))
         {
             ModelState.AddModelError("stage", "已有活動數據的階段不可標記為不適用。");
@@ -740,7 +822,7 @@ public sealed class WorkspaceModel : PageModel
         declaration.Reason = isApplicable ? string.Empty : reason.Trim();
         AddAudit("inventory.stage.applicability.changed", "LifecycleStageDeclaration", declaration.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = project.Id });
     }
 
     public async Task<IActionResult> OnPostCreatePcrAsync(
@@ -936,7 +1018,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("pcr.version.created", "PcrVersion", pcrVersionId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = $"PCR 草稿已建立；原始文件 SHA-256：{storedDocument.Sha256}。";
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostReviewPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
@@ -978,7 +1060,7 @@ public sealed class WorkspaceModel : PageModel
         pcr.ReviewedBy = reviewerId;
         AddAudit("pcr.version.reviewed", "PcrVersion", pcr.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostRejectPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
@@ -1020,7 +1102,7 @@ public sealed class WorkspaceModel : PageModel
         pcr.ReviewedBy = reviewerId;
         AddAudit("pcr.version.rejected", "PcrVersion", pcr.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostPublishPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
@@ -1092,7 +1174,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("pcr.version.published", "PcrVersion", pcr.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "PCR 版本已發布。";
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostWithdrawPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
@@ -1124,7 +1206,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("pcr.version.withdrawn", "PcrVersion", pcr.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "PCR 版本已撤回；歷史計算不受影響。";
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostCreateFactorAsync(
@@ -1210,7 +1292,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("factor.version.created", "EmissionFactorVersion", factorVersionId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "係數草稿已建立；發布後才可用於新計算。";
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostSyncMoenvFactorsAsync(CancellationToken cancellationToken)
@@ -1230,7 +1312,7 @@ public sealed class WorkspaceModel : PageModel
                 HttpContext.TraceIdentifier,
                 cancellationToken);
             StatusMessage = $"環境部係數同步完成：新增並發布 {result.CreatedCount} 筆、啟用舊草稿 {result.PublishedExistingCount} 筆、未變更 {result.UnchangedCount} 筆、略過 {result.SkippedCount} 筆無法對應的資料。";
-            return RedirectToPage(new { section = "factors" });
+            return RedirectToPage(new { section = "factors", projectVersionId = ProjectVersionId });
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
         {
@@ -1262,7 +1344,7 @@ public sealed class WorkspaceModel : PageModel
         factor.ReviewedBy = Guid.TryParse(_userManager.GetUserId(User), out var reviewerId) ? reviewerId : null;
         AddAudit("factor.version.reviewed", "EmissionFactorVersion", factor.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostPublishFactorAsync(Guid factorVersionId, CancellationToken cancellationToken)
@@ -1310,7 +1392,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("factor.version.published", "EmissionFactorVersion", factor.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "係數版本已發布。";
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostWithdrawFactorAsync(Guid factorVersionId, CancellationToken cancellationToken)
@@ -1344,7 +1426,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("factor.version.withdrawn", "EmissionFactorVersion", factor.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "係數版本已撤回；歷史計算不受影響。";
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostSupersedeFactorAsync(
@@ -1409,7 +1491,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("factor.version.superseded", "EmissionFactorVersion", newVersionId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "更新草稿已建立；現行係數會保留至新版本審查發布，歷史計算不受影響。";
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
     public async Task<IActionResult> OnPostAddActivityAsync(
@@ -1441,7 +1523,8 @@ public sealed class WorkspaceModel : PageModel
         bool isEstimated,
         string activityEstimationReason,
         string dataQuality,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? activityId = null)
     {
         if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
         {
@@ -1449,6 +1532,15 @@ public sealed class WorkspaceModel : PageModel
         }
 
         var organizationId = RequireOrganization();
+        var existingActivity = activityId.HasValue
+            ? await _dbContext.ActivityData.SingleOrDefaultAsync(
+                item => item.Id == activityId.Value && item.InventoryProjectVersionId == inventoryProjectVersionId
+                    && item.RetiredAt == null, cancellationToken)
+            : null;
+        if (activityId.HasValue && existingActivity is null)
+        {
+            return NotFound();
+        }
         if (inventoryProjectVersionId == Guid.Empty || factorVersionId == Guid.Empty)
         {
             ModelState.AddModelError("activity", "請先建立盤查版本並選擇已發布排放係數。");
@@ -1573,10 +1665,15 @@ public sealed class WorkspaceModel : PageModel
                 throw new InvalidOperationException("活動標準單位必須等於係數分母單位。");
             }
 
-            var activityId = Guid.NewGuid();
+            var newActivityId = Guid.NewGuid();
+            if (existingActivity is not null)
+            {
+                existingActivity.RetiredAt = DateTimeOffset.UtcNow;
+                AddAudit("activity.version.superseded", "ActivityDataVersion", existingActivity.Id);
+            }
             _dbContext.ActivityData.Add(new ActivityDataRecord
             {
-                Id = activityId,
+                Id = newActivityId,
                 OrganizationId = organizationId,
                 InventoryProjectVersionId = project.Id,
                 LifecycleStage = (int)lifecycleStage,
@@ -1607,10 +1704,17 @@ public sealed class WorkspaceModel : PageModel
                 DataQuality = dataQuality.Trim(),
                 EvidenceSha256 = null
             });
-            AddAudit("activity.version.created", "ActivityDataVersion", activityId);
+            AddAudit("activity.version.created", "ActivityDataVersion", newActivityId);
             await _dbContext.SaveChangesAsync(cancellationToken);
-            StatusMessage = "活動數據已保存。";
+            StatusMessage = existingActivity is null ? "活動數據已保存。" : "活動數據已更正；舊資料與佐證保留，新版本請重新附上適用佐證。";
             return RedirectToPage(new { section = Section, stage = Stage, projectVersionId = project.Id });
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            _dbContext.ChangeTracker.Clear();
+            ModelState.AddModelError("activity", "此活動已由另一個操作更正或移除，請重新載入後再操作。");
+            await LoadAsync(cancellationToken);
+            return Page();
         }
         catch (InvalidOperationException exception)
         {
@@ -1618,6 +1722,39 @@ public sealed class WorkspaceModel : PageModel
             await LoadAsync(cancellationToken);
             return Page();
         }
+    }
+
+    public async Task<IActionResult> OnPostRemoveActivityAsync(Guid activityId, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
+        {
+            return Forbid();
+        }
+        var activity = await _dbContext.ActivityData.SingleOrDefaultAsync(
+            item => item.Id == activityId && item.RetiredAt == null, cancellationToken);
+        if (activity is null)
+        {
+            return NotFound();
+        }
+        var project = await _dbContext.InventoryProjectVersions.SingleAsync(
+            item => item.Id == activity.InventoryProjectVersionId, cancellationToken);
+        if (!InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus)))
+        {
+            return BadRequest();
+        }
+        activity.RetiredAt = DateTimeOffset.UtcNow;
+        AddAudit("activity.retired", "ActivityDataVersion", activity.Id);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            _dbContext.ChangeTracker.Clear();
+            return StatusCode(StatusCodes.Status409Conflict);
+        }
+        StatusMessage = "活動已從目前盤查移除；歷史資料與佐證仍保留。";
+        return RedirectToPage(new { section = Section, stage = Stage, projectVersionId = project.Id });
     }
 
     public async Task<IActionResult> OnPostUploadEvidenceAsync(
@@ -1631,7 +1768,7 @@ public sealed class WorkspaceModel : PageModel
         }
 
         var activity = await _dbContext.ActivityData.SingleOrDefaultAsync(
-            item => item.Id == activityDataId,
+            item => item.Id == activityDataId && item.RetiredAt == null,
             cancellationToken);
         if (activity is null)
         {
@@ -1774,7 +1911,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit("inventory.submitted", "InventoryProjectVersion", project.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "盤查版本已送審。";
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = project.Id });
     }
 
     public async Task<IActionResult> OnPostReviewInventoryAsync(
@@ -1839,154 +1976,136 @@ public sealed class WorkspaceModel : PageModel
             project.Id);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = decision == InventoryWorkflowStatus.Approved ? "盤查版本已核准。" : "盤查版本已退回補正。";
-        return RedirectToPage(new { section = Section });
+        return RedirectToPage(new { section = Section, projectVersionId = project.Id });
     }
 
     public async Task<IActionResult> OnGetExportExcelAsync(
         Guid projectVersionId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? runId = null)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ViewInventory) || !await IsMfaEnabledAsync())
         {
             return Forbid();
         }
-
-        var organizationId = RequireOrganization();
         var project = await _dbContext.InventoryProjectVersions.AsNoTracking()
-            .SingleOrDefaultAsync(
-                item => item.Id == projectVersionId && item.OrganizationId == organizationId,
-                cancellationToken);
+            .SingleOrDefaultAsync(item => item.Id == projectVersionId, cancellationToken);
         if (project is null)
         {
             return NotFound();
         }
-
-        var latestRun = await _dbContext.CalculationRuns.AsNoTracking()
-            .Where(item => item.ProjectVersionId == project.Id)
-            .OrderByDescending(item => item.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-        var lines = latestRun is null
-            ? []
-            : await _dbContext.CalculationLineItems.AsNoTracking()
-                .Where(item => item.CalculationRunId == latestRun.Id)
-                .OrderBy(item => item.LifecycleStage)
-                .ThenBy(item => item.ActivityId)
-                .ToArrayAsync(cancellationToken);
-        var activityIds = lines.Select(item => item.ActivityId).Distinct().ToArray();
-        var activityQuery = _dbContext.ActivityData.AsNoTracking()
-            .Where(item => item.InventoryProjectVersionId == project.Id);
-        if (latestRun is not null)
+        var runQuery = _dbContext.CalculationRuns.AsNoTracking()
+            .Where(item => item.ProjectVersionId == project.Id);
+        if (runId.HasValue)
         {
-            activityQuery = activityQuery.Where(item => activityIds.Contains(item.Id));
+            runQuery = runQuery.Where(item => item.Id == runId.Value);
         }
-
-        var activities = await activityQuery
-            .OrderBy(item => item.LifecycleStage)
-            .ThenBy(item => item.Name)
-            .ToArrayAsync(cancellationToken);
-        var factorIds = activities.Select(item => item.FactorVersionId).Distinct().ToArray();
-        var factors = await _dbContext.EmissionFactorVersions.AsNoTracking()
-            .Where(item => factorIds.Contains(item.Id))
-            .OrderBy(item => item.Name)
-            .ToArrayAsync(cancellationToken);
-        var factorById = factors.ToDictionary(item => item.Id);
-
+        var run = await runQuery.OrderByDescending(item => item.CreatedAt).FirstOrDefaultAsync(cancellationToken);
+        if (runId.HasValue && run is null)
+        {
+            return NotFound();
+        }
+        if (run is not null && !RunExportValidation.TryReadRules(run, out _))
+        {
+            return RunExportValidation.ConflictResult();
+        }
+        var manifest = run is not null
+            ? (Json: run.CanonicalInputManifest, Sha256: run.InputSha256)
+            : CanonicalManifest.Create(await _snapshotReader.ReadAsync(project.Id, cancellationToken), _buildProvenance);
+        var references = CanonicalManifest.ReadEvidenceReferences(manifest.Json, manifest.Sha256);
+        using var document = JsonDocument.Parse(manifest.Json);
+        var root = document.RootElement;
+        var activities = root.GetProperty("activities").EnumerateArray().ToArray();
+        var factorIds = activities.Select(activity => activity.GetProperty("factorVersionId").GetGuid()).Distinct().ToArray();
+        var factorMetadata = await _dbContext.EmissionFactorVersions.AsNoTracking()
+            .Where(factor => factorIds.Contains(factor.Id)).ToDictionaryAsync(factor => factor.Id, cancellationToken);
+        var lines = run is null ? [] : await _dbContext.CalculationLineItems.AsNoTracking()
+            .Where(item => item.CalculationRunId == run.Id)
+            .OrderBy(item => item.LifecycleStage).ThenBy(item => item.ActivityId).ToArrayAsync(cancellationToken);
+        var evidenceActivityIds = references.Keys.ToArray();
+        var evidenceFiles = await _dbContext.EvidenceFiles.AsNoTracking()
+            .Where(item => evidenceActivityIds.Contains(item.ActivityDataId))
+            .OrderBy(item => item.ActivityDataId).ToArrayAsync(cancellationToken);
         var summaryRows = new List<IReadOnlyList<object?>>
         {
             new object?[] { "欄位", "內容" },
-            new object?[] { "功能單位", project.FunctionalUnit },
-            new object?[] { "宣告單位", project.DeclaredUnit },
-            new object?[] { "盤查期間", $"{project.PeriodStart:yyyy-MM-dd}～{project.PeriodEnd:yyyy-MM-dd}" },
-            new object?[] { "系統邊界", project.SystemBoundary },
-            new object?[] { "分配方法", project.AllocationMethod },
-            new object?[] { "PCR 版本", project.PcrVersion },
-            new object?[]
-            {
-                "資料範圍",
-                latestRun is null
-                    ? "尚未建立計算版本；匯出目前活動資料"
-                    : $"計算版本 {latestRun.Id:N} 的不可變輸入與結果"
-            },
-            new object?[] { "計算結果", latestRun?.ProductTotal },
-            new object?[] { "結果單位", latestRun is null ? string.Empty : "kgCO2e" }
+            new object?[] { "功能單位", root.GetProperty("functionalUnit").GetString() },
+            new object?[] { "宣告單位", root.GetProperty("declaredUnit").GetString() },
+            new object?[] { "盤查期間", $"{root.GetProperty("periodStart").GetString()}～{root.GetProperty("periodEnd").GetString()}" },
+            new object?[] { "系統邊界", root.GetProperty("systemBoundary").GetString() },
+            new object?[] { "分配方法", root.GetProperty("allocationMethod").GetString() },
+            new object?[] { "PCR 版本", root.GetProperty("pcrVersion").GetString() },
+            new object?[] { "資料範圍", run is null ? "尚未建立計算版本；匯出目前活動資料" : $"計算版本 {run.Id:N} 的不可變輸入與結果" },
+            new object?[] { "輸入 SHA-256", manifest.Sha256 },
+            new object?[] { "係數來源欄位", "來源與名稱參照所引用的係數版本目錄；活動量、係數值、單位與分配比例取自本次匯出快照。" },
+            new object?[] { "計算結果", run?.ProductTotal },
+            new object?[] { "結果單位", run is null ? string.Empty : "kgCO2e" }
         };
         var activityRows = new List<IReadOnlyList<object?>>
         {
-            new object?[]
-            {
-                "階段", "活動名稱", "活動類型", "原始活動量", "原始單位", "標準活動量", "標準單位",
-                "係數名稱", "係數版本", "係數值", "係數單位", "分配比例", "資料品質", "來源"
-            }
+            new object?[] { "階段", "活動名稱", "活動類型", "原始活動量", "原始單位", "標準活動量", "標準單位",
+                "係數名稱", "係數版本", "係數值", "係數單位", "分配比例", "資料品質", "來源", "活動 ID" }
         };
         activityRows.AddRange(activities.Select(activity =>
         {
-            factorById.TryGetValue(activity.FactorVersionId, out var factor);
+            factorMetadata.TryGetValue(activity.GetProperty("factorVersionId").GetGuid(), out var metadata);
             return (IReadOnlyList<object?>)new object?[]
             {
-                LifecycleStageDisplayName((LifecycleStage)activity.LifecycleStage),
-                activity.Name,
-                ActivityKindDisplayName(Enum.Parse<ActivityDataKind>(activity.ActivityKind)),
-                activity.RawValue,
-                activity.RawUnitCode,
-                activity.CanonicalValue,
-                activity.CanonicalUnitCode,
-                factor?.Name ?? string.Empty,
-                factor?.VersionNumber,
-                factor?.Value,
-                factor is null ? string.Empty : $"{factor.NumeratorUnitCode}/{factor.DenominatorUnitCode}",
-                activity.AllocationFactor,
-                activity.DataQuality,
-                activity.SourceReference
+                LifecycleStageDisplayName(Enum.Parse<LifecycleStage>(activity.GetProperty("stage").GetString()!)),
+                activity.GetProperty("name").GetString(),
+                ActivityKindDisplayName(Enum.Parse<ActivityDataKind>(activity.GetProperty("kind").GetString()!)),
+                activity.GetProperty("rawValue").GetDecimal(), activity.GetProperty("rawUnitCode").GetString(),
+                activity.GetProperty("canonicalValue").GetDecimal(), activity.GetProperty("canonicalUnitCode").GetString(),
+                metadata?.Name ?? "係數版本目錄資料遺失", metadata?.VersionNumber,
+                activity.GetProperty("factorValue").GetDecimal(),
+                $"{activity.GetProperty("factorNumeratorUnit").GetString()}/{activity.GetProperty("factorDenominatorUnit").GetString()}",
+                activity.GetProperty("allocationFactor").GetDecimal(), activity.GetProperty("dataQuality").GetString(),
+                activity.GetProperty("sourceReference").GetString(), activity.GetProperty("id").GetGuid()
             };
         }));
         var factorRows = new List<IReadOnlyList<object?>>
         {
-            new object?[]
-            {
-                "係數名稱", "版本", "係數值", "單位", "地域", "來源機構", "來源資料集",
-                "公告版本", "來源網址", "原始資料 SHA-256"
-            }
+            new object?[] { "係數名稱", "版本", "係數值", "單位", "地域", "來源機構", "來源資料集",
+                "公告版本", "來源網址", "原始資料 SHA-256", "係數版本 ID" }
         };
-        factorRows.AddRange(factors.Select(factor => (IReadOnlyList<object?>)new object?[]
-        {
-            factor.Name,
-            factor.VersionNumber,
-            factor.Value,
-            $"{factor.NumeratorUnitCode}/{factor.DenominatorUnitCode}",
-            GeographyDisplayName(factor.Geography),
-            factor.SourceName,
-            factor.DatasetName,
-            factor.SourceDatasetVersion,
-            factor.SourceReference,
-            factor.OriginalDocumentSha256
-        }));
+        factorRows.AddRange(activities.DistinctBy(activity => activity.GetProperty("factorVersionId").GetGuid())
+            .Select(activity =>
+            {
+                var id = activity.GetProperty("factorVersionId").GetGuid();
+                factorMetadata.TryGetValue(id, out var metadata);
+                return (IReadOnlyList<object?>)new object?[]
+                {
+                    metadata?.Name ?? "係數版本目錄資料遺失", metadata?.VersionNumber,
+                    activity.GetProperty("factorValue").GetDecimal(),
+                    $"{activity.GetProperty("factorNumeratorUnit").GetString()}/{activity.GetProperty("factorDenominatorUnit").GetString()}",
+                    metadata is null ? null : GeographyDisplayName(metadata.Geography), metadata?.SourceName,
+                    metadata?.DatasetName, metadata?.SourceDatasetVersion, metadata?.SourceReference,
+                    metadata?.OriginalDocumentSha256, id
+                };
+            }));
         var resultRows = new List<IReadOnlyList<object?>>
         {
             new object?[] { "階段", "活動 ID", "標準活動量", "單位", "係數值", "係數單位", "排放量", "結果單位" }
         };
         resultRows.AddRange(lines.Select(line => (IReadOnlyList<object?>)new object?[]
         {
-            LifecycleStageDisplayName((LifecycleStage)line.LifecycleStage),
-            line.ActivityId,
-            line.CanonicalActivityValue,
-            line.ActivityUnitCode,
-            line.FactorValue,
-            line.FactorUnit,
-            line.Emissions,
-            line.EmissionsUnitCode
+            LifecycleStageDisplayName((LifecycleStage)line.LifecycleStage), line.ActivityId,
+            line.CanonicalActivityValue, line.ActivityUnitCode, line.FactorValue, line.FactorUnit,
+            line.Emissions, line.EmissionsUnitCode
         }));
-
-        var workbook = ExcelWorkbook.Create(
+        var evidenceRows = new List<IReadOnlyList<object?>>
+        {
+            new object?[] { "活動 ID", "檔案名稱", "SHA-256", "掃描狀態" }
+        };
+        evidenceRows.AddRange(evidenceFiles.Where(item => string.Equals(references[item.ActivityDataId], item.Sha256, StringComparison.OrdinalIgnoreCase))
+            .Select(item => (IReadOnlyList<object?>)new object?[] { item.ActivityDataId, item.OriginalFileName, item.Sha256, item.ScanStatus }));
+        return File(ExcelWorkbook.Create(
         [
-            new ExcelSheet("盤查摘要", summaryRows),
-            new ExcelSheet("五階段活動", activityRows),
-            new ExcelSheet("使用係數", factorRows),
-            new ExcelSheet("計算結果", resultRows)
-        ]);
-        return File(
-            workbook,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"碳足跡盤查-{project.Id:N}.xlsx");
+            new ExcelSheet("盤查摘要", summaryRows), new ExcelSheet("五階段活動", activityRows),
+            new ExcelSheet("使用係數", factorRows), new ExcelSheet("計算結果", resultRows),
+            new ExcelSheet("佐證索引", evidenceRows)
+        ]), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"碳足跡盤查-{(run?.Id ?? project.Id):N}.xlsx");
     }
 
     public async Task<IActionResult> OnPostCalculateAsync(Guid inventoryProjectVersionId, CancellationToken cancellationToken)
@@ -2066,9 +2185,18 @@ public sealed class WorkspaceModel : PageModel
             return;
         }
 
+        OrganizationName = await _dbContext.Organizations.AsNoTracking()
+            .Select(item => item.Name).SingleAsync(cancellationToken);
+        HasVerifiedMfa = await IsMfaEnabledAsync();
+        CanEditData = await IsAllowedAsync(OrganizationPermission.EditInventory);
+        CanEditInventory = CanEditData;
+        CanCalculate = await IsAllowedAsync(OrganizationPermission.CreateCalculationRun) && HasVerifiedMfa;
+        CanReviewInventory = await IsAllowedAsync(OrganizationPermission.ReviewInventory);
+        CanManageFactors = await IsAllowedAsync(OrganizationPermission.ManageFactors);
+        CanManageOrganization = await IsAllowedAsync(OrganizationPermission.ManageOrganization);
+
         if (Section == "settings")
         {
-            CanManageOrganization = await IsAllowedAsync(OrganizationPermission.ManageOrganization);
             MailSettings = await _dbContext.OrganizationMailSettings
                 .AsNoTracking()
                 .SingleOrDefaultAsync(cancellationToken);
@@ -2077,6 +2205,11 @@ public sealed class WorkspaceModel : PageModel
         ProductVersions = await _dbContext.ProductVersions.AsNoTracking().OrderBy(item => item.NameZhTw).ToArrayAsync(cancellationToken);
         Facilities = await _dbContext.Facilities.AsNoTracking().OrderBy(item => item.Code).ToArrayAsync(cancellationToken);
         Memberships = await _dbContext.OrganizationMemberships.AsNoTracking().OrderBy(item => item.CreatedAt).ToArrayAsync(cancellationToken);
+        var memberIds = Memberships.Select(item => item.UserId).ToArray();
+        MemberNames = await _dbContext.Users.AsNoTracking().Where(item => memberIds.Contains(item.Id))
+            .ToDictionaryAsync(item => item.Id,
+                item => string.IsNullOrWhiteSpace(item.DisplayName) ? item.UserName ?? string.Empty : item.DisplayName,
+                cancellationToken);
         Invitations = await _dbContext.OrganizationInvitations.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
         PcrVersions = await _dbContext.PcrVersions.AsNoTracking().OrderBy(item => item.RegistrationNumber).ThenByDescending(item => item.VersionNumber).ToArrayAsync(cancellationToken);
         PcrStageRules = await _dbContext.PcrStageRules.AsNoTracking().OrderBy(item => item.LifecycleStage).ToArrayAsync(cancellationToken);
@@ -2103,12 +2236,21 @@ public sealed class WorkspaceModel : PageModel
         {
             ProjectVersionId = InventoryProjects.FirstOrDefault()?.Id;
         }
+        var selectedProject = InventoryProjects.FirstOrDefault(item => item.Id == ProjectVersionId);
+        var canEditSelectedProject = selectedProject is not null
+            && InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(selectedProject.WorkflowStatus));
+        CanEditInventory &= canEditSelectedProject;
+        CanCalculate &= canEditSelectedProject;
         StageDeclarations = await _dbContext.LifecycleStageDeclarations.AsNoTracking().OrderBy(item => item.LifecycleStage).ToArrayAsync(cancellationToken);
         Factors = await _dbContext.EmissionFactorVersions.AsNoTracking().OrderBy(item => item.Name).ToArrayAsync(cancellationToken);
         SelectableFactors = Factors
             .Where(item => item.PublicationStatus == FactorPublicationStatus.Published.ToString())
             .ToArray();
-        Activities = await _dbContext.ActivityData.AsNoTracking().OrderBy(item => item.LifecycleStage).ThenBy(item => item.Name).ToArrayAsync(cancellationToken);
+        Activities = await _dbContext.ActivityData.AsNoTracking().Where(item => item.RetiredAt == null).OrderBy(item => item.LifecycleStage).ThenBy(item => item.Name).ToArrayAsync(cancellationToken);
+        EditingActivity = CanEditInventory ? Activities.FirstOrDefault(item => item.Id == ActivityId
+            && item.InventoryProjectVersionId == ProjectVersionId
+            && InventoryProjects.Any(project => project.Id == item.InventoryProjectVersionId
+                && InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus)))) : null;
         var selectedUnitCatalogueVersion = ProjectVersionId.HasValue
             ? GetActivityUnitCatalogueVersion(Activities.Where(item => item.InventoryProjectVersionId == ProjectVersionId.Value))
             : CurrentUnitCatalogueVersion;
@@ -2146,6 +2288,8 @@ public sealed class WorkspaceModel : PageModel
             : Array.Empty<CalculationRunRecord>();
         if (selectedRuns.Length > 0)
         {
+            LatestReportingRules = RunExportValidation.TryReadRules(selectedRuns[0], out var reportingRules)
+                ? reportingRules : null;
             LatestManifestHashValid = CanonicalManifest.HasValidSha256(
                 selectedRuns[0].CanonicalInputManifest,
                 selectedRuns[0].InputSha256);
@@ -2233,7 +2377,7 @@ public sealed class WorkspaceModel : PageModel
     private async Task<string> GetProjectUnitCatalogueVersionAsync(Guid projectVersionId, CancellationToken cancellationToken)
     {
         var versions = await _dbContext.ActivityData
-            .Where(item => item.InventoryProjectVersionId == projectVersionId)
+            .Where(item => item.InventoryProjectVersionId == projectVersionId && item.RetiredAt == null)
             .Select(item => item.ConversionRuleVersion)
             .Distinct()
             .ToArrayAsync(cancellationToken);
@@ -2348,7 +2492,7 @@ public sealed class WorkspaceModel : PageModel
                 item => item.IsApplicable,
                 cancellationToken);
         var activities = await _dbContext.ActivityData.AsNoTracking()
-            .Where(item => item.InventoryProjectVersionId == project.Id)
+            .Where(item => item.InventoryProjectVersionId == project.Id && item.RetiredAt == null)
             .OrderBy(item => item.Id)
             .ToArrayAsync(cancellationToken);
         var activityContexts = activities.Select(activity => new PcrActivityContext(

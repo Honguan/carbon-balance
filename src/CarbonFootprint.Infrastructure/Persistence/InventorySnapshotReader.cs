@@ -19,7 +19,7 @@ public sealed class InventorySnapshotReader : IInventorySnapshotReader
         var project = await _dbContext.InventoryProjectVersions.SingleAsync(
             item => item.Id == projectVersionId, cancellationToken);
         var activities = await _dbContext.ActivityData
-            .Where(item => item.InventoryProjectVersionId == project.Id)
+            .Where(item => item.InventoryProjectVersionId == project.Id && item.RetiredAt == null)
             .OrderBy(item => item.LifecycleStage)
             .ThenBy(item => item.Id)
             .ToArrayAsync(cancellationToken);

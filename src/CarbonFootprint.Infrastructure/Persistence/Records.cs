@@ -222,6 +222,7 @@ public sealed class EmissionFactorVersionRecord : IOrganizationOwned
 
 public sealed class ActivityDataRecord : IOrganizationOwned
 {
+    public DateTimeOffset? RetiredAt { get; set; }
     public Guid Id { get; set; }
     public Guid OrganizationId { get; set; }
     public Guid InventoryProjectVersionId { get; set; }

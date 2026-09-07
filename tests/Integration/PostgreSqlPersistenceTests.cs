@@ -11,6 +11,19 @@ using CarbonFootprint.Domain.Modules.Inventories;
 using CarbonFootprint.Web.Services;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using CarbonFootprint.Web.Pages;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
+using System.Text;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
+using Microsoft.Extensions.DependencyInjection;
+using System.IO.Compression;
+using System.Text.Json;
+using CarbonFootprint.Web.Security;
 
 namespace CarbonFootprint.Integration.Tests;
 
@@ -136,6 +149,229 @@ public sealed class PostgreSqlPersistenceTests
             run.CanonicalInputManifest, run.InputSha256));
         Assert.Equal("test-source", input.SourceReference);
         Assert.Equal(1.54320875m, run.ProductTotal);
+
+        var noEvidenceRun = new CalculationEngine().Calculate(Guid.NewGuid(), snapshot with
+        {
+            Activities = [input with { EvidenceSha256 = null }]
+        }, CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)));
+        var store = new CalculationRunStore(context);
+        await store.SaveAsync(noEvidenceRun, CancellationToken.None);
+        await store.SaveAsync(run, CancellationToken.None);
+        var transport = ActivityAmountFormula.Derive(ActivityDataKind.MaterialTransport, null, "",
+            12.3456m, 7.890m, null, null, null);
+        var use = ActivityAmountFormula.Derive(ActivityDataKind.UseEnergy, null, "kWh",
+            null, null, 3.50m, 365.00m, 0.001234560m);
+        var precisionSnapshot = snapshot with
+        {
+            FunctionalUnit = "一台電風扇／運輸與使用情境",
+            ReportingRequirements = "保留小數精度與中文來源",
+            Stages = snapshot.Stages.Select(stage => stage.Stage == LifecycleStage.Use
+                ? stage with { IsApplicable = true, Reason = null } : stage).ToArray(),
+            Activities =
+            [
+                input with
+                {
+                    Id = Guid.NewGuid(), Name = "原料運輸：甲廠 → 乙廠", Kind = ActivityDataKind.MaterialTransport,
+                    RawValue = transport.Value, CanonicalValue = transport.Value,
+                    RawUnitCode = transport.UnitCode, CanonicalUnitCode = transport.UnitCode,
+                    AmountFormulaId = transport.FormulaId, FormulaInputsJson = JsonSerializer.Serialize(transport.Inputs),
+                    FactorVersion = input.FactorVersion with { Id = Guid.NewGuid(), DenominatorUnitCode = transport.UnitCode },
+                    SourceReference = "供應商運輸紀錄（測試）"
+                },
+                input with
+                {
+                    Id = Guid.NewGuid(), Name = "使用階段耗電", Stage = LifecycleStage.Use, Kind = ActivityDataKind.UseEnergy,
+                    RawValue = use.Value, CanonicalValue = use.Value, RawUnitCode = use.UnitCode, CanonicalUnitCode = use.UnitCode,
+                    AmountFormulaId = use.FormulaId, FormulaInputsJson = JsonSerializer.Serialize(use.Inputs),
+                    FactorVersion = input.FactorVersion with { Id = Guid.NewGuid(), DenominatorUnitCode = use.UnitCode },
+                    SourceReference = "測試壽命、頻率與每次消耗"
+                }
+            ]
+        };
+        var precisionRun = new CalculationEngine().Calculate(Guid.NewGuid(), precisionSnapshot,
+            CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)));
+        await store.SaveAsync(precisionRun, CancellationToken.None);
+        await using (var persistedContext = CreateContext(organizationId))
+        {
+            foreach (var saved in new[] { noEvidenceRun, run, precisionRun })
+            {
+                var persisted = await persistedContext.CalculationRuns.AsNoTracking().SingleAsync(item => item.Id == saved.Id);
+                Assert.Equal(saved.CanonicalInputManifest, persisted.CanonicalInputManifest);
+                Assert.Equal(saved.InputSha256, persisted.InputSha256);
+                Assert.True(CanonicalManifest.HasValidSha256(persisted.CanonicalInputManifest, persisted.InputSha256));
+            }
+            var persistedPrecision = await persistedContext.CalculationRuns.AsNoTracking().SingleAsync(item => item.Id == precisionRun.Id);
+            using var frozen = JsonDocument.Parse(persistedPrecision.CanonicalInputManifest);
+            Assert.Equal(precisionSnapshot.FunctionalUnit, frozen.RootElement.GetProperty("functionalUnit").GetString());
+            var frozenActivities = frozen.RootElement.GetProperty("activities").EnumerateArray().ToArray();
+            var frozenTransport = frozenActivities.Single(activity => activity.GetProperty("amountFormulaId").GetString() == ActivityAmountFormula.TransportFormulaId);
+            var frozenUse = frozenActivities.Single(activity => activity.GetProperty("amountFormulaId").GetString() == ActivityAmountFormula.UseScenarioFormulaId);
+            Assert.Equal(12.3456m, frozenTransport.GetProperty("formulaInputs").GetProperty("distanceKm").GetDecimal());
+            Assert.Equal(7.890m, frozenTransport.GetProperty("formulaInputs").GetProperty("weightKg").GetDecimal());
+            Assert.Equal(0.001234560m, frozenUse.GetProperty("formulaInputs").GetProperty("consumptionPerUse").GetDecimal());
+            Assert.Equal(transport.Value, frozenTransport.GetProperty("canonicalValue").GetDecimal());
+            Assert.Equal(use.Value, frozenUse.GetProperty("canonicalValue").GetDecimal());
+        }
+        var evidence = new EvidenceFileRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            ActivityDataId = activity.Id,
+            ObjectKey = "test-evidence",
+            OriginalFileName = "later-evidence.pdf",
+            ContentType = "application/pdf",
+            Sha256 = new string('b', 64),
+            ScanStatus = "Clean",
+            SizeBytes = 1,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        context.EvidenceFiles.Add(evidence);
+        await context.SaveChangesAsync();
+        var reports = new ReportsModel(context, new AllowAuthorization(), new TestOrganizationScope(organizationId))
+        {
+            PageContext = new PageContext { HttpContext = new DefaultHttpContext() }
+        };
+        var before = Assert.IsType<FileContentResult>(await reports.OnPostEvidenceIndexCsvAsync(noEvidenceRun.Id, CancellationToken.None));
+        Assert.DoesNotContain("later-evidence.pdf", Encoding.UTF8.GetString(before.FileContents), StringComparison.Ordinal);
+        using var identityServices = new ServiceCollection().AddSingleton(context).AddLogging()
+            .AddIdentityCore<ApplicationUser>().AddEntityFrameworkStores<CarbonFootprintDbContext>()
+            .Services.BuildServiceProvider();
+        var http = new DefaultHttpContext();
+        var permissions = new AllowAuthorization();
+        var workspace = new WorkspaceModel(context, new TestOrganizationScope(organizationId), null!, null!, null!,
+            identityServices.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, reader,
+            permissions, null!, null!, new EphemeralDataProtectionProvider(),
+            CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)))
+        {
+            PageContext = new PageContext { HttpContext = http },
+            TempData = new TempDataDictionary(http, new MemoryTempDataProvider()),
+            Section = "lifecycle",
+            Stage = "raw-material",
+            ProjectVersionId = project.Id
+        };
+        workspace.ProjectVersionId = Guid.NewGuid();
+        Assert.IsType<NotFoundResult>(await workspace.OnGetAsync(CancellationToken.None));
+        workspace.ProjectVersionId = project.Id;
+        workspace.ActivityId = Guid.NewGuid();
+        Assert.IsType<NotFoundResult>(await workspace.OnGetAsync(CancellationToken.None));
+        workspace.ActivityId = null;
+        Task<IActionResult> CorrectActivity(WorkspaceModel page, Guid id) => page.OnPostAddActivityAsync(project.Id, LifecycleStage.RawMaterial,
+            ActivityDataKind.Material, "Corrected", "", "supplier", "equipment", "", "source", "",
+            "provider", "", "method", "", "corrected-source", 2m, null, null, null, null, null,
+            "kg", "kg", factor.Id, 0.5m, false, "", "primary", CancellationToken.None, id);
+        permissions.Role = OrganizationRole.Viewer;
+        Assert.IsType<ForbidResult>(await CorrectActivity(workspace, activity.Id));
+        Assert.IsType<ForbidResult>(await workspace.OnPostRemoveActivityAsync(activity.Id, CancellationToken.None));
+        Assert.Single((await reader.ReadAsync(project.Id, CancellationToken.None)).Activities);
+        permissions.Role = OrganizationRole.Owner;
+        var correction = await CorrectActivity(workspace, activity.Id);
+        Assert.IsType<RedirectToPageResult>(correction);
+        Assert.NotNull(changed.RetiredAt);
+        var corrected = Assert.Single((await reader.ReadAsync(project.Id, CancellationToken.None)).Activities);
+        Assert.Equal(2m, corrected.RawValue);
+        Assert.NotEqual(activity.Id, corrected.Id);
+        Assert.Null(corrected.EvidenceSha256);
+        var trackedProject = await context.InventoryProjectVersions.SingleAsync(item => item.Id == project.Id);
+        var foreignOrganizationId = Guid.NewGuid();
+        await using (var foreignContext = CreateContext(foreignOrganizationId))
+        {
+            var foreignWorkspace = new WorkspaceModel(foreignContext, new TestOrganizationScope(foreignOrganizationId),
+                null!, null!, null!, identityServices.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!,
+                new InventorySnapshotReader(foreignContext), new AllowAuthorization(), null!, null!,
+                new EphemeralDataProtectionProvider(), CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)))
+            {
+                PageContext = new PageContext { HttpContext = new DefaultHttpContext() }
+            };
+            Assert.IsType<NotFoundResult>(await CorrectActivity(foreignWorkspace, corrected.Id));
+            Assert.IsType<NotFoundResult>(await foreignWorkspace.OnPostRemoveActivityAsync(corrected.Id, CancellationToken.None));
+        }
+        foreach (var status in new[] { "Submitted", "Approved" })
+        {
+            trackedProject.WorkflowStatus = status;
+            await context.SaveChangesAsync();
+            Assert.IsType<BadRequestResult>(await workspace.OnPostRemoveActivityAsync(corrected.Id, CancellationToken.None));
+            Assert.IsType<PageResult>(await CorrectActivity(workspace, corrected.Id));
+            Assert.False(workspace.ModelState.IsValid);
+            Assert.Equal(corrected.Id, Assert.Single((await reader.ReadAsync(project.Id, CancellationToken.None)).Activities).Id);
+            workspace.ModelState.Clear();
+        }
+        trackedProject.WorkflowStatus = "ChangesRequested";
+        await context.SaveChangesAsync();
+        Assert.IsType<RedirectToPageResult>(await workspace.OnPostRemoveActivityAsync(corrected.Id, CancellationToken.None));
+        Assert.IsType<NotFoundResult>(await workspace.OnPostRemoveActivityAsync(corrected.Id, CancellationToken.None));
+        Assert.Empty((await reader.ReadAsync(project.Id, CancellationToken.None)).Activities);
+        for (var expectedVersion = 2; expectedVersion <= 3; expectedVersion++)
+        {
+            Assert.IsType<RedirectToPageResult>(await workspace.OnPostCreateInventoryAsync(productVersion.Id,
+                project.PeriodStart, project.PeriodEnd, "next inventory", "kg", "cradle-to-grave",
+                "mass", "test allocation", "none", "none", "none", pcr.Id, CancellationToken.None));
+            Assert.Equal(expectedVersion, await context.InventoryProjectVersions
+                .Where(item => item.ProductVersionId == productVersion.Id).MaxAsync(item => item.VersionNumber));
+        }
+        var after = Assert.IsType<FileContentResult>(await reports.OnPostEvidenceIndexCsvAsync(run.Id, CancellationToken.None));
+        Assert.Contains("later-evidence.pdf", Encoding.UTF8.GetString(after.FileContents), StringComparison.Ordinal);
+        Assert.Equal(run.CanonicalInputManifest, (await context.CalculationRuns.SingleAsync(item => item.Id == run.Id)).CanonicalInputManifest);
+        Assert.True(await context.EvidenceFiles.AnyAsync(item => item.Id == evidence.Id));
+        await reports.OnGetAsync(CancellationToken.None);
+        Assert.Equal(6, reports.PcrRulesByRunId[run.Id].RoundingDecimalPlaces);
+        var excel = Assert.IsType<FileContentResult>(await workspace.OnGetExportExcelAsync(project.Id, CancellationToken.None, run.Id));
+        using (var archive = new ZipArchive(new MemoryStream(excel.FileContents)))
+        {
+            using var sheet = new StreamReader(archive.GetEntry("xl/worksheets/sheet2.xml")!.Open());
+            var xml = await sheet.ReadToEndAsync();
+            Assert.Contains("Material", xml, StringComparison.Ordinal);
+            Assert.DoesNotContain("Corrected", xml, StringComparison.Ordinal);
+            Assert.Contains("test-source", xml, StringComparison.Ordinal);
+            Assert.NotNull(archive.GetEntry("xl/worksheets/sheet5.xml"));
+        }
+
+        var archiveReport = new ArchiveReportModel(context, new AllowAuthorization())
+        {
+            PageContext = new PageContext { HttpContext = new DefaultHttpContext() }
+        };
+        try
+        {
+            var unknownSchema = precisionRun.CanonicalInputManifest.Replace(
+                CalculationBuildProvenance.CurrentManifestSchemaVersion, "unknown-schema", StringComparison.Ordinal);
+            foreach (var (invalidManifest, invalidHash) in new[]
+            {
+                (precisionRun.CanonicalInputManifest, new string('0', 64)),
+                ("{}", CanonicalManifest.ComputeSha256("{}")),
+                (unknownSchema, CanonicalManifest.ComputeSha256(unknownSchema))
+            })
+            {
+                await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE app.calculation_runs SET canonical_input_manifest = {invalidManifest}, input_sha256 = {invalidHash} WHERE id = {precisionRun.Id}");
+                context.ChangeTracker.Clear();
+                var auditCount = await context.AuditEvents.CountAsync();
+                await reports.OnGetAsync(CancellationToken.None);
+                Assert.Contains(precisionRun.Id, reports.InvalidRunIds);
+                Assert.DoesNotContain(precisionRun.Id, reports.PcrRulesByRunId.Keys);
+                Assert.Contains(run.Id, reports.PcrRulesByRunId.Keys);
+                Assert.Contains(reports.Runs, item => item.Id == precisionRun.Id);
+                Func<Task<IActionResult>>[] exports =
+                [
+                    () => reports.OnPostInventoryCsvAsync(precisionRun.Id, CancellationToken.None),
+                    () => reports.OnPostEvidenceIndexCsvAsync(precisionRun.Id, CancellationToken.None),
+                    () => reports.OnPostManifestAsync(precisionRun.Id, CancellationToken.None),
+                    () => archiveReport.OnGetAsync(precisionRun.Id, CancellationToken.None),
+                    () => workspace.OnGetExportExcelAsync(project.Id, CancellationToken.None, precisionRun.Id)
+                ];
+                foreach (var export in exports)
+                {
+                    var conflict = Assert.IsType<ObjectResult>(await export());
+                    Assert.Equal(StatusCodes.Status409Conflict, conflict.StatusCode);
+                    Assert.Contains("暫停匯出", Assert.IsType<string>(conflict.Value), StringComparison.Ordinal);
+                }
+                Assert.Equal(auditCount, await context.AuditEvents.CountAsync());
+                Assert.Equal(invalidManifest, (await context.CalculationRuns.AsNoTracking()
+                    .SingleAsync(item => item.Id == precisionRun.Id)).CanonicalInputManifest);
+            }
+        }
+        finally
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE app.calculation_runs SET canonical_input_manifest = {precisionRun.CanonicalInputManifest}, input_sha256 = {precisionRun.InputSha256} WHERE id = {precisionRun.Id}");
+            context.ChangeTracker.Clear();
+        }
 
         await using var otherOrganization = CreateContext(Guid.NewGuid());
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -1056,6 +1292,24 @@ public sealed class PostgreSqlPersistenceTests
     private sealed record TestOrganizationScope(Guid Value) : IOrganizationScope
     {
         public Guid? OrganizationId => Value;
+    }
+
+    private sealed class AllowAuthorization : IAuthorizationService
+    {
+        public OrganizationRole Role { get; set; } = OrganizationRole.Owner;
+        public Task<AuthorizationResult> AuthorizeAsync(ClaimsPrincipal user, object? resource, IEnumerable<IAuthorizationRequirement> requirements)
+            => Task.FromResult(requirements.OfType<OrganizationPermissionRequirement>()
+                .All(requirement => OrganizationPermissions.IsAllowed(Role, requirement.Permission))
+                    ? AuthorizationResult.Success() : AuthorizationResult.Failed());
+
+        public Task<AuthorizationResult> AuthorizeAsync(ClaimsPrincipal user, object? resource, string policyName)
+            => Task.FromResult(AuthorizationResult.Success());
+    }
+
+    private sealed class MemoryTempDataProvider : ITempDataProvider
+    {
+        public IDictionary<string, object> LoadTempData(HttpContext context) => new Dictionary<string, object>();
+        public void SaveTempData(HttpContext context, IDictionary<string, object> values) { }
     }
 
     private sealed class MutableOrganizationScope : IOrganizationScope

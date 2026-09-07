@@ -70,6 +70,33 @@ public sealed class CalculationEngineValidationTests
     }
 
     [Fact]
+    public void CanonicalManifest_ReportReferencesAreFrozenAndRequireValidHash()
+    {
+        var snapshot = CreateSnapshot(rawValue: 1m, canonicalValue: 1m) with
+        {
+            FunctionalUnit = "frozen unit",
+            CutoffThresholdPercent = 1m,
+            RoundingDecimalPlaces = 6,
+            ReportingRequirements = "frozen rules"
+        };
+        var original = snapshot.Activities[0];
+        snapshot = snapshot with { Activities = [original with { EvidenceSha256 = new string('b', 64) }] };
+        var manifest = CanonicalManifest.Create(snapshot, TestBuildProvenance);
+
+        var references = CanonicalManifest.ReadEvidenceReferences(manifest.Json, manifest.Sha256);
+        Assert.Equal(new string('b', 64), references[original.Id]);
+        var rules = CanonicalManifest.ReadReportingRules(manifest.Json, manifest.Sha256);
+        Assert.Equal(new CanonicalManifest.ReportingRules("frozen unit", 1m, 6, "frozen rules"), rules);
+        var withoutEvidence = CanonicalManifest.Create(snapshot with
+        {
+            Activities = [original with { EvidenceSha256 = null }]
+        }, TestBuildProvenance);
+        Assert.Empty(CanonicalManifest.ReadEvidenceReferences(withoutEvidence.Json, withoutEvidence.Sha256));
+        Assert.Throws<InvalidOperationException>(() => CanonicalManifest.ReadEvidenceReferences(manifest.Json, new string('0', 64)));
+        Assert.Throws<InvalidOperationException>(() => CanonicalManifest.ReadReportingRules(manifest.Json, new string('0', 64)));
+    }
+
+    [Fact]
     public void Calculate_UnsupportedPcrFormulaRuleSet_IsRejected()
     {
         var snapshot = CreateSnapshot(rawValue: 1m, canonicalValue: 1m) with

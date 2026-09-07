@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using CarbonFootprint.Domain.Modules.Inventories;
+using CarbonFootprint.Domain.Modules.Calculations;
 using CarbonFootprint.Domain.Modules.Organizations;
 using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Web.Security;
@@ -30,32 +32,35 @@ public sealed class ReportsModel : PageModel
     }
 
     public IReadOnlyList<CalculationRunRecord> Runs { get; private set; } = [];
+    public IReadOnlySet<Guid> InvalidRunIds { get; private set; } = new HashSet<Guid>();
+    public bool CanExport { get; private set; }
 
-    public IReadOnlyDictionary<Guid, PcrVersionRecord> PcrRulesByRunId { get; private set; } =
-        new Dictionary<Guid, PcrVersionRecord>();
+    public IReadOnlyDictionary<Guid, CanonicalManifest.ReportingRules> PcrRulesByRunId { get; private set; } =
+        new Dictionary<Guid, CanonicalManifest.ReportingRules>();
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
+        CanExport = await CanViewAsync();
         if (_organizationScope.OrganizationId.HasValue)
         {
             Runs = await _dbContext.CalculationRuns.AsNoTracking()
                 .OrderByDescending(item => item.CreatedAt)
                 .ToArrayAsync(cancellationToken);
-            var projectIds = Runs.Select(item => item.ProjectVersionId).Distinct().ToArray();
-            var projects = await _dbContext.InventoryProjectVersions.AsNoTracking()
-                .Where(item => projectIds.Contains(item.Id) && item.PcrVersionId.HasValue)
-                .ToDictionaryAsync(item => item.Id, cancellationToken);
-            var pcrIds = projects.Values.Select(item => item.PcrVersionId!.Value).Distinct().ToArray();
-            var pcrs = await _dbContext.PcrVersions.AsNoTracking()
-                .Where(item => pcrIds.Contains(item.Id))
-                .ToDictionaryAsync(item => item.Id, cancellationToken);
-            PcrRulesByRunId = Runs
-                .Where(run => projects.TryGetValue(run.ProjectVersionId, out var project)
-                    && project.PcrVersionId.HasValue
-                    && pcrs.ContainsKey(project.PcrVersionId.Value))
-                .ToDictionary(
-                    run => run.Id,
-                    run => pcrs[projects[run.ProjectVersionId].PcrVersionId!.Value]);
+            var rules = new Dictionary<Guid, CanonicalManifest.ReportingRules>();
+            var invalidRunIds = new HashSet<Guid>();
+            foreach (var run in Runs)
+            {
+                if (RunExportValidation.TryReadRules(run, out var rule))
+                {
+                    rules.Add(run.Id, rule);
+                }
+                else
+                {
+                    invalidRunIds.Add(run.Id);
+                }
+            }
+            PcrRulesByRunId = rules;
+            InvalidRunIds = invalidRunIds;
         }
     }
 
@@ -72,6 +77,10 @@ public sealed class ReportsModel : PageModel
             return NotFound();
         }
 
+        if (!RunExportValidation.TryReadRules(run, out var pcr))
+        {
+            return RunExportValidation.ConflictResult();
+        }
         var project = await _dbContext.InventoryProjectVersions.SingleAsync(
             item => item.Id == run.ProjectVersionId,
             cancellationToken);
@@ -80,12 +89,7 @@ public sealed class ReportsModel : PageModel
             .OrderBy(item => item.LifecycleStage)
             .ThenBy(item => item.ActivityId)
             .ToArrayAsync(cancellationToken);
-        var pcr = project.PcrVersionId.HasValue
-            ? await _dbContext.PcrVersions.AsNoTracking().SingleOrDefaultAsync(
-                item => item.Id == project.PcrVersionId.Value,
-                cancellationToken)
-            : null;
-        var roundingDecimalPlaces = Math.Clamp(pcr?.RoundingDecimalPlaces ?? 3, 0, 12);
+        var roundingDecimalPlaces = Math.Clamp(pcr.RoundingDecimalPlaces, 0, 12);
         var builder = new StringBuilder();
         builder.AppendLine("run_id,input_sha256,workflow_status,pcr_version,functional_unit,stage,activity_id,formula_id,activity_value,activity_unit,factor_version_id,factor_value,factor_unit,allocation_factor,emissions,emissions_unit,reported_emissions,cutoff_threshold_percent,rounding_decimal_places,reporting_requirements");
         foreach (var line in lines)
@@ -95,7 +99,7 @@ public sealed class ReportsModel : PageModel
                 Csv(run.InputSha256),
                 Csv(project.WorkflowStatus),
                 Csv(run.PcrVersion),
-                Csv(project.FunctionalUnit),
+                Csv(pcr.FunctionalUnit),
                 Csv(((LifecycleStage)line.LifecycleStage).ToString()),
                 Csv(line.ActivityId),
                 Csv(line.FormulaId),
@@ -108,9 +112,9 @@ public sealed class ReportsModel : PageModel
                 Csv(line.Emissions),
                 Csv(line.EmissionsUnitCode),
                 Csv(line.Emissions.ToString($"F{roundingDecimalPlaces}", CultureInfo.InvariantCulture)),
-                Csv(pcr?.CutoffThresholdPercent ?? 0m),
+                Csv(pcr.CutoffThresholdPercent),
                 Csv(roundingDecimalPlaces),
-                Csv(pcr?.ReportingRequirements ?? string.Empty)));
+                Csv(pcr.ReportingRequirements)));
         }
 
         await AddExportAuditAsync("report.inventory-exported", run.Id, cancellationToken);
@@ -130,16 +134,19 @@ public sealed class ReportsModel : PageModel
             return NotFound();
         }
 
-        var activityIds = await _dbContext.CalculationLineItems.AsNoTracking()
-            .Where(item => item.CalculationRunId == run.Id)
-            .Select(item => item.ActivityId)
-            .ToArrayAsync(cancellationToken);
+        if (!RunExportValidation.TryReadRules(run, out _))
+        {
+            return RunExportValidation.ConflictResult();
+        }
+        var references = CanonicalManifest.ReadEvidenceReferences(run.CanonicalInputManifest, run.InputSha256);
+        var activityIds = references.Keys.ToArray();
         var evidenceFiles = await _dbContext.EvidenceFiles.AsNoTracking()
             .Where(item => activityIds.Contains(item.ActivityDataId))
             .OrderBy(item => item.ActivityDataId)
             .ToArrayAsync(cancellationToken);
         var builder = new StringBuilder("run_id,activity_id,file_name,content_type,size_bytes,sha256,scan_status,object_key\r\n");
-        foreach (var evidence in evidenceFiles)
+        foreach (var evidence in evidenceFiles.Where(item =>
+            string.Equals(references[item.ActivityDataId], item.Sha256, StringComparison.OrdinalIgnoreCase)))
         {
             builder.AppendLine(string.Join(",",
                 Csv(run.Id),
@@ -169,6 +176,10 @@ public sealed class ReportsModel : PageModel
             return NotFound();
         }
 
+        if (!RunExportValidation.TryReadRules(run, out _))
+        {
+            return RunExportValidation.ConflictResult();
+        }
         await AddExportAuditAsync("report.manifest-exported", run.Id, cancellationToken);
         return File(
             Encoding.UTF8.GetBytes(run.CanonicalInputManifest),
@@ -231,4 +242,35 @@ public sealed class ReportsModel : PageModel
 
     private static byte[] WithUtf8Bom(string value) =>
         [.. Encoding.UTF8.GetPreamble(), .. Encoding.UTF8.GetBytes(value)];
+}
+
+internal static class RunExportValidation
+{
+    public static bool TryReadRules(CalculationRunRecord run, out CanonicalManifest.ReportingRules rules)
+    {
+        rules = null!;
+        if (!CanonicalManifest.HasValidSha256(run.CanonicalInputManifest, run.InputSha256)
+            || !CanonicalManifest.TryReadBuildProvenance(run.CanonicalInputManifest, out _))
+        {
+            return false;
+        }
+        try
+        {
+            rules = CanonicalManifest.ReadReportingRules(run.CanonicalInputManifest, run.InputSha256);
+            _ = CanonicalManifest.ReadEvidenceReferences(run.CanonicalInputManifest, run.InputSha256);
+            return rules.RoundingDecimalPlaces is >= 0 and <= 12
+                && rules.CutoffThresholdPercent is >= 0m and <= 100m;
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException
+            or KeyNotFoundException or FormatException or ArgumentException or OverflowException)
+        {
+            return false;
+        }
+    }
+
+    public static ObjectResult ConflictResult() => new(
+        "此計算版本的輸入快照雜湊不符或格式不受支援，暫停匯出。請由管理者檢查原始資料與修復紀錄；本次操作未變更任何資料。")
+    {
+        StatusCode = StatusCodes.Status409Conflict
+    };
 }

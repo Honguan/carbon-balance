@@ -28,24 +28,25 @@ const initializeSite = (root = document) => {
             const enabled = select.value === "__other__";
             target.hidden = !enabled;
             target.required = enabled;
-            if (!enabled) target.value = "";
+            target.disabled = !enabled;
         };
         select.addEventListener("change", sync);
         sync();
     });
 
     root.querySelectorAll("select[data-auto-submit-select]").forEach((select) => {
+        let previousValue = select.value;
         select.addEventListener("change", () => {
             if (!select.value || !(select.form instanceof HTMLFormElement)) {
                 return;
             }
 
-            if (typeof select.form.requestSubmit === "function") {
-                select.form.requestSubmit();
-                return;
+            select.form.requestSubmit();
+            if (select.form.dataset.submitting !== "true") {
+                select.value = previousValue;
+            } else {
+                previousValue = select.value;
             }
-
-            select.form.submit();
         });
     });
 
@@ -80,12 +81,20 @@ const initializeSite = (root = document) => {
             return;
         }
 
-        input.addEventListener("input", () => {
+        const status = document.createElement("p");
+        status.setAttribute("role", "status");
+        input.after(status);
+        const filter = () => {
             const query = input.value.trim().toLocaleLowerCase("zh-TW");
+            let visibleCount = 0;
             list.querySelectorAll("[data-factor-list-item]").forEach((item) => {
                 item.hidden = Boolean(query) && !item.textContent.toLocaleLowerCase("zh-TW").includes(query);
+                if (!item.hidden) visibleCount++;
             });
-        });
+            status.textContent = visibleCount ? `顯示 ${visibleCount} 筆係數。` : "沒有符合的係數，請調整搜尋條件。";
+        };
+        input.addEventListener("input", filter);
+        filter();
     });
 
     root.querySelectorAll("[data-emission-form]").forEach((form) => {
@@ -109,6 +118,7 @@ const initializeSite = (root = document) => {
                 container.hidden = !enabled;
                 container.querySelectorAll("input, select").forEach((input) => {
                     input.required = enabled;
+                    input.disabled = !enabled;
                 });
             });
         };
@@ -157,9 +167,9 @@ const initializeSite = (root = document) => {
                 const matchesQuery = !factorQuery
                     || (option.dataset.factorSearch ?? option.textContent).toLocaleLowerCase("zh-TW").includes(factorQuery);
                 option.disabled = Boolean(option.value) && !matchesUnit;
-                option.hidden = Boolean(option.value) && !matchesQuery;
+                option.hidden = Boolean(option.value) && !matchesQuery && !option.selected;
             });
-            if (factorSelect?.selectedOptions[0]?.disabled || factorSelect?.selectedOptions[0]?.hidden) {
+            if (factorSelect?.selectedOptions[0]?.disabled) {
                 factorSelect.value = "";
             }
 
@@ -186,94 +196,48 @@ const initializeSite = (root = document) => {
     });
 };
 
-let workspaceNavigationSequence = 0;
-let workspaceNavigationController;
-
-const loadWorkspaceContent = async (link, replaceHistory) => {
-    const url = new URL(link.href, window.location.origin);
-    const workspacePath = url.pathname.toLowerCase();
-    if (url.origin !== window.location.origin || (workspacePath !== "/workspace" && !workspacePath.startsWith("/workspace/"))) {
-        return false;
-    }
-
-    const sequence = ++workspaceNavigationSequence;
-    workspaceNavigationController?.abort();
-    const controller = new AbortController();
-    workspaceNavigationController = controller;
-    let response;
-    try {
-        response = await fetch(url, {
-            headers: { "X-Requested-With": "XMLHttpRequest" },
-            credentials: "same-origin",
-            signal: controller.signal
-        });
-    } catch (error) {
-        if (error?.name === "AbortError") {
-            return true;
-        }
-        throw error;
-    }
-    if (sequence !== workspaceNavigationSequence) {
-        return true;
-    }
-    if (!response.ok) {
-        return false;
-    }
-
-    const html = await response.text();
-    if (sequence !== workspaceNavigationSequence) {
-        return true;
-    }
-    const parsed = new DOMParser().parseFromString(html, "text/html");
-    const nextContent = parsed.querySelector("[data-workspace-content]");
-    const currentContent = document.querySelector("[data-workspace-content]");
-    if (!nextContent || !currentContent) {
-        return false;
-    }
-
-    currentContent.replaceWith(nextContent);
-    document.querySelectorAll("[data-workspace-nav]").forEach((navLink) => {
-        const navUrl = new URL(navLink.href, window.location.origin);
-        navLink.setAttribute("aria-current", navUrl.href === url.href ? "page" : "");
-    });
-    if (replaceHistory) {
-        window.history.pushState({ workspace: true }, "", url.href);
-    }
-    document.title = parsed.title;
-    initializeSite(nextContent);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    return true;
-};
-
 document.addEventListener("DOMContentLoaded", () => {
     initializeSite();
-    document.addEventListener("click", async (event) => {
-        const link = event.target instanceof Element
-            ? event.target.closest("a[data-workspace-nav]")
-            : null;
-        if (!(link instanceof HTMLAnchorElement) || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-            return;
-        }
+    const snapshot = (form) => JSON.stringify(Array.from(new FormData(form), ([name, value]) =>
+        [name, value instanceof File ? [value.name, value.size, value.name ? value.lastModified : 0] : value]));
+    const originals = new Map(Array.from(document.querySelectorAll("form[method='post']"),
+        (form) => [form, snapshot(form)]));
+    let leaving = false;
+    const hasChanges = (except) => Array.from(originals).some(([form, original]) =>
+        form !== except && (form.dataset.unsaved === "true" || snapshot(form) !== original));
 
-        event.preventDefault();
-        try {
-            if (!await loadWorkspaceContent(link, true)) {
-                window.location.assign(link.href);
-            }
-        } catch {
-            window.location.assign(link.href);
+    window.addEventListener("beforeunload", (event) => {
+        if (!leaving && hasChanges()) {
+            event.preventDefault();
+            event.returnValue = "";
         }
     });
-
-    window.addEventListener("popstate", async () => {
-        const link = document.createElement("a");
-        link.href = window.location.href;
-        try {
-            if (!await loadWorkspaceContent(link, false)) {
-                window.location.reload();
-            }
-        } catch {
-            window.location.reload();
+    document.addEventListener("submit", (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || event.defaultPrevented) return;
+        if (form.dataset.submitting === "true" || !form.checkValidity()) {
+            event.preventDefault();
+            return;
         }
+        if (form.dataset.download !== undefined) return;
+        if (hasChanges(form) && !window.confirm("其他表單尚未儲存，確定離開並捨棄變更？")) {
+            event.preventDefault();
+            return;
+        }
+        form.dataset.submitting = "true";
+        form.setAttribute("aria-busy", "true");
+        form.querySelectorAll("button[type='submit'], input[type='submit']").forEach((button) => {
+            // Keep named submitters enabled so their values reach the server.
+            button.setAttribute("aria-disabled", "true");
+        });
+        leaving = true;
+    });
+    window.addEventListener("pageshow", () => {
+        leaving = false;
+        document.querySelectorAll("form[data-submitting='true']").forEach((form) => {
+            delete form.dataset.submitting;
+            form.removeAttribute("aria-busy");
+            form.querySelectorAll("[aria-disabled='true']").forEach((button) => button.removeAttribute("aria-disabled"));
+        });
     });
 });

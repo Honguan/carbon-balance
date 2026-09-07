@@ -5,8 +5,7 @@ namespace CarbonFootprint.Web.Pages;
 
 public class IndexModel : PageModel
 {
-    public void OnGet()
-    {
-
-    }
+    public IActionResult OnGet() => User.Identity?.IsAuthenticated == true
+        ? RedirectToPage("/Workspace")
+        : Page();
 }

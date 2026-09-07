@@ -14,98 +14,110 @@
         <section class="workspace-subpanel mb-3">
             <h3 class="h6">同步環境部公開係數</h3>
             <p>資料來源：環境部「碳足跡排放係數」資料集 CFP_P_02。重新整理頁面不會匯入資料；請按下方按鈕執行同步。官方資料會直接寫入並發布，不需人工審查；既有版本與歷史計算不會被覆寫。</p>
-            <form method="post" asp-page="/Workspace" asp-page-handler="SyncMoenvFactors" asp-route-section="factors">
-                <button class="btn btn-primary" type="submit">同步並導入可用係數</button>
+            <form method="post" asp-page="/Workspace" asp-page-handler="SyncMoenvFactors" preserve-input-for="SyncMoenvFactors" asp-route-section="factors" asp-route-projectVersionId="@Model.ProjectVersionId">
+                <fieldset disabled="@(!Model.CanManageFactors || !Model.HasVerifiedMfa)">
+                    <button class="btn btn-primary" type="submit">同步並導入可用係數</button>
+                </fieldset>
+                @if (!Model.CanManageFactors || !Model.HasVerifiedMfa)
+                {
+                    <p class="workspace-select-help mt-2">此操作需要係數管理權限，且須完成多因素驗證。</p>
+                }
             </form>
             <p class="workspace-select-help mt-2 mb-0">未設定自有金鑰時，系統會從政府資料開放平臺取得目前的官方 JSON 公開下載網址。</p>
         </section>
 
         <details class="lifecycle-factor-registry">
             <summary>手動新增係數（需審查）</summary>
-            <form method="post" asp-page="/Workspace" asp-page-handler="CreateFactor" asp-route-section="factors">
-                <div class="lifecycle-form-grid">
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="factorName">係數名稱</label>
-                        <input class="form-control" id="factorName" name="factorName" required />
+            <form method="post" asp-page="/Workspace" asp-page-handler="CreateFactor" preserve-input-for="CreateFactor" asp-route-section="factors" asp-route-projectVersionId="@Model.ProjectVersionId">
+                <fieldset disabled="@(!Model.CanManageFactors)">
+                    <div class="lifecycle-form-grid">
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="factorName">係數名稱</label>
+                            <input class="form-control" id="factorName" name="factorName" required />
+                        </div>
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="factorValue">係數值</label>
+                            <input class="form-control" type="number" step="any" min="0" id="factorValue" name="factorValue" required />
+                        </div>
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="denominatorUnitCode">係數分母單位</label>
+                            <select class="form-select" id="denominatorUnitCode" name="denominatorUnitCode" required>
+                                @foreach (var unit in Model.Units)
+                                {
+                                    <option value="@unit.Code">kgCO2e／@unit.Code</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="factorSourceType">來源類型</label>
+                            <select class="form-select" id="factorSourceType" name="factorSourceType" required data-controlled-other data-other-target="#factorSourceTypeOther">
+                                <option value="government-database">主管機關／政府資料庫</option>
+                                <option value="lca-database">國際 LCA 資料庫</option>
+                                <option value="academic-paper">學術文獻／論文</option>
+                                <option value="test-report">檢測／查驗報告</option>
+                                <option value="supplier-data">供應商一級資料</option>
+                                <option value="self-calculated">自廠計算係數</option>
+                                <option value="__other__">其他（自行輸入）</option>
+                            </select>
+                            <input class="form-control mt-2" id="factorSourceTypeOther" name="factorSourceTypeOther" placeholder="請輸入其他來源類型" hidden />
+                        </div>
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="factorGeography">適用地域</label>
+                            <select class="form-select" id="factorGeography" name="factorGeography" required data-controlled-other data-other-target="#factorGeographyOther">
+                                <option value="TW">台灣</option>
+                                <option value="Global">全球</option>
+                                <option value="East Asia">東亞</option>
+                                <option value="EU">歐盟</option>
+                                <option value="US">美國</option>
+                                <option value="CN">中國</option>
+                                <option value="JP">日本</option>
+                                <option value="__other__">其他（自行輸入）</option>
+                            </select>
+                            <input class="form-control mt-2" id="factorGeographyOther" name="factorGeographyOther" placeholder="請輸入其他地域" hidden />
+                        </div>
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="factorValidFrom">有效起日</label>
+                            <input class="form-control" type="date" id="factorValidFrom" name="factorValidFrom" required />
+                        </div>
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="factorValidTo">有效迄日</label>
+                            <input class="form-control" type="date" id="factorValidTo" name="factorValidTo" required />
+                        </div>
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="sourceDatasetVersion">來源資料集版本</label>
+                            <input class="form-control" id="sourceDatasetVersion" name="sourceDatasetVersion" required />
+                        </div>
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="licenseCode">授權識別</label>
+                            <input class="form-control" id="licenseCode" name="licenseCode" required />
+                        </div>
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="factorSourceName">來源機構／文件</label>
+                            <input class="form-control" id="factorSourceName" name="factorSourceName" required />
+                        </div>
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="factorSourceReference">來源網址／文件編號</label>
+                            <input class="form-control" id="factorSourceReference" name="factorSourceReference" required />
+                        </div>
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="datasetName">資料集名稱</label>
+                            <input class="form-control" id="datasetName" name="datasetName" required />
+                        </div>
+                        <div class="lifecycle-field">
+                            <label class="form-label" for="factorOriginalDocumentName">原始文件名稱</label>
+                            <input class="form-control" id="factorOriginalDocumentName" name="factorOriginalDocumentName" required />
+                        </div>
+                        <div class="lifecycle-field lifecycle-field--wide">
+                            <label class="form-label" for="factorApplicability">適用性</label>
+                            <textarea class="form-control" id="factorApplicability" name="factorApplicability" required></textarea>
+                        </div>
                     </div>
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="factorValue">係數值</label>
-                        <input class="form-control" type="number" step="any" min="0" id="factorValue" name="factorValue" required />
-                    </div>
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="denominatorUnitCode">係數分母單位</label>
-                        <select class="form-select" id="denominatorUnitCode" name="denominatorUnitCode" required>
-                            @foreach (var unit in Model.Units)
-                            {
-                                <option value="@unit.Code">kgCO2e／@unit.Code</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="factorSourceType">來源類型</label>
-                        <select class="form-select" id="factorSourceType" name="factorSourceType" required data-controlled-other data-other-target="#factorSourceTypeOther">
-                            <option value="government-database">主管機關／政府資料庫</option>
-                            <option value="lca-database">國際 LCA 資料庫</option>
-                            <option value="academic-paper">學術文獻／論文</option>
-                            <option value="test-report">檢測／查驗報告</option>
-                            <option value="supplier-data">供應商一級資料</option>
-                            <option value="self-calculated">自廠計算係數</option>
-                            <option value="__other__">其他（自行輸入）</option>
-                        </select>
-                        <input class="form-control mt-2" id="factorSourceTypeOther" name="factorSourceTypeOther" placeholder="請輸入其他來源類型" hidden />
-                    </div>
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="factorGeography">適用地域</label>
-                        <select class="form-select" id="factorGeography" name="factorGeography" required data-controlled-other data-other-target="#factorGeographyOther">
-                            <option value="TW">台灣</option>
-                            <option value="Global">全球</option>
-                            <option value="East Asia">東亞</option>
-                            <option value="EU">歐盟</option>
-                            <option value="US">美國</option>
-                            <option value="CN">中國</option>
-                            <option value="JP">日本</option>
-                            <option value="__other__">其他（自行輸入）</option>
-                        </select>
-                        <input class="form-control mt-2" id="factorGeographyOther" name="factorGeographyOther" placeholder="請輸入其他地域" hidden />
-                    </div>
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="factorValidFrom">有效起日</label>
-                        <input class="form-control" type="date" id="factorValidFrom" name="factorValidFrom" required />
-                    </div>
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="factorValidTo">有效迄日</label>
-                        <input class="form-control" type="date" id="factorValidTo" name="factorValidTo" required />
-                    </div>
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="sourceDatasetVersion">來源資料集版本</label>
-                        <input class="form-control" id="sourceDatasetVersion" name="sourceDatasetVersion" required />
-                    </div>
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="licenseCode">授權識別</label>
-                        <input class="form-control" id="licenseCode" name="licenseCode" required />
-                    </div>
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="factorSourceName">來源機構／文件</label>
-                        <input class="form-control" id="factorSourceName" name="factorSourceName" required />
-                    </div>
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="factorSourceReference">來源網址／文件編號</label>
-                        <input class="form-control" id="factorSourceReference" name="factorSourceReference" required />
-                    </div>
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="datasetName">資料集名稱</label>
-                        <input class="form-control" id="datasetName" name="datasetName" required />
-                    </div>
-                    <div class="lifecycle-field">
-                        <label class="form-label" for="factorOriginalDocumentName">原始文件名稱</label>
-                        <input class="form-control" id="factorOriginalDocumentName" name="factorOriginalDocumentName" required />
-                    </div>
-                    <div class="lifecycle-field lifecycle-field--wide">
-                        <label class="form-label" for="factorApplicability">適用性</label>
-                        <textarea class="form-control" id="factorApplicability" name="factorApplicability" required></textarea>
-                    </div>
-                </div>
-                <button class="btn btn-outline-primary mt-2" type="submit">建立係數草稿</button>
+                    <button class="btn btn-outline-primary mt-2" type="submit">建立係數草稿</button>
+                </fieldset>
+                @if (!Model.CanManageFactors)
+                {
+                    <p class="workspace-select-help mt-2">此操作需要係數管理權限。</p>
+                }
             </form>
         </details>
 
@@ -144,30 +156,48 @@
                         </details>
                         @if (factor.PublicationStatus == FactorPublicationStatus.Draft.ToString())
                         {
-                            <form class="d-inline" method="post" asp-page="/Workspace" asp-page-handler="ReviewFactor" asp-route-section="factors">
-                                <input type="hidden" name="factorVersionId" value="@factor.Id" />
-                                <button class="btn btn-sm btn-outline-primary" type="submit">完成審查</button>
+                            <form class="d-inline" method="post" asp-page="/Workspace" asp-page-handler="ReviewFactor" preserve-input-for="ReviewFactor-@factor.Id" asp-route-section="factors" asp-route-projectVersionId="@Model.ProjectVersionId">
+                                <fieldset disabled="@(!Model.CanManageFactors || !Model.HasVerifiedMfa)">
+                                    <input type="hidden" name="factorVersionId" value="@factor.Id" />
+                                    <button class="btn btn-sm btn-outline-primary" type="submit">完成審查</button>
+                                </fieldset>
+                                @if (!Model.CanManageFactors || !Model.HasVerifiedMfa)
+                                {
+                                    <p class="workspace-select-help mt-2">此操作需要係數管理權限，且須完成多因素驗證。</p>
+                                }
                             </form>
-                            <form class="d-inline" method="post" asp-page="/Workspace" asp-page-handler="PublishFactor" asp-route-section="factors">
-                                <input type="hidden" name="factorVersionId" value="@factor.Id" />
-                                <button class="btn btn-sm btn-success" type="submit">發布</button>
+                            <form class="d-inline" method="post" asp-page="/Workspace" asp-page-handler="PublishFactor" preserve-input-for="PublishFactor-@factor.Id" asp-route-section="factors" asp-route-projectVersionId="@Model.ProjectVersionId">
+                                <fieldset disabled="@(!Model.CanManageFactors)">
+                                    <input type="hidden" name="factorVersionId" value="@factor.Id" />
+                                    <button class="btn btn-sm btn-success" type="submit">發布</button>
+                                </fieldset>
+                                @if (!Model.CanManageFactors)
+                                {
+                                    <p class="workspace-select-help mt-2">此操作需要係數管理權限。</p>
+                                }
                             </form>
                         }
                         else if (factor.PublicationStatus == FactorPublicationStatus.Published.ToString())
                         {
-                            <form class="factor-update-form mt-2" method="post" asp-page="/Workspace" asp-page-handler="SupersedeFactor" asp-route-section="factors">
-                                <input type="hidden" name="factorVersionId" value="@factor.Id" />
-                                <label class="form-label" for="new-value-@factor.Id">更新係數值</label>
-                                <input class="form-control" id="new-value-@factor.Id" name="newFactorValue" type="number" min="0" step="any" value="@factor.Value" required />
-                                <label class="form-label mt-2" for="new-version-@factor.Id">新來源版本</label>
-                                <input class="form-control" id="new-version-@factor.Id" name="newSourceDatasetVersion" required />
-                                <label class="form-label mt-2" for="new-source-reference-@factor.Id">新來源網址／文件編號</label>
-                                <input class="form-control" id="new-source-reference-@factor.Id" name="newFactorSourceReference" value="@factor.SourceReference" required />
-                                <label class="form-label mt-2" for="new-document-name-@factor.Id">新原始文件名稱</label>
-                                <input class="form-control" id="new-document-name-@factor.Id" name="newOriginalDocumentName" required />
-                                <label class="form-label mt-2" for="new-applicability-@factor.Id">新版本適用性</label>
-                                <textarea class="form-control" id="new-applicability-@factor.Id" name="newApplicability" required>@factor.Applicability</textarea>
-                                <button class="btn btn-sm btn-outline-primary mt-2" type="submit">建立更新草稿</button>
+                            <form class="factor-update-form mt-2" method="post" asp-page="/Workspace" asp-page-handler="SupersedeFactor" preserve-input-for="SupersedeFactor-@factor.Id" asp-route-section="factors" asp-route-projectVersionId="@Model.ProjectVersionId">
+                                <fieldset disabled="@(!Model.CanManageFactors || !Model.HasVerifiedMfa)">
+                                    <input type="hidden" name="factorVersionId" value="@factor.Id" />
+                                    <label class="form-label" for="new-value-@factor.Id">更新係數值</label>
+                                    <input class="form-control" id="new-value-@factor.Id" name="newFactorValue" type="number" min="0" step="any" value="@factor.Value" required />
+                                    <label class="form-label mt-2" for="new-version-@factor.Id">新來源版本</label>
+                                    <input class="form-control" id="new-version-@factor.Id" name="newSourceDatasetVersion" required />
+                                    <label class="form-label mt-2" for="new-source-reference-@factor.Id">新來源網址／文件編號</label>
+                                    <input class="form-control" id="new-source-reference-@factor.Id" name="newFactorSourceReference" value="@factor.SourceReference" required />
+                                    <label class="form-label mt-2" for="new-document-name-@factor.Id">新原始文件名稱</label>
+                                    <input class="form-control" id="new-document-name-@factor.Id" name="newOriginalDocumentName" required />
+                                    <label class="form-label mt-2" for="new-applicability-@factor.Id">新版本適用性</label>
+                                    <textarea class="form-control" id="new-applicability-@factor.Id" name="newApplicability" required>@factor.Applicability</textarea>
+                                    <button class="btn btn-sm btn-outline-primary mt-2" type="submit">建立更新草稿</button>
+                                </fieldset>
+                                @if (!Model.CanManageFactors || !Model.HasVerifiedMfa)
+                                {
+                                    <p class="workspace-select-help mt-2">此操作需要係數管理權限，且須完成多因素驗證。</p>
+                                }
                             </form>
                         }
                     </li>

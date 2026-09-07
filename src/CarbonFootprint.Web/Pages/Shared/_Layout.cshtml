@@ -1,6 +1,8 @@
 @{
     var bodyClass = ViewData["BodyClass"]?.ToString() ?? string.Empty;
     var isAuthPage = bodyClass == "auth-page";
+    var currentPage = ViewContext.RouteData.Values["page"]?.ToString();
+    if (!isAuthPage && User.Identity?.IsAuthenticated == true) bodyClass += " application-page";
 }
 <!DOCTYPE html>
 <html lang="zh-Hant-TW">
@@ -43,20 +45,20 @@
 
                     <div class="collapse navbar-collapse" id="main-navigation">
                         <ul class="navbar-nav site-links">
-                            <li class="nav-item">
-                                <a class="nav-link" asp-area="" asp-page="/Index">碳排總覽</a>
-                            </li>
                             @if (User.Identity?.IsAuthenticated == true)
                             {
                                 <li class="nav-item">
-                                    <a class="nav-link" asp-area="" asp-page="/Workspace">盤查工作區</a>
+                                    <a class="nav-link" asp-area="" asp-page="/Workspace" asp-route-projectVersionId="@Context.Request.Query["projectVersionId"]" aria-current="@(currentPage == "/Workspace" ? "page" : null)">盤查工作區</a>
                                 </li>
                                 <li class="nav-item">
-                                    <a class="nav-link" asp-area="" asp-page="/Reports">計算與稽核匯出</a>
+                                    <a class="nav-link" asp-area="" asp-page="/Reports" aria-current="@(currentPage is "/Reports" or "/ArchiveReport" ? "page" : null)">計算與稽核匯出</a>
                                 </li>
                             }
                             else
                             {
+                                <li class="nav-item">
+                                    <a class="nav-link" asp-area="" asp-page="/Index" aria-current="@(currentPage == "/Index" ? "page" : null)">系統首頁</a>
+                                </li>
                                 <li class="nav-item">
                                     <a class="nav-link" asp-area="" asp-page="/Index" asp-fragment="lifecycle">生命週期</a>
                                 </li>

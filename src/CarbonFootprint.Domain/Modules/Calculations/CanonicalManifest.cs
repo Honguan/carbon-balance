@@ -7,6 +7,36 @@ namespace CarbonFootprint.Domain.Modules.Calculations;
 
 public static class CanonicalManifest
 {
+    public sealed record ReportingRules(string FunctionalUnit, decimal CutoffThresholdPercent,
+        int RoundingDecimalPlaces, string ReportingRequirements);
+
+    public static ReportingRules ReadReportingRules(string manifest, string sha256)
+    {
+        if (!HasValidSha256(manifest, sha256))
+        {
+            throw new InvalidOperationException("計算輸入快照雜湊不符，無法讀取報告規則。");
+        }
+        using var document = JsonDocument.Parse(manifest);
+        var root = document.RootElement;
+        return new ReportingRules(root.GetProperty("functionalUnit").GetString()!,
+            root.GetProperty("cutoffThresholdPercent").GetDecimal(),
+            root.GetProperty("roundingDecimalPlaces").GetInt32(),
+            root.GetProperty("reportingRequirements").GetString()!);
+    }
+
+    public static IReadOnlyDictionary<Guid, string> ReadEvidenceReferences(string manifest, string sha256)
+    {
+        if (!HasValidSha256(manifest, sha256))
+        {
+            throw new InvalidOperationException("計算輸入快照雜湊不符，無法匯出證據索引。");
+        }
+        using var document = JsonDocument.Parse(manifest);
+        return document.RootElement.GetProperty("activities").EnumerateArray()
+            .Where(activity => activity.GetProperty("evidenceSha256").ValueKind == JsonValueKind.String)
+            .ToDictionary(activity => activity.GetProperty("id").GetGuid(),
+                activity => activity.GetProperty("evidenceSha256").GetString()!);
+    }
+
     public static (string Json, string Sha256) Create(
         InventoryProjectSnapshot snapshot,
         CalculationBuildProvenance buildProvenance)

@@ -55,7 +55,7 @@
     <dt class="col-sm-4">資料集版本</dt><dd class="col-sm-8">@Model.DatasetVersions</dd>
     <dt class="col-sm-4">規則／單位／GWP 版本</dt><dd class="col-sm-8">@Model.Run.RuleSetVersion／@Model.Run.UnitCatalogueVersion／@Model.Run.GwpVersion</dd>
     <dt class="col-sm-4">PCR 版本</dt><dd class="col-sm-8">@Model.Run.PcrVersion</dd>
-    <dt class="col-sm-4">盤查狀態</dt><dd class="col-sm-8">@WorkflowStatusName(Model.Project.WorkflowStatus)</dd>
+    <dt class="col-sm-4">目前盤查狀態</dt><dd class="col-sm-8">@WorkflowStatusName(Model.Project.WorkflowStatus)</dd>
     <dt class="col-sm-4">資料品質摘要</dt><dd class="col-sm-8"><code>@Model.Run.DataQualitySummaryJson</code></dd>
     <dt class="col-sm-4">計算版本 ID</dt><dd class="col-sm-8"><code>@Model.Run.Id</code></dd>
     <dt class="col-sm-4">輸入資料 SHA-256</dt><dd class="col-sm-8"><code>@Model.Run.InputSha256</code></dd>

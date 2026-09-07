@@ -25,7 +25,7 @@ public sealed class ArchiveReportModel : PageModel
 
     public InventoryProjectVersionRecord Project { get; private set; } = null!;
 
-    public PcrVersionRecord? PcrRule { get; private set; }
+    public CanonicalManifest.ReportingRules? PcrRule { get; private set; }
 
     public IReadOnlyList<CalculationLineRecord> Lines { get; private set; } = [];
 
@@ -62,6 +62,10 @@ public sealed class ArchiveReportModel : PageModel
         {
             return NotFound();
         }
+        if (!RunExportValidation.TryReadRules(run, out var rules))
+        {
+            return RunExportValidation.ConflictResult();
+        }
         Run = run;
         if (CanonicalManifest.TryReadBuildProvenance(run.CanonicalInputManifest, out var buildProvenance))
         {
@@ -72,11 +76,7 @@ public sealed class ArchiveReportModel : PageModel
         }
         Project = await _dbContext.InventoryProjectVersions.AsNoTracking()
             .SingleAsync(item => item.Id == run.ProjectVersionId, cancellationToken);
-        PcrRule = Project.PcrVersionId.HasValue
-            ? await _dbContext.PcrVersions.AsNoTracking().SingleOrDefaultAsync(
-                item => item.Id == Project.PcrVersionId.Value,
-                cancellationToken)
-            : null;
+        PcrRule = rules;
         Lines = await _dbContext.CalculationLineItems.AsNoTracking()
             .Where(item => item.CalculationRunId == run.Id)
             .OrderBy(item => item.LifecycleStage)
@@ -86,11 +86,13 @@ public sealed class ArchiveReportModel : PageModel
             .Where(item => item.CalculationRunId == run.Id)
             .OrderBy(item => item.Code)
             .ToArrayAsync(cancellationToken);
-        var activityIds = Lines.Select(item => item.ActivityId).ToArray();
+        var references = CanonicalManifest.ReadEvidenceReferences(run.CanonicalInputManifest, run.InputSha256);
+        var activityIds = references.Keys.ToArray();
         var evidence = await _dbContext.EvidenceFiles.AsNoTracking()
             .Where(item => activityIds.Contains(item.ActivityDataId))
             .ToArrayAsync(cancellationToken);
         EvidenceHashes = evidence
+            .Where(item => string.Equals(references[item.ActivityDataId], item.Sha256, StringComparison.OrdinalIgnoreCase))
             .GroupBy(item => item.ActivityDataId)
             .ToDictionary(group => group.Key, group => string.Join(";", group.Select(item => item.Sha256)));
         var factorIds = Lines.Select(item => item.FactorVersionId).Distinct().ToArray();

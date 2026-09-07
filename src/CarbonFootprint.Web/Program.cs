@@ -185,6 +185,15 @@ builder.Services.AddOpenTelemetry()
 
 var app = builder.Build();
 
+if (args.Contains("--repair-canonical-manifests", StringComparer.Ordinal))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<CarbonFootprintDbContext>();
+    var repaired = await CanonicalManifestRepair.RepairAsync(dbContext, CancellationToken.None);
+    app.Logger.LogInformation("Restored original canonical bytes for {Count} calculation manifests; original hashes preserved.", repaired);
+    return;
+}
+
 if (args.Contains("--migrate", StringComparer.Ordinal))
 {
     await using var scope = app.Services.CreateAsyncScope();

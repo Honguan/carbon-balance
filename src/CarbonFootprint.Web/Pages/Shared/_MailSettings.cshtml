@@ -12,13 +12,13 @@
 
         <div asp-validation-summary="All" class="text-danger" role="alert"></div>
 
-        @if (!Model.CanManageOrganization)
+        @if (!Model.CanManageOrganization || !Model.HasVerifiedMfa)
         {
-            <p class="alert alert-info">只有組織擁有者或管理員可以修改 SMTP 設定。</p>
+            <p class="alert alert-info">只有已完成多因素驗證的組織擁有者或管理員可以修改 SMTP 設定及寄送測試信。</p>
         }
         else
         {
-            <form method="post" asp-page-handler="SaveMailSettings" asp-route-section="settings" asp-route-stage="mail" class="workspace-subpanel">
+            <form method="post" asp-page-handler="SaveMailSettings" preserve-input-for="SaveMailSettings" asp-route-section="settings" asp-route-stage="mail" class="workspace-subpanel" asp-route-projectVersionId="@Model.ProjectVersionId">
                 <div class="row g-3">
                     <div class="col-md-8">
                         <label class="form-label" for="mailHost">SMTP 主機</label>
@@ -45,7 +45,7 @@
                         <input class="form-control" id="mailFromName" name="fromName" value="@Model.MailFromName" required maxlength="200" />
                     </div>
                     <div class="col-12 form-check ms-2">
-                        <input class="form-check-input" id="mailEnableSsl" name="enableSsl" type="checkbox" value="true" @(Model.MailEnableSsl ? "checked" : null) />
+                        <input class="form-check-input" id="mailEnableSsl" name="enableSsl" type="checkbox" value="true" checked="@Model.MailEnableSsl" />
                         <label class="form-check-label" for="mailEnableSsl">使用 TLS／SSL</label>
                     </div>
                 </div>
@@ -56,7 +56,7 @@
                 }
             </form>
 
-            <form method="post" asp-page-handler="TestMail" asp-route-section="settings" asp-route-stage="mail" class="workspace-subpanel mt-3">
+            <form method="post" asp-page-handler="TestMail" preserve-input-for="TestMail" asp-route-section="settings" asp-route-stage="mail" class="workspace-subpanel mt-3" asp-route-projectVersionId="@Model.ProjectVersionId">
                 <h3 class="h6">寄送測試信</h3>
                 <label class="form-label" for="mailTestRecipient">測試收件地址</label>
                 <input class="form-control" id="mailTestRecipient" name="recipient" type="email" required maxlength="320" />

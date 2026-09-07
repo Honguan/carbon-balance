@@ -13,7 +13,8 @@
         ? Model.PcrVersions.FirstOrDefault(item => item.Id == selectedPcrId)
         : null;
     string FormatReportingDecimal(decimal value) =>
-        value.ToString($"F{Math.Clamp(selectedPcr?.RoundingDecimalPlaces ?? 3, 0, 12)}");
+        value.ToString(Model.LatestReportingRules is { } rules ? $"F{rules.RoundingDecimalPlaces}" : "G29");
+    string DisplayAmount(decimal value) => value.ToString("0.############################");
     var factorsById = Model.Factors.ToDictionary(item => item.Id);
     var hasFacilities = Model.Facilities.Count > 0;
     var hasProductVersions = Model.ProductVersions.Count > 0;
@@ -100,13 +101,14 @@
         new { Stage = LifecycleStage.Use, Number = "04", Slug = "use", Title = "使用階段", Summary = "使用壽命、頻率、能源與耗材", Formula = "每個能源或耗材的情境消耗量分別乘對應係數；多個消耗項目逐筆加總。", ActivityLabel = "使用情境／消耗項目", ScenarioLabel = "壽命、頻率與消耗量公式說明", ValueLabel = "該消耗項目的公式結果", Kinds = new[] { ActivityDataKind.UseEnergy, ActivityDataKind.UseConsumable } },
         new { Stage = LifecycleStage.EndOfLife, Number = "05", Slug = "end-of-life", Title = "廢棄處理階段", Summary = "回收、焚化、掩埋與處理運輸", Formula = "廢棄量依單位目錄換算（kg ÷ 1000 → tonne）後乘處理係數；運輸另以 tkm 乘係數。", ActivityLabel = "處理方式／運輸項目", ScenarioLabel = "處理廠／服務與運輸情境", ValueLabel = "廢棄量／重量距離活動量", Kinds = new[] { ActivityDataKind.EndOfLifeTreatment, ActivityDataKind.EndOfLifeTransport } }
     };
+    string InventoryLabel(CarbonFootprint.Infrastructure.Persistence.InventoryProjectVersionRecord inventory) =>
+        $"{Model.ProductVersions.FirstOrDefault(item => item.Id == inventory.ProductVersionId)?.NameZhTw ?? "產品"} · 第 {inventory.VersionNumber} 版 · {inventory.PeriodStart:yyyy-MM-dd}～{inventory.PeriodEnd:yyyy-MM-dd}";
     var activeLifecycleSections = lifecycleSections.Where(item => item.Slug == Model.Stage).ToArray();
 }
 <header class="workspace-hero">
-    <p class="workspace-eyebrow">產品碳足跡盤查流程</p>
+    <p class="workspace-eyebrow">產品碳足跡 / 盤查與管理</p>
     <h1>盤查工作區</h1>
-    <p>依序完成組織與產品資料、盤查邊界、係數資料庫、五階段活動數據，再建立可重現的計算結果。</p>
-    <p class="workspace-disclaimer">計算結果仍須依適用 PCR、組織程序與查驗要求完成確認。</p>
+    <p>建立資料、記錄五階段活動，保存每次計算與審查軌跡。</p>
 </header>
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
@@ -120,7 +122,7 @@
     <section class="card mb-4">
         <div class="card-body">
             <h2 class="h4">1. 建立組織</h2>
-            <form method="post" asp-page-handler="CreateOrganization">
+            <form method="post" asp-page-handler="CreateOrganization" preserve-input-for="CreateOrganization" asp-route-projectVersionId="@Model.ProjectVersionId">
                 <label class="form-label" for="organizationName">組織名稱</label>
                 <input class="form-control" id="organizationName" name="organizationName" required maxlength="200" />
                 <button class="btn btn-primary mt-3" type="submit">建立組織</button>
@@ -130,27 +132,53 @@
 }
 else
 {
-    <div class="workspace-context">
-        <span>目前組織</span>
-        <code>@Model.OrganizationId</code>
-    </div>
+    <section class="workspace-context" aria-label="目前作業範圍">
+        <div><span>目前組織</span><strong>@Model.OrganizationName</strong>
+            @if (Model.CanManageOrganization)
+            {
+                <a class="workspace-context-settings" asp-page="/Workspace" asp-route-section="settings" asp-route-stage="mail" asp-route-projectVersionId="@Model.ProjectVersionId">郵件設定</a>
+            }
+        </div>
+        @if (Model.InventoryProjects.Count > 0)
+        {
+            <form method="get" asp-page="/Workspace" asp-route-section="@Model.Section" asp-route-stage="@Model.Stage" class="workspace-project-picker">
+                <label class="form-label" for="projectVersionId">目前盤查版本</label>
+                <select class="form-select" id="projectVersionId" name="projectVersionId" data-auto-submit-select>
+                    @foreach (var inventory in Model.InventoryProjects)
+                    {
+                        <option value="@inventory.Id" selected="@(inventory.Id == Model.ProjectVersionId)">@InventoryLabel(inventory)</option>
+                    }
+                </select>
+                <button class="btn btn-outline-primary" type="submit">切換</button>
+            </form>
+        }
+        @if (selectedInventory is not null)
+        {
+            <span class="workspace-status-badge">@WorkflowStatusName(Enum.Parse<InventoryWorkflowStatus>(selectedInventory.WorkflowStatus))</span>
+        }
+    </section>
 
     <nav class="workspace-stage-nav" aria-label="盤查作業分頁">
-        <a data-workspace-nav asp-page="/Workspace" asp-route-section="governance" aria-current="@(Model.Section == "governance" ? "page" : null)"><span>01</span>組織與廠場</a>
-        <div class="workspace-stage-group" aria-current="@(isSetupSection ? "page" : null)">
-            <a data-workspace-nav asp-page="/Workspace" asp-route-section="product" aria-current="@(Model.Section == "product" ? "page" : null)"><span>02</span>產品基本資料</a>
-            <a data-workspace-nav asp-page="/Workspace" asp-route-section="pcr" aria-current="@(Model.Section == "pcr" ? "page" : null)"><span>03</span>PCR 規範</a>
-            <a data-workspace-nav asp-page="/Workspace" asp-route-section="inventory" aria-current="@(Model.Section == "inventory" ? "page" : null)"><span>04</span>盤查範圍</a>
-        </div>
-        <a data-workspace-nav asp-page="/Workspace" asp-route-section="factors" aria-current="@(Model.Section == "factors" ? "page" : null)"><span>05</span>係數資料庫</a>
-        <a data-workspace-nav asp-page="/Workspace" asp-route-section="lifecycle" asp-route-stage="raw-material" aria-current="@(Model.Section == "lifecycle" ? "page" : null)"><span>06</span>五階段活動數據</a>
-        <a data-workspace-nav asp-page="/Workspace" asp-route-section="calculation" aria-current="@(Model.Section == "calculation" ? "page" : null)"><span>07</span>計算與結果</a>
+        <a asp-page="/Workspace" asp-route-section="governance" aria-current="@(Model.Section == "governance" ? "page" : null)" asp-route-projectVersionId="@Model.ProjectVersionId"><span>01</span>組織與廠場</a>
+        <a asp-page="/Workspace" asp-route-section="product" aria-current="@(Model.Section == "product" ? "page" : null)" asp-route-projectVersionId="@Model.ProjectVersionId"><span>02</span>產品資料</a>
+        <a asp-page="/Workspace" asp-route-section="pcr" aria-current="@(Model.Section == "pcr" ? "page" : null)" asp-route-projectVersionId="@Model.ProjectVersionId"><span>03</span>PCR 規範</a>
+        <a asp-page="/Workspace" asp-route-section="inventory" aria-current="@(Model.Section is "inventory" or "setup" ? "page" : null)" asp-route-projectVersionId="@Model.ProjectVersionId"><span>04</span>盤查範圍</a>
+        <a asp-page="/Workspace" asp-route-section="factors" aria-current="@(Model.Section == "factors" ? "page" : null)" asp-route-projectVersionId="@Model.ProjectVersionId"><span>05</span>係數資料庫</a>
+        <a asp-page="/Workspace" asp-route-section="lifecycle" asp-route-stage="raw-material" aria-current="@(Model.Section == "lifecycle" ? "page" : null)" asp-route-projectVersionId="@Model.ProjectVersionId"><span>06</span>五階段活動</a>
+        <a asp-page="/Workspace" asp-route-section="calculation" aria-current="@(Model.Section == "calculation" ? "page" : null)" asp-route-projectVersionId="@Model.ProjectVersionId"><span>07</span>計算與結果</a>
     </nav>
+    @if (!string.IsNullOrWhiteSpace(selectedInventory?.ReviewComment))
+    {
+        <aside class="alert alert-warning" aria-label="盤查審查意見">
+            <strong>審查意見</strong> <time>@selectedInventory.ReviewedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</time>
+            <p class="mb-0 review-comment">@selectedInventory.ReviewComment</p>
+        </aside>
+    }
 
-    <div class="workspace-settings-link">
-        <a data-workspace-nav asp-page="/Workspace" asp-route-section="settings" asp-route-stage="mail">郵件服務設定</a>
-    </div>
-
+    @if (!Model.HasVerifiedMfa)
+    {
+        <p class="alert alert-info">計算、提交與管理審查作業需要雙因素驗證。<a asp-area="Identity" asp-page="/Account/Manage/TwoFactorAuthentication">設定雙因素驗證</a></p>
+    }
     <div id="workspace-content" data-workspace-content>
     @if (Model.Section == "settings" && Model.Stage == "mail")
     {
@@ -168,15 +196,18 @@ else
                 </div>
             </div>
             <div class="row g-3">
-                <form class="col-lg-4 workspace-subpanel" method="post" asp-page-handler="CreateFacility">
+                <form class="col-lg-4 workspace-subpanel" method="post" asp-page-handler="CreateFacility" preserve-input-for="CreateFacility" asp-route-projectVersionId="@Model.ProjectVersionId">
+<fieldset disabled="@(!(Model.CanManageOrganization))">
                     <h3 class="h6">廠場基本資料</h3>
                     <label class="form-label" for="facilityCode">廠場代碼</label>
                     <input class="form-control" id="facilityCode" name="facilityCode" required maxlength="100" />
                     <label class="form-label mt-2" for="facilityName">廠場名稱</label>
                     <input class="form-control" id="facilityName" name="facilityName" required maxlength="300" />
                     <button class="btn btn-primary mt-2" type="submit">建立廠場</button>
-                </form>
-                <form class="col-lg-4 workspace-subpanel" method="post" asp-page-handler="InviteMember">
+
+</fieldset></form>
+                <form class="col-lg-4 workspace-subpanel" method="post" asp-page-handler="InviteMember" preserve-input-for="InviteMember" asp-route-projectVersionId="@Model.ProjectVersionId">
+<fieldset disabled="@(!(Model.CanManageOrganization && Model.HasVerifiedMfa))">
                     <h3 class="h6">新增協作成員</h3>
                     <label class="form-label" for="invitationEmail">受邀電子郵件</label>
                     <input class="form-control" id="invitationEmail" name="invitationEmail" type="email" required maxlength="320" />
@@ -188,20 +219,23 @@ else
                         }
                     </select>
                     <button class="btn btn-primary mt-2" type="submit">寄送邀請</button>
-                </form>
+
+</fieldset></form>
                 <div class="col-lg-4 workspace-subpanel">
                     <h3 class="h6">現有成員與角色</h3>
                     <ul>
                         @foreach (var membership in Model.Memberships)
                         {
                             <li>
-                                @membership.UserId：@RoleName(membership.Role)
+                                @Model.MemberNames.GetValueOrDefault(membership.UserId, "未命名成員")：@RoleName(membership.Role)
                                 @if (membership.RevokedAt is null && membership.Role != CarbonFootprint.Domain.Modules.Organizations.OrganizationRole.Owner.ToString())
                                 {
-                                    <form class="d-inline" method="post" asp-page-handler="RevokeMember">
+                                    <form class="d-inline" method="post" asp-page-handler="RevokeMember" preserve-input-for="RevokeMember-@membership.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
+<fieldset disabled="@(!(Model.CanManageOrganization && Model.HasVerifiedMfa))">
                                         <input type="hidden" name="membershipId" value="@membership.Id" />
                                         <button class="btn btn-sm btn-outline-danger" type="submit">撤銷</button>
-                                    </form>
+
+</fieldset></form>
                                 }
                             </li>
                         }
@@ -214,10 +248,12 @@ else
                 {
                     <li>
                         @invitation.Email：@RoleName(invitation.Role)（到期 @invitation.ExpiresAt.ToString("u")）
-                        <form class="d-inline" method="post" asp-page-handler="RevokeInvitation">
+                        <form class="d-inline" method="post" asp-page-handler="RevokeInvitation" preserve-input-for="RevokeInvitation-@invitation.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
+<fieldset disabled="@(!(Model.CanManageOrganization && Model.HasVerifiedMfa))">
                             <input type="hidden" name="invitationId" value="@invitation.Id" />
                             <button class="btn btn-sm btn-outline-danger" type="submit">撤銷邀請</button>
-                        </form>
+
+</fieldset></form>
                     </li>
                 }
             </ul>
@@ -250,7 +286,8 @@ else
                             <p>建立盤查對象、分類與生產廠場的版本關係。</p>
                         </div>
                     </div>
-                    <form method="post" asp-page-handler="CreateProduct">
+                    <form method="post" asp-page-handler="CreateProduct" preserve-input-for="CreateProduct" asp-route-projectVersionId="@Model.ProjectVersionId">
+<fieldset disabled="@(!(Model.CanEditData))">
                         <h3 class="workspace-subheading">產品識別</h3>
                         <label class="form-label" for="productName">產品名稱</label>
                         <input class="form-control" id="productName" name="productName" required maxlength="300" />
@@ -272,12 +309,13 @@ else
                                 }
                                 else
                                 {
-                                    <span>目前沒有廠場。請先到 <a asp-page="/Workspace" asp-route-section="governance">組織與廠場</a> 建立廠場。</span>
+                                    <span>目前沒有廠場。請先到 <a asp-page="/Workspace" asp-route-section="governance" asp-route-projectVersionId="@Model.ProjectVersionId">組織與廠場</a> 建立廠場。</span>
                                 }
                             </p>
                         </div>
                         <button class="btn btn-primary mt-3" type="submit" disabled="@(!hasFacilities)">儲存產品第 1 版</button>
-                    </form>
+
+</fieldset></form>
                     <h3 class="workspace-subheading mt-4">已建立版本</h3>
                     <ul class="workspace-records">
                         @foreach (var item in Model.ProductVersions)
@@ -302,7 +340,8 @@ else
                             <p>分別記錄規範識別、有效期間、適用範圍與原始文件完整性。</p>
                         </div>
                     </div>
-                    <form method="post" asp-page-handler="CreatePcr" enctype="multipart/form-data">
+                    <form method="post" asp-page-handler="CreatePcr" enctype="multipart/form-data" preserve-input-for="CreatePcr" asp-route-projectVersionId="@Model.ProjectVersionId">
+<fieldset disabled="@(!(Model.CanManageFactors))">
                         <h3 class="workspace-subheading">規範識別與有效期間</h3>
                         <label class="form-label" for="registrationNumber">登錄編號</label>
                         <input class="form-control" id="registrationNumber" name="registrationNumber" required />
@@ -432,7 +471,8 @@ else
                         <input class="form-control" type="file" id="originalDocument" name="originalDocument" required />
                         <p class="workspace-select-help">系統會掃描檔案並自動計算、保存 SHA-256，不需手動輸入。</p>
                         <button class="btn btn-primary mt-3" type="submit">儲存 PCR 草稿</button>
-                    </form>
+
+</fieldset></form>
                     <h3 class="workspace-subheading mt-4">審查與發布狀態</h3>
                     <ul class="workspace-records">
                         @foreach (var pcr in Model.PcrVersions)
@@ -463,25 +503,33 @@ else
                                 }
                                 @if (pcr.PublicationStatus == PcrPublicationStatus.Draft.ToString())
                                 {
-                                    <form class="d-inline" method="post" asp-page-handler="ReviewPcr">
+                                    <form class="d-inline" method="post" asp-page-handler="ReviewPcr" preserve-input-for="ReviewPcr-@pcr.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
+<fieldset disabled="@(!(Model.CanManageFactors && Model.HasVerifiedMfa))">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
                                         <button class="btn btn-sm btn-outline-primary" type="submit">核准審查</button>
-                                    </form>
-                                    <form class="d-inline" method="post" asp-page-handler="RejectPcr">
+
+</fieldset></form>
+                                    <form class="d-inline" method="post" asp-page-handler="RejectPcr" preserve-input-for="RejectPcr-@pcr.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
+<fieldset disabled="@(!(Model.CanManageFactors && Model.HasVerifiedMfa))">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
                                         <button class="btn btn-sm btn-outline-danger" type="submit">拒絕審查</button>
-                                    </form>
-                                    <form class="d-inline" method="post" asp-page-handler="PublishPcr">
+
+</fieldset></form>
+                                    <form class="d-inline" method="post" asp-page-handler="PublishPcr" preserve-input-for="PublishPcr-@pcr.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
+<fieldset disabled="@(!(Model.CanManageFactors))">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
                                         <button class="btn btn-sm btn-success" type="submit">發布</button>
-                                    </form>
+
+</fieldset></form>
                                 }
                                 else if (pcr.PublicationStatus == PcrPublicationStatus.Published.ToString())
                                 {
-                                    <form class="d-inline" method="post" asp-page-handler="WithdrawPcr">
+                                    <form class="d-inline" method="post" asp-page-handler="WithdrawPcr" preserve-input-for="WithdrawPcr-@pcr.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
+<fieldset disabled="@(!(Model.CanManageFactors))">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
                                         <button class="btn btn-sm btn-outline-danger" type="submit">撤回</button>
-                                    </form>
+
+</fieldset></form>
                                 }
                             </li>
                         }
@@ -503,7 +551,8 @@ else
                             <p>界定盤查期間、計算單位、系統邊界與資料處理原則。</p>
                         </div>
                     </div>
-                    <form method="post" asp-page-handler="CreateInventory">
+                    <form method="post" asp-page-handler="CreateInventory" preserve-input-for="CreateInventory" asp-route-projectVersionId="@Model.ProjectVersionId">
+<fieldset disabled="@(!(Model.CanEditData))">
                         <h3 class="workspace-subheading">盤查對象與期間</h3>
                         <div class="workspace-select-field">
                             <label class="form-label" for="productVersionId">產品版本</label>
@@ -517,7 +566,7 @@ else
                             <p class="workspace-select-help" id="productVersionId-help">
                                 @if (!hasProductVersions)
                                 {
-                                    <span>請先到 <a asp-page="/Workspace" asp-route-section="product">產品基本資料</a> 建立產品版本。</span>
+                                    <span>請先到 <a asp-page="/Workspace" asp-route-section="product" asp-route-projectVersionId="@Model.ProjectVersionId">產品基本資料</a> 建立產品版本。</span>
                                 }
                                 else
                                 {
@@ -570,7 +619,7 @@ else
                             <p class="workspace-select-help" id="pcrVersionId-help">
                                 @if (!hasSelectablePcrVersions)
                                 {
-                                    <span>草稿或已撤回版本不可使用。請先到 <a asp-page="/Workspace" asp-route-section="pcr">PCR 規範</a> 完成審查並發布。</span>
+                                    <span>草稿或已撤回版本不可使用。請先到 <a asp-page="/Workspace" asp-route-section="pcr" asp-route-projectVersionId="@Model.ProjectVersionId">PCR 規範</a> 完成審查並發布。</span>
                                 }
                                 else
                                 {
@@ -578,21 +627,22 @@ else
                                 }
                             </p>
                         </div>
-                        <button class="btn btn-primary mt-3" type="submit" disabled="@(!canCreateInventory)">儲存盤查第 1 版</button>
-                    </form>
+                        <button class="btn btn-primary mt-3" type="submit" disabled="@(!canCreateInventory)">建立盤查版本</button>
+
+</fieldset></form>
                     <h3 class="workspace-subheading mt-4">階段適用性與專案狀態</h3>
                     <p class="workspace-help">各階段資料與計算完成後，請至「計算與結果」頁統一提交整份盤查。</p>
                     <ul class="workspace-records">
-                        @foreach (var inventory in Model.InventoryProjects)
+                        @foreach (var inventory in Model.InventoryProjects.Where(item => item.Id == Model.ProjectVersionId))
                         {
                             var workflowStatus = Enum.Parse<InventoryWorkflowStatus>(inventory.WorkflowStatus);
                             <li class="mb-3">
-                                @inventory.FunctionalUnit／@inventory.PcrVersion／@WorkflowStatusName(workflowStatus)
-                                @if (InventoryWorkflow.AllowsEditing(workflowStatus))
+                                @InventoryLabel(inventory)／@WorkflowStatusName(workflowStatus)
+                                @if (Model.CanEditData && InventoryWorkflow.AllowsEditing(workflowStatus))
                                 {
                                     @foreach (var declaration in Model.StageDeclarations.Where(item => item.InventoryProjectVersionId == inventory.Id))
                                     {
-                                        <form class="mt-1 border rounded p-2" method="post" asp-page-handler="SetStageApplicability">
+                                        <form class="mt-1 border rounded p-2" method="post" asp-page-handler="SetStageApplicability" preserve-input-for="SetStageApplicability-@declaration.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
                                             <input type="hidden" name="stageDeclarationId" value="@declaration.Id" />
                                             <label class="form-check-label" for="stage-applicable-@declaration.Id">@FormalStageName((LifecycleStage)declaration.LifecycleStage)適用</label>
                                             <input class="form-check-input" id="stage-applicable-@declaration.Id" name="isApplicable" type="checkbox" value="true" checked="@declaration.IsApplicable" />
@@ -602,9 +652,9 @@ else
                                         </form>
                                     }
                                 }
-                                else if (workflowStatus == InventoryWorkflowStatus.Submitted)
+                                else if (Model.CanReviewInventory && workflowStatus == InventoryWorkflowStatus.Submitted)
                                 {
-                                    <form class="mt-1" method="post" asp-page-handler="ReviewInventory">
+                                    <form class="mt-1" method="post" asp-page-handler="ReviewInventory" preserve-input-for="ReviewInventory-@inventory.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
                                         <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
                                         <label class="form-label" for="review-comment-@inventory.Id">審查意見</label>
                                         <input class="form-control" id="review-comment-@inventory.Id" name="reviewComment" maxlength="2000" />
@@ -643,20 +693,12 @@ else
                             <p>每個生命週期階段使用獨立頁面，逐筆記錄活動量、換算單位、係數與資料品質。</p>
                         </div>
                     </div>
-                    <p class="alert alert-warning">階段計算公式尚待適用 PCR 與領域審核者確認；完成確認前不可正式提交。</p>
+                    @if (selectedPcr?.FormulaRuleSetVersion != ActivityEmissionFormula.PcrFormulaRuleSetV1)
+                    {
+                        <p class="alert alert-warning">階段計算公式尚待適用 PCR 與領域審核者確認；完成確認前不可正式提交。</p>
+                    }
                     @if (Model.InventoryProjects.Count > 0)
                     {
-                    <form class="lifecycle-project-selector" method="get" asp-page="/Workspace" asp-route-section="lifecycle" asp-route-stage="@Model.Stage">
-                        <label class="form-label" for="projectVersionId">目前盤查版本</label>
-                        <select class="form-select" id="projectVersionId" name="projectVersionId" data-auto-submit-select aria-describedby="projectVersionId-help">
-                            @foreach (var inventory in Model.InventoryProjects)
-                            {
-                                <option value="@inventory.Id" selected="@(inventory.Id == Model.ProjectVersionId)">@inventory.FunctionalUnit / @inventory.PeriodStart～@inventory.PeriodEnd</option>
-                            }
-                        </select>
-                        <p class="workspace-select-help" id="projectVersionId-help">變更選項後會自動切換；也可使用下方按鈕。</p>
-                        <button class="btn btn-outline-primary mt-2" type="submit">切換盤查版本</button>
-                    </form>
                     <nav class="lifecycle-section-nav" aria-label="五階段分頁">
                         @foreach (var stageSection in lifecycleSections)
                         {
@@ -688,14 +730,24 @@ else
                                         <h3>@FormalStageName(stageSection.Stage)</h3>
                                         <p>@stageSection.Summary</p>
                                     </div>
-                                    <strong>@stageActivities.Length 筆／@(stageEmissions.HasValue ? $"{stageEmissions.Value} kgCO2e" : "係數版本遺失")</strong>
+                                    <strong>@stageActivities.Length 筆／@(stageEmissions.HasValue ? $"{DisplayAmount(stageEmissions.Value)} kgCO2e" : "係數版本遺失")</strong>
                                 </header>
                                 <div class="lifecycle-formula-note">
                                     <strong>階段計算方式</strong>
                                     <span>@stageSection.Formula</span>
                                     <span>系統先依受控單位目錄換算，再逐筆執行「活動量 × 係數 × 分配比例」。</span>
                                 </div>
-                                <form method="post" asp-page-handler="AddActivity" asp-route-section="lifecycle" asp-route-stage="@stageSection.Slug" asp-route-projectVersionId="@Model.ProjectVersionId" data-emission-form>
+                                @if (!Model.CanEditInventory)
+                                {
+                                    <p class="alert alert-secondary">目前為唯讀：需要編輯權限，且盤查須為草稿或退回補正狀態。</p>
+                                }
+                                <form method="post" asp-page-handler="AddActivity" asp-route-section="lifecycle" asp-route-stage="@stageSection.Slug" asp-route-projectVersionId="@Model.ProjectVersionId" id="activity-editor" data-emission-form preserve-input-for="AddActivity-@stageSection.Slug" preserve-input-editing="@(Model.EditingActivity is not null)">
+                                    <fieldset disabled="@(!Model.CanEditInventory)">
+                                    @if (Model.EditingActivity is not null)
+                                    {
+                                        <input type="hidden" name="activityId" value="@Model.EditingActivity.Id" />
+                                        <div class="alert alert-info">正在更正「@Model.EditingActivity.Name」。儲存後保留舊活動與歷史計算，新活動請重新附上佐證。</div>
+                                    }
                                     <input type="hidden" name="lifecycleStage" value="@stageSection.Stage" />
                                     <input type="hidden" name="inventoryProjectVersionId" value="@Model.ProjectVersionId" />
                                     <div class="lifecycle-form-grid">
@@ -755,7 +807,7 @@ else
                                                 }
                                                 <option value="__other__">其他（自行輸入）</option>
                                             </select>
-                                            <input class="form-control mt-2" id="activity-other-@stageSection.Slug" name="activityNameOther" placeholder="請輸入其他活動項目" maxlength="300" hidden />
+                                            <input class="form-control mt-2" id="activity-other-@stageSection.Slug" name="activityNameOther" aria-label="其他活動名稱" placeholder="請輸入其他活動項目" maxlength="300" hidden />
                                         </div>
                                         <div class="lifecycle-field lifecycle-field--wide">
                                             <label class="form-label" for="scenario-@stageSection.Slug">@stageSection.ScenarioLabel</label>
@@ -776,7 +828,7 @@ else
                                                     <option value="照明">照明</option>
                                                     <option value="__other__">其他（自行輸入）</option>
                                                 </select>
-                                                <input class="form-control mt-2" id="equipment-other-@stageSection.Slug" name="equipmentCategoryOther" placeholder="請輸入其他設備類別" maxlength="200" hidden />
+                                                <input class="form-control mt-2" id="equipment-other-@stageSection.Slug" name="equipmentCategoryOther" aria-label="其他設備類別" placeholder="請輸入其他設備類別" maxlength="200" hidden />
                                                 <p class="workspace-select-help">設備類別為選填；品牌、型號、功率與效率只在 PCR 或分配佐證需要時填入情境說明。</p>
                                             </div>
                                         }
@@ -790,7 +842,7 @@ else
                                                 <option value="估算／替代資料">估算／替代資料</option>
                                                 <option value="__other__">其他（自行輸入）</option>
                                             </select>
-                                            <input class="form-control mt-2" id="source-type-other-@stageSection.Slug" name="dataSourceTypeOther" placeholder="請輸入其他來源類型" maxlength="200" hidden />
+                                            <input class="form-control mt-2" id="source-type-other-@stageSection.Slug" name="dataSourceTypeOther" aria-label="其他資料來源類型" placeholder="請輸入其他來源類型" maxlength="200" hidden />
                                         </div>
                                         <div class="lifecycle-field">
                                             <label class="form-label" for="provider-@stageSection.Slug">資料提供者</label>
@@ -802,7 +854,7 @@ else
                                                 <option value="主管機關／資料庫維護者">主管機關／資料庫維護者</option>
                                                 <option value="__other__">其他（自行輸入）</option>
                                             </select>
-                                            <input class="form-control mt-2" id="provider-other-@stageSection.Slug" name="dataProviderOther" placeholder="請輸入其他提供者" maxlength="300" hidden />
+                                            <input class="form-control mt-2" id="provider-other-@stageSection.Slug" name="dataProviderOther" aria-label="其他資料提供者" placeholder="請輸入其他提供者" maxlength="300" hidden />
                                         </div>
                                         <div class="lifecycle-field">
                                             <label class="form-label" for="collection-@stageSection.Slug">取得方式</label>
@@ -815,7 +867,7 @@ else
                                                 <option value="計算／估算">計算／估算</option>
                                                 <option value="__other__">其他（自行輸入）</option>
                                             </select>
-                                            <input class="form-control mt-2" id="collection-other-@stageSection.Slug" name="collectionMethodOther" placeholder="請輸入其他取得方式" maxlength="300" hidden />
+                                            <input class="form-control mt-2" id="collection-other-@stageSection.Slug" name="collectionMethodOther" aria-label="其他取得方式" placeholder="請輸入其他取得方式" maxlength="300" hidden />
                                         </div>
                                         <div class="lifecycle-field lifecycle-field--wide">
                                             <label class="form-label" for="source-reference-@stageSection.Slug">來源參照</label>
@@ -885,7 +937,7 @@ else
                                             <p class="workspace-select-help" id="factor-@stageSection.Slug-help">
                                                 @if (!hasSelectableFactors)
                                                 {
-                                                    <span>請先到 <a asp-page="/Workspace" asp-route-section="factors">排放係數</a> 建立、審查並發布係數版本。</span>
+                                                    <span>請先到 <a asp-page="/Workspace" asp-route-section="factors" asp-route-projectVersionId="@Model.ProjectVersionId">排放係數</a> 建立、審查並發布係數版本。</span>
                                                 }
                                                 else
                                                 {
@@ -918,11 +970,16 @@ else
                                             <output data-emission-preview>輸入活動量並選擇係數後顯示計算式。</output>
                                         </div>
                                     </div>
-                                    <button class="btn btn-primary mt-3" type="submit" disabled="@(!hasSelectableFactors)">儲存「@FormalStageName(stageSection.Stage)」活動</button>
+                                    <button class="btn btn-primary mt-3" type="submit" disabled="@(!hasSelectableFactors)">@(Model.EditingActivity is null ? "儲存活動" : "儲存更正")</button>
+                                    </fieldset>
+                                    @if (Model.EditingActivity is not null)
+                                    {
+                                        <a class="btn btn-link" asp-page="/Workspace" asp-route-section="lifecycle" asp-route-stage="@stageSection.Slug" asp-route-projectVersionId="@Model.ProjectVersionId">取消更正</a>
+                                    }
                                 </form>
 
                                 <div class="lifecycle-saved-data">
-                                    <h4>已儲存的@FormalStageName(stageSection.Stage)資料</h4>
+                                    <h4>已儲存的@(FormalStageName(stageSection.Stage))資料</h4>
                                     @if (stageActivities.Length == 0)
                                     {
                                         <p class="workspace-empty">尚未儲存此階段活動。</p>
@@ -947,18 +1004,30 @@ else
                                                     {
                                                         <span class="text-danger">此筆引用的係數版本不存在，無法計算。</span>
                                                     }
-                                                    @if (evidence is null)
+                                                    @if (Model.CanEditInventory)
                                                     {
-                                                        <form method="post" enctype="multipart/form-data" asp-page-handler="UploadEvidence" asp-route-section="lifecycle" asp-route-stage="@stageSection.Slug" asp-route-projectVersionId="@Model.ProjectVersionId">
+                                                        <div class="record-actions">
+                                                            <a class="btn btn-sm btn-outline-primary" asp-page="/Workspace" asp-route-section="lifecycle" asp-route-stage="@stageSection.Slug" asp-route-projectVersionId="@Model.ProjectVersionId" asp-route-activityId="@activity.Id" asp-fragment="activity-editor">更正活動</a>
+                                                            <form method="post" asp-page-handler="RemoveActivity" asp-route-section="lifecycle" asp-route-stage="@stageSection.Slug" asp-route-projectVersionId="@Model.ProjectVersionId" preserve-input-for="RemoveActivity-@activity.Id">
+                                                                <input type="hidden" name="activityId" value="@activity.Id" />
+                                                                <button class="btn btn-sm btn-outline-danger" type="submit">停用此筆</button>
+                                                            </form>
+                                                        </div>
+                                                        <small class="text-muted">停用後不再納入新計算；原始資料、佐證與舊計算保留。</small>
+                                                    }
+                                                    @if (evidence is null && Model.CanEditInventory)
+                                                    {
+                                                        <form method="post" enctype="multipart/form-data" asp-page-handler="UploadEvidence" asp-route-section="lifecycle" asp-route-stage="@stageSection.Slug" asp-route-projectVersionId="@Model.ProjectVersionId" preserve-input-for="UploadEvidence-@activity.Id">
                                                             <input type="hidden" name="activityDataId" value="@activity.Id" />
                                                             <label class="form-label" for="evidence-@activity.Id">佐證檔案</label>
                                                             <input class="form-control" type="file" id="evidence-@activity.Id" name="evidenceFile" required />
                                                             <button class="btn btn-sm btn-outline-primary mt-1" type="submit">掃描並上傳</button>
                                                         </form>
                                                     }
-                                                    else
+                                                    else if (evidence is not null)
                                                     {
-                                                        <span>佐證：@evidence.OriginalFileName／@ScanStatusName(evidence.ScanStatus)／<code>@evidence.Sha256</code></span>
+                                                        <span>佐證：@evidence.OriginalFileName／@ScanStatusName(evidence.ScanStatus)</span>
+                                                        <details class="technical-details"><summary>佐證 SHA-256</summary><code>@evidence.Sha256</code></details>
                                                     }
                                                 </li>
                                             }
@@ -992,21 +1061,14 @@ else
             </div>
             @if (Model.InventoryProjects.Count > 0)
             {
-            <form class="lifecycle-project-selector" method="get" asp-page="/Workspace" asp-route-section="calculation">
-            <label class="form-label" for="calculationProjectVersionId">目前盤查版本</label>
-            <select class="form-select" id="calculationProjectVersionId" name="projectVersionId" data-auto-submit-select aria-describedby="calculationProjectVersionId-help">
-                @foreach (var inventory in Model.InventoryProjects)
-                {
-                    <option value="@inventory.Id" selected="@(inventory.Id == Model.ProjectVersionId)">@inventory.FunctionalUnit / @inventory.PeriodStart～@inventory.PeriodEnd</option>
-                }
-            </select>
-            <p class="workspace-select-help" id="calculationProjectVersionId-help">變更選項後會自動切換；也可使用下方按鈕。</p>
-            <button class="btn btn-outline-primary mt-2" type="submit">切換盤查版本</button>
-        </form>
-            <form method="post" asp-page-handler="Calculate" asp-route-projectVersionId="@Model.ProjectVersionId">
+            <form method="post" asp-page-handler="Calculate" asp-route-projectVersionId="@Model.ProjectVersionId" preserve-input-for="Calculate" asp-route-section="calculation">
                 <input type="hidden" name="inventoryProjectVersionId" value="@Model.ProjectVersionId" />
-                <button class="btn btn-success mt-3" type="submit">凍結輸入並計算</button>
+                <button class="btn btn-success mt-3" type="submit" disabled="@(!Model.CanCalculate)">凍結輸入並計算</button>
             </form>
+            @if (!Model.CanCalculate)
+            {
+                <p class="workspace-help mt-2">需要計算權限，且盤查須為草稿或退回補正狀態。</p>
+            }
             @if (selectedPcr is not null)
             {
                 <div class="workspace-subpanel mt-3">
@@ -1016,11 +1078,15 @@ else
                     <p>報告要求：@selectedPcr.ReportingRequirements</p>
                 </div>
             }
+            <a class="btn btn-outline-primary mt-3" asp-page="/Reports">選擇計算版本與稽核匯出</a>
+            @if (Model.HasVerifiedMfa)
+            {
             <a class="btn btn-outline-success mt-3"
                asp-page="/Workspace"
                asp-page-handler="ExportExcel"
                asp-route-section="calculation"
                asp-route-projectVersionId="@Model.ProjectVersionId">匯出 Excel</a>
+            }
             }
             else
             {
@@ -1049,6 +1115,10 @@ else
                     <dt class="col-sm-3">快照完整性</dt>
                     <dd class="col-sm-9">@(Model.LatestManifestHashValid == true ? "SHA-256 驗證通過" : "SHA-256 驗證失敗")</dd>
                 </dl>
+                @if (Model.LatestReportingRules is null)
+                {
+                    <p class="alert alert-danger">此版本快照尚無法驗證，以下存量不得作為有效報告。請由管理者確認或還原原始快照。</p>
+                }
                 @if (Model.LatestWarnings.Count > 0)
                 {
                     <h3 class="h5">警告與假設</h3>
@@ -1109,7 +1179,7 @@ else
                 }
                 else
                 {
-                    @foreach (var inventory in Model.InventoryProjects)
+                    @foreach (var inventory in Model.InventoryProjects.Where(item => item.Id == Model.ProjectVersionId))
                     {
                         var workflowStatus = Enum.Parse<InventoryWorkflowStatus>(inventory.WorkflowStatus);
                         var savedStageCount = Model.Activities
@@ -1122,14 +1192,14 @@ else
                         var hasPendingFormulaRun = Model.PendingFormulaRunProjectIds.Contains(inventory.Id);
                         <li class="workspace-submit-item">
                             <div>
-                                <strong>@inventory.FunctionalUnit／@inventory.PeriodStart～@inventory.PeriodEnd</strong>
+                                <strong>@InventoryLabel(inventory)</strong>
                                 <span>已保存 @savedStageCount／5 階段｜計算版本：@(hasCurrentRun ? "目前有效" : hasPendingFormulaRun ? "公式尚待確認，暫不可提交" : hasRun ? "資料已變更，請重算" : "尚未建立")｜狀態：@WorkflowStatusName(workflowStatus)</span>
                             </div>
-                            @if (InventoryWorkflow.AllowsEditing(workflowStatus))
+                            @if (Model.CanEditData && InventoryWorkflow.AllowsEditing(workflowStatus))
                             {
-                                <form method="post" asp-page-handler="SubmitInventory" asp-route-section="calculation">
+                                <form method="post" asp-page-handler="SubmitInventory" asp-route-section="calculation" preserve-input-for="SubmitInventory-@inventory.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
                                     <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
-                                    <button class="btn btn-warning" type="submit" disabled="@(!hasCurrentRun)">統一提交盤查</button>
+                                    <button class="btn btn-warning" type="submit" disabled="@(!hasCurrentRun || !Model.HasVerifiedMfa)">統一提交盤查</button>
                                 </form>
                             }
                             else

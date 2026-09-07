@@ -244,6 +244,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         {
             entity.ToTable("activity_data_versions");
             entity.HasKey(item => item.Id);
+            entity.Property(item => item.RetiredAt).IsConcurrencyToken();
             entity.Property(item => item.Name).HasMaxLength(300);
             entity.Property(item => item.ActivityKind).HasMaxLength(100);
             entity.Property(item => item.SupplierOrScenario).HasMaxLength(1000);
@@ -339,7 +340,7 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
         {
             entity.ToTable("calculation_runs");
             entity.HasKey(item => item.Id);
-            entity.Property(item => item.CanonicalInputManifest).HasColumnType("jsonb");
+            entity.Property(item => item.CanonicalInputManifest).HasColumnType("text");
             entity.Property(item => item.DataQualitySummaryJson).HasColumnType("jsonb");
             entity.Property(item => item.InputSha256).HasMaxLength(64);
             entity.Property(item => item.ProductTotal).HasPrecision(38, 15);
