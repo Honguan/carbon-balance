@@ -27,6 +27,7 @@ reports/generated/
 
 # Historical source assets are inventoried by checksum, not committed.
 public_html_Carbon-master.zip
+/old/
 CODEX_GOAL.md
 
 # OS files

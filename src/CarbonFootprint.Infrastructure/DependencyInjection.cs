@@ -26,6 +26,7 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString).UseSnakeCaseNamingConvention());
         services.TryAddScoped<IOrganizationScope, UnscopedOrganizationScope>();
         services.AddScoped<ICalculationRunStore, CalculationRunStore>();
+        services.AddScoped<IInventorySnapshotReader, InventorySnapshotReader>();
         services.AddScoped<OrganizationOnboardingService>();
         services.AddScoped<OrganizationInvitationService>();
         services.Configure<AdministratorBootstrapOptions>(

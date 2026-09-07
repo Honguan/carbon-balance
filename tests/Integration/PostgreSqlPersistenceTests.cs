@@ -6,6 +6,8 @@ using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Organizations;
 using CarbonFootprint.Domain.Modules.Organizations;
 using CarbonFootprint.Domain.Modules.Standards;
+using CarbonFootprint.Domain.Modules.Calculations;
+using CarbonFootprint.Domain.Modules.Inventories;
 using CarbonFootprint.Web.Services;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +16,132 @@ namespace CarbonFootprint.Integration.Tests;
 
 public sealed class PostgreSqlPersistenceTests
 {
+    [Fact]
+    public async Task InventorySnapshotReader_PreservesProvenanceAndDetectsChangedInputsWithoutWriting()
+    {
+        var organizationId = Guid.NewGuid();
+        await using var context = CreateContext(organizationId);
+        var product = new ProductRecord { Id = Guid.NewGuid(), OrganizationId = organizationId, Name = "Snapshot test" };
+        var productVersion = new ProductVersionRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            ProductId = product.Id,
+            VersionNumber = 1,
+            NameZhTw = "快照測試"
+        };
+        var pcr = CreatePcrVersion(organizationId, PcrPublicationStatus.Published);
+        pcr.FormulaRuleSetVersion = ActivityEmissionFormula.PcrFormulaRuleSetV1;
+        pcr.RoundingDecimalPlaces = 6;
+        var project = new InventoryProjectVersionRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            ProductVersionId = productVersion.Id,
+            VersionNumber = 1,
+            PeriodStart = new DateOnly(2026, 1, 1),
+            PeriodEnd = new DateOnly(2026, 12, 31),
+            FunctionalUnit = "1 kg product",
+            DeclaredUnit = "kg",
+            SystemBoundary = "cradle-to-grave",
+            PcrVersionId = pcr.Id,
+            PcrVersion = "snapshot-pcr-v1",
+            WorkflowStatus = "Draft"
+        };
+        var factor = CreateFactorVersion(organizationId, Guid.NewGuid(), "Snapshot factor", 2.5m,
+            FactorPublicationStatus.Published, FactorReviewStatus.Approved,
+            "https://example.test/factor", "factor.csv", new string('a', 64));
+        var activity = new ActivityDataRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            InventoryProjectVersionId = project.Id,
+            LifecycleStage = (int)LifecycleStage.RawMaterial,
+            Name = "Material",
+            ActivityKind = "Material",
+            RawValue = 1.234567m,
+            RawUnitCode = "kg",
+            CanonicalValue = 1.234567m,
+            CanonicalUnitCode = "kg",
+            ConversionRuleVersion = "units-p0-v1",
+            AmountFormulaId = ActivityAmountFormula.DirectFormulaId,
+            FormulaInputsJson = "{}",
+            PeriodStart = project.PeriodStart,
+            PeriodEnd = project.PeriodEnd,
+            FactorVersionId = factor.Id,
+            AllocationFactor = 0.5m,
+            DataQuality = "measured",
+            EvidenceSha256 = new string('b', 64),
+            DataSourceType = "meter",
+            DataProvider = "Test provider",
+            CollectionMethod = "measured",
+            SourceReference = "test-source",
+            SupplierOrScenario = " ",
+            EquipmentCategory = "test-equipment"
+        };
+        context.Organizations.Add(new OrganizationRecord { Id = organizationId, Name = "Snapshot test" });
+        context.Products.Add(product);
+        context.ProductVersions.Add(productVersion);
+        context.PcrVersions.Add(pcr);
+        context.InventoryProjectVersions.Add(project);
+        context.EmissionFactorVersions.Add(factor);
+        context.ActivityData.Add(activity);
+        context.LifecycleStageDeclarations.AddRange(Enum.GetValues<LifecycleStage>().Reverse().Select(stage =>
+            new LifecycleStageDeclarationRecord
+            {
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationId,
+                InventoryProjectVersionId = project.Id,
+                LifecycleStage = (int)stage,
+                IsApplicable = stage == LifecycleStage.RawMaterial,
+                Reason = stage == LifecycleStage.RawMaterial ? " " : "Test exclusion"
+            }));
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var reader = new InventorySnapshotReader(context);
+        var snapshot = await reader.ReadAsync(project.Id, CancellationToken.None);
+        Assert.False(context.ChangeTracker.HasChanges());
+        Assert.Equal(organizationId, snapshot.OrganizationId);
+        Assert.Equal(project.ProductVersionId, snapshot.ProductVersionId);
+        Assert.Equal(project.PcrVersion, snapshot.PcrVersion);
+        Assert.Equal(pcr.FormulaRuleSetVersion, snapshot.RuleSetVersion);
+        Assert.Equal(pcr.ReportingRequirements, snapshot.ReportingRequirements);
+        Assert.Equal(6, snapshot.RoundingDecimalPlaces);
+        Assert.Equal("units-p0-v1", snapshot.UnitCatalogueVersion);
+        Assert.Equal(Enum.GetValues<LifecycleStage>(), snapshot.Stages.Select(stage => stage.Stage));
+        Assert.Null(snapshot.Stages[0].Reason);
+        var input = Assert.Single(snapshot.Activities);
+        Assert.Equal(1.234567m, input.CanonicalValue);
+        Assert.Equal(0.5m, input.AllocationFactor);
+        Assert.Equal(activity.EvidenceSha256, input.EvidenceSha256);
+        Assert.Equal(activity.SourceReference, input.SourceReference);
+        Assert.Equal(activity.DataProvider, input.DataProvider);
+        Assert.Equal(activity.CollectionMethod, input.CollectionMethod);
+        Assert.Equal(activity.EquipmentCategory, input.EquipmentCategory);
+        Assert.Equal(activity.FormulaInputsJson, input.FormulaInputsJson);
+        Assert.Null(input.SupplierOrScenario);
+        Assert.Equal(factor.Id, input.FactorVersion.Id);
+        Assert.Equal(factor.Value, input.FactorVersion.Value);
+        var run = new CalculationEngine().Calculate(Guid.NewGuid(), snapshot,
+            CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)));
+        Assert.Equal(1.54320875m, run.ProductTotal);
+        Assert.True(CanonicalManifest.Matches(await reader.ReadAsync(project.Id, CancellationToken.None),
+            run.CanonicalInputManifest, run.InputSha256));
+
+        var changed = await context.ActivityData.SingleAsync(item => item.Id == activity.Id);
+        changed.SourceReference = "corrected-source";
+        await context.SaveChangesAsync();
+        Assert.False(CanonicalManifest.Matches(await reader.ReadAsync(project.Id, CancellationToken.None),
+            run.CanonicalInputManifest, run.InputSha256));
+        Assert.Equal("test-source", input.SourceReference);
+        Assert.Equal(1.54320875m, run.ProductTotal);
+
+        await using var otherOrganization = CreateContext(Guid.NewGuid());
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new InventorySnapshotReader(otherOrganization).ReadAsync(project.Id, CancellationToken.None));
+    }
+
     [Fact]
     public void Model_HasNoPendingMigrationChanges()
     {

@@ -5,6 +5,20 @@ namespace CarbonFootprint.Architecture.Tests;
 public sealed class DependencyRuleTests
 {
     [Fact]
+    public void Application_DoesNotReferenceWebInfrastructureOrEntityFramework()
+    {
+        var references = typeof(CarbonFootprint.Application.Calculations.IInventorySnapshotReader).Assembly
+            .GetReferencedAssemblies()
+            .Select(reference => reference.Name)
+            .ToArray();
+
+        Assert.DoesNotContain("CarbonFootprint.Web", references);
+        Assert.DoesNotContain("CarbonFootprint.Infrastructure", references);
+        Assert.DoesNotContain(references, name => name?.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal) == true);
+        Assert.DoesNotContain(references, name => name?.StartsWith("Npgsql", StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
     public void Domain_DoesNotReferenceWebInfrastructureOrEntityFramework()
     {
         var references = typeof(CalculationEngine).Assembly
@@ -39,4 +53,3 @@ public sealed class DependencyRuleTests
         }
     }
 }
-

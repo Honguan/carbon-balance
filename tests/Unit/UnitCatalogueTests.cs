@@ -5,6 +5,14 @@ namespace CarbonFootprint.Unit.Tests;
 public sealed class UnitCatalogueTests
 {
     [Fact]
+    public void ResolveVersion_PreservesExistingCatalogueAndRejectsMixedVersions()
+    {
+        Assert.Equal("units-p0-v2", UnitCatalogue.ResolveVersion([]));
+        Assert.Equal("units-p0-v1", UnitCatalogue.ResolveVersion(["units-p0-v1", "units-p0-v1"]));
+        Assert.Throws<InvalidOperationException>(() => UnitCatalogue.ResolveVersion(["units-p0-v1", "units-p0-v2"]));
+    }
+
+    [Fact]
     public void Convert_GramsToKilograms_PreservesDecimalPrecision()
     {
         var catalogue = new UnitCatalogue(

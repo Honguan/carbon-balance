@@ -40,6 +40,17 @@ public sealed class UnitCatalogue
 
     public string Version { get; }
 
+    public static string ResolveVersion(IEnumerable<string> versions)
+    {
+        var distinctVersions = versions.Distinct(StringComparer.Ordinal).ToArray();
+        return distinctVersions.Length switch
+        {
+            0 => "units-p0-v2",
+            1 => distinctVersions[0],
+            _ => throw new InvalidOperationException("同一盤查專案不可混用不同單位目錄版本。")
+        };
+    }
+
     private static void AddCode(IDictionary<string, UnitDefinition> units, string code, UnitDefinition unit)
     {
         if (string.IsNullOrWhiteSpace(code) || !units.TryAdd(code.Trim(), unit))

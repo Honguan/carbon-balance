@@ -36,6 +36,7 @@ public sealed class WorkspaceModel : PageModel
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly CalculateInventoryHandler _calculateHandler;
+    private readonly IInventorySnapshotReader _snapshotReader;
     private readonly IAuthorizationService _authorizationService;
     private readonly EvidenceStorageService _evidenceStorageService;
     private readonly MoenvFactorSynchronizationService _moenvFactorSynchronizationService;
@@ -51,6 +52,7 @@ public sealed class WorkspaceModel : PageModel
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
         CalculateInventoryHandler calculateHandler,
+        IInventorySnapshotReader snapshotReader,
         IAuthorizationService authorizationService,
         EvidenceStorageService evidenceStorageService,
         MoenvFactorSynchronizationService moenvFactorSynchronizationService,
@@ -65,6 +67,7 @@ public sealed class WorkspaceModel : PageModel
         _userManager = userManager;
         _signInManager = signInManager;
         _calculateHandler = calculateHandler;
+        _snapshotReader = snapshotReader;
         _authorizationService = authorizationService;
         _evidenceStorageService = evidenceStorageService;
         _moenvFactorSynchronizationService = moenvFactorSynchronizationService;
@@ -1743,7 +1746,7 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
-        var currentSnapshot = await BuildSnapshotAsync(project, cancellationToken);
+        var currentSnapshot = await _snapshotReader.ReadAsync(project.Id, cancellationToken);
         if (!CanonicalManifest.Matches(
                 currentSnapshot,
                 latestRun.CanonicalInputManifest,
@@ -2035,7 +2038,7 @@ public sealed class WorkspaceModel : PageModel
 
         try
         {
-            var snapshot = await BuildSnapshotAsync(project, cancellationToken);
+            var snapshot = await _snapshotReader.ReadAsync(project.Id, cancellationToken);
 
             var supersedesRunId = await _dbContext.CalculationRuns
                 .Where(item => item.ProjectVersionId == project.Id)
@@ -2054,100 +2057,6 @@ public sealed class WorkspaceModel : PageModel
             await LoadAsync(cancellationToken);
             return Page();
         }
-    }
-
-    private async Task<InventoryProjectSnapshot> BuildSnapshotAsync(
-        InventoryProjectVersionRecord project,
-        CancellationToken cancellationToken)
-    {
-        var activities = await _dbContext.ActivityData
-            .Where(item => item.InventoryProjectVersionId == project.Id)
-            .OrderBy(item => item.LifecycleStage)
-            .ThenBy(item => item.Id)
-            .ToArrayAsync(cancellationToken);
-        var stageDeclarations = await _dbContext.LifecycleStageDeclarations
-            .Where(item => item.InventoryProjectVersionId == project.Id)
-            .OrderBy(item => item.LifecycleStage)
-            .ToArrayAsync(cancellationToken);
-        var factorIds = activities.Select(item => item.FactorVersionId).Distinct().ToArray();
-        var factorRecords = await _dbContext.EmissionFactorVersions
-            .Where(item => factorIds.Contains(item.Id))
-            .ToDictionaryAsync(item => item.Id, cancellationToken);
-        var pcr = await _dbContext.PcrVersions.AsNoTracking().SingleAsync(
-            item => item.Id == project.PcrVersionId,
-            cancellationToken);
-
-        return new InventoryProjectSnapshot(
-            RequireOrganization(),
-            project.Id,
-            project.ProductVersionId,
-            project.PeriodStart,
-            project.PeriodEnd,
-            project.FunctionalUnit,
-            project.PcrVersion,
-            pcr.FormulaRuleSetVersion,
-            "gwp-fixture-p0-v1",
-            GetActivityUnitCatalogueVersion(activities),
-            stageDeclarations.Select(item => new StageDeclaration(
-                (LifecycleStage)item.LifecycleStage,
-                item.IsApplicable,
-                string.IsNullOrWhiteSpace(item.Reason) ? null : item.Reason)).ToArray(),
-            activities.Select(activity =>
-            {
-                var factor = factorRecords[activity.FactorVersionId];
-                return new ActivityDataSnapshot(
-                    activity.Id,
-                    activity.OrganizationId,
-                    (LifecycleStage)activity.LifecycleStage,
-                    activity.Name,
-                    activity.RawValue,
-                    activity.RawUnitCode,
-                    activity.CanonicalValue,
-                    activity.CanonicalUnitCode,
-                    activity.ConversionRuleVersion,
-                    activity.PeriodStart,
-                    activity.PeriodEnd,
-                    new EmissionFactorVersion(
-                        factor.Id,
-                        factor.FactorId,
-                        factor.VersionNumber,
-                        factor.Name,
-                        factor.Value,
-                        factor.NumeratorUnitCode,
-                        factor.DenominatorUnitCode,
-                        factor.Geography,
-                        factor.ValidFrom,
-                        factor.ValidTo,
-                        Enum.Parse<FactorPublicationStatus>(factor.PublicationStatus),
-                        factor.SourceDatasetVersion,
-                        factor.LicenseCode,
-                        Enum.Parse<FactorReviewStatus>(factor.ReviewStatus),
-                        factor.Applicability),
-                    activity.EvidenceSha256,
-                    Enum.Parse<ActivityDataKind>(activity.ActivityKind),
-                    string.IsNullOrWhiteSpace(activity.SupplierOrScenario) ? null : activity.SupplierOrScenario,
-                    activity.AllocationFactor,
-                    activity.IsEstimated,
-                    string.IsNullOrWhiteSpace(activity.EstimationReason) ? null : activity.EstimationReason,
-                    activity.DataQuality,
-                    activity.AmountFormulaId,
-                    activity.FormulaInputsJson,
-                    activity.EquipmentCategory,
-                    activity.DataSourceType,
-                    activity.DataProvider,
-                    activity.CollectionMethod,
-                    activity.SourceReference);
-            }).ToArray(),
-            project.DeclaredUnit,
-            project.SystemBoundary,
-            project.AllocationMethod,
-            project.AllocationReason,
-            project.Exclusions,
-            project.Assumptions,
-            project.EstimationReason,
-            pcr.CutoffThresholdPercent,
-            pcr.RoundingDecimalPlaces,
-            pcr.ReportingRequirements);
     }
 
     private async Task LoadAsync(CancellationToken cancellationToken)
@@ -2222,7 +2131,7 @@ public sealed class WorkspaceModel : PageModel
                 if (latestRun is not null
                     && !string.Equals(latestRun.RuleSetVersion, PendingStageFormulaRuleSetVersion, StringComparison.Ordinal)
                     && CanonicalManifest.Matches(
-                        await BuildSnapshotAsync(project, cancellationToken),
+                        await _snapshotReader.ReadAsync(project.Id, cancellationToken),
                         latestRun.CanonicalInputManifest,
                         latestRun.InputSha256))
                 {
@@ -2334,16 +2243,8 @@ public sealed class WorkspaceModel : PageModel
     private static string GetActivityUnitCatalogueVersion(IEnumerable<ActivityDataRecord> activities) =>
         GetActivityUnitCatalogueVersion(activities.Select(item => item.ConversionRuleVersion));
 
-    private static string GetActivityUnitCatalogueVersion(IEnumerable<string> versions)
-    {
-        var distinctVersions = versions.Distinct(StringComparer.Ordinal).ToArray();
-        return distinctVersions.Length switch
-        {
-            0 => CurrentUnitCatalogueVersion,
-            1 => distinctVersions[0],
-            _ => throw new InvalidOperationException("同一盤查專案不可混用不同單位目錄版本。")
-        };
-    }
+    private static string GetActivityUnitCatalogueVersion(IEnumerable<string> versions) =>
+        UnitCatalogue.ResolveVersion(versions);
 
     private static bool TryResolveControlledValue(string? selected, string? other, out string value)
     {

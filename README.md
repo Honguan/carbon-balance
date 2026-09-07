@@ -1,6 +1,8 @@
 # 碳衡｜產品碳足跡盤查系統
 
-碳衡（Carbon Balance）用於管理產品生命週期資料、排放係數、CO₂e 計算結果、證據附件與稽核匯出。
+碳衡（Carbon Balance）以產品生命週期五階段引導企業蒐集盤查資料、搜尋與選用係數，產生可追溯的 CO₂e 結果、證據附件與稽核匯出，支援後續改善分析。
+
+產品與開發依據：[目前需求](docs/04_PRODUCT_REQUIREMENTS.md)、[目前架構](docs/05_ARCHITECTURE.md)、[old 來源分析](docs/architecture/LEGACY_PURPOSE_ANALYSIS.md)、[實作狀態與缺口](docs/IMPLEMENTATION_STATUS.md)。`docs/planning-baseline` 是歷史規劃；本機 `old/` 保留唯讀來源，不提交原始資料。
 
 > 本專案目前適合本機或封閉測試環境，請勿直接公開到網際網路。Repository 尚未提供 LICENSE。
 

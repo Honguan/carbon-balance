@@ -6,6 +6,8 @@ Legacy 來源永遠視為不可信且唯讀。匯入工具只會把逐列原始 
 
 `legacy-source-inventory.csv` 只含舊 ZIP 內的相對路徑、大小、SHA-256、風險分類與不可提交旗標，不含舊檔內容；舊計算結果只供 comparison。
 
+該 CSV 是早期 ZIP 的清單，不涵蓋 2026-09-07 新提供的全部 `old/`。本次深入閱讀來源的定位、hash、候選工作簿與公式限制見[old 來源分析](../architecture/LEGACY_PURPOSE_ANALYSIS.md)。原始資料維持本機唯讀；不執行舊 SQL／PHP、不直接轉為正式資料。
+
 ## 係數 CSV 格式
 
 來源必須是有效 UTF-8 CSV，且包含：
