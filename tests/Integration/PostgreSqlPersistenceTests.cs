@@ -218,7 +218,7 @@ public sealed class PostgreSqlPersistenceTests
             OrganizationId = organizationId,
             ActivityDataId = activity.Id,
             ObjectKey = "test-evidence",
-            OriginalFileName = "later-evidence.pdf",
+            OriginalFileName = "=later-evidence.pdf",
             ContentType = "application/pdf",
             Sha256 = new string('b', 64),
             ScanStatus = "Clean",
@@ -233,6 +233,26 @@ public sealed class PostgreSqlPersistenceTests
         };
         var before = Assert.IsType<FileContentResult>(await reports.OnPostEvidenceIndexCsvAsync(noEvidenceRun.Id, CancellationToken.None));
         Assert.DoesNotContain("later-evidence.pdf", Encoding.UTF8.GetString(before.FileContents), StringComparison.Ordinal);
+        var csvSnapshot = snapshot with
+        {
+            FunctionalUnit = "=1+1",
+            PcrVersion = "@pcr",
+            ReportingRequirements = " \t+SUM(1,2)"
+        };
+        var csvRun = new CalculationEngine().Calculate(Guid.NewGuid(), csvSnapshot,
+            CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)));
+        await store.SaveAsync(csvRun, CancellationToken.None);
+        var inventoryCsv = Assert.IsType<FileContentResult>(await reports.OnPostInventoryCsvAsync(csvRun.Id, CancellationToken.None));
+        var csvText = Encoding.UTF8.GetString(inventoryCsv.FileContents);
+        Assert.Contains("\"'=1+1\"", csvText, StringComparison.Ordinal);
+        Assert.Contains("\"'@pcr\"", csvText, StringComparison.Ordinal);
+        Assert.Contains("\"' \t+SUM(1,2)\"", csvText, StringComparison.Ordinal);
+        Assert.Contains("\"1.543209\"", csvText, StringComparison.Ordinal);
+        var evidenceCsv = Assert.IsType<FileContentResult>(await reports.OnPostEvidenceIndexCsvAsync(csvRun.Id, CancellationToken.None));
+        Assert.Contains("\"'=later-evidence.pdf\"", Encoding.UTF8.GetString(evidenceCsv.FileContents), StringComparison.Ordinal);
+        var manifestExport = Assert.IsType<FileContentResult>(await reports.OnPostManifestAsync(csvRun.Id, CancellationToken.None));
+        Assert.Equal(Encoding.UTF8.GetBytes(csvRun.CanonicalInputManifest), manifestExport.FileContents);
+        Assert.True(CanonicalManifest.HasValidSha256(Encoding.UTF8.GetString(manifestExport.FileContents), csvRun.InputSha256));
         using var identityServices = new ServiceCollection().AddSingleton(context).AddLogging()
             .AddIdentityCore<ApplicationUser>().AddEntityFrameworkStores<CarbonFootprintDbContext>()
             .Services.BuildServiceProvider();

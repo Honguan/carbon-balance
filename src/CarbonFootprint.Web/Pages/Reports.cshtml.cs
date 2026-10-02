@@ -1,4 +1,4 @@
-using System.Globalization;
+using static CarbonFootprint.Application.Exports.SpreadsheetCsv;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -95,26 +95,26 @@ public sealed class ReportsModel : PageModel
         foreach (var line in lines)
         {
             builder.AppendLine(string.Join(",",
-                Csv(run.Id),
-                Csv(run.InputSha256),
-                Csv(project.WorkflowStatus),
-                Csv(run.PcrVersion),
-                Csv(pcr.FunctionalUnit),
-                Csv(((LifecycleStage)line.LifecycleStage).ToString()),
-                Csv(line.ActivityId),
-                Csv(line.FormulaId),
-                Csv(line.CanonicalActivityValue),
-                Csv(line.ActivityUnitCode),
-                Csv(line.FactorVersionId),
-                Csv(line.FactorValue),
-                Csv(line.FactorUnit),
-                Csv(line.AllocationFactor),
-                Csv(line.Emissions),
-                Csv(line.EmissionsUnitCode),
-                Csv(line.Emissions.ToString($"F{roundingDecimalPlaces}", CultureInfo.InvariantCulture)),
-                Csv(pcr.CutoffThresholdPercent),
-                Csv(roundingDecimalPlaces),
-                Csv(pcr.ReportingRequirements)));
+                Encode(run.Id),
+                Encode(run.InputSha256),
+                Encode(project.WorkflowStatus),
+                Encode(run.PcrVersion),
+                Encode(pcr.FunctionalUnit),
+                Encode(((LifecycleStage)line.LifecycleStage).ToString()),
+                Encode(line.ActivityId),
+                Encode(line.FormulaId),
+                Encode(line.CanonicalActivityValue),
+                Encode(line.ActivityUnitCode),
+                Encode(line.FactorVersionId),
+                Encode(line.FactorValue),
+                Encode(line.FactorUnit),
+                Encode(line.AllocationFactor),
+                Encode(line.Emissions),
+                Encode(line.EmissionsUnitCode),
+                Encode(line.Emissions, $"F{roundingDecimalPlaces}"),
+                Encode(pcr.CutoffThresholdPercent),
+                Encode(roundingDecimalPlaces),
+                Encode(pcr.ReportingRequirements)));
         }
 
         await AddExportAuditAsync("report.inventory-exported", run.Id, cancellationToken);
@@ -149,14 +149,14 @@ public sealed class ReportsModel : PageModel
             string.Equals(references[item.ActivityDataId], item.Sha256, StringComparison.OrdinalIgnoreCase)))
         {
             builder.AppendLine(string.Join(",",
-                Csv(run.Id),
-                Csv(evidence.ActivityDataId),
-                Csv(evidence.OriginalFileName),
-                Csv(evidence.ContentType),
-                Csv(evidence.SizeBytes),
-                Csv(evidence.Sha256),
-                Csv(evidence.ScanStatus),
-                Csv(evidence.ObjectKey)));
+                Encode(run.Id),
+                Encode(evidence.ActivityDataId),
+                Encode(evidence.OriginalFileName),
+                Encode(evidence.ContentType),
+                Encode(evidence.SizeBytes),
+                Encode(evidence.Sha256),
+                Encode(evidence.ScanStatus),
+                Encode(evidence.ObjectKey)));
         }
 
         await AddExportAuditAsync("report.evidence-index-exported", run.Id, cancellationToken);
@@ -227,17 +227,6 @@ public sealed class ReportsModel : PageModel
             MetadataJson = "{}"
         });
         await _dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    private static string Csv(object? value)
-    {
-        var text = value switch
-        {
-            null => string.Empty,
-            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
-            _ => value.ToString() ?? string.Empty
-        };
-        return $"\"{text.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
     }
 
     private static byte[] WithUtf8Bom(string value) =>
