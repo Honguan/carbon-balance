@@ -177,6 +177,14 @@ docker compose logs migrate --tail=200
 
 工作區各分頁會以局部內容切換，瀏覽器停用 JavaScript 時仍會退回一般完整導覽。
 
+## 報表與機器可讀匯出
+
+盤查清冊與證據索引 CSV 供試算表使用：文字以公式符號、空白或控制字元開頭時，會加上單引號，避免開啟時被當成公式執行；數值欄位仍保留數值與指定的小數位數。CSV 不是原始資料交換格式，請勿移除此保護後再交由試算表開啟。
+
+需要原始、可重現的計算輸入時，請使用報表頁的 canonical manifest JSON 匯出；JSON 不套用 CSV 呈現轉義，保留原始位元組與 SHA-256。XLSX 文字欄位則使用明確的文字儲存格。
+
+Windows 安裝 Excel 與使用 .NET 10 的 PowerShell 7 後，可先完成 Release build，再執行 `pwsh -File scripts/verify-csv-excel.ps1`。此回歸使用獨立 Excel instance、合成 CSV 與無害算式對照，不讀寫使用者活頁簿。
+
 ## 技術架構
 
 - .NET 10 / ASP.NET Core Razor Pages
