@@ -24,11 +24,265 @@ using Microsoft.Extensions.DependencyInjection;
 using System.IO.Compression;
 using System.Text.Json;
 using CarbonFootprint.Web.Security;
+using System.Data.Common;
+using System.Diagnostics;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Xunit.Abstractions;
 
 namespace CarbonFootprint.Integration.Tests;
 
-public sealed class PostgreSqlPersistenceTests
+public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
 {
+    [Fact]
+    public async Task CalculationFreshness_IsBoundedWith100ProjectsAndRecheckedBeforeGovernance()
+    {
+        var organizationId = Guid.NewGuid();
+        await using var context = CreateContext(organizationId);
+        var product = new ProductRecord { Id = Guid.NewGuid(), OrganizationId = organizationId, Name = "Freshness" };
+        var productVersion = new ProductVersionRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            ProductId = product.Id,
+            VersionNumber = 1,
+            NameZhTw = "Freshness"
+        };
+        var pcr = CreatePcrVersion(organizationId, PcrPublicationStatus.Published);
+        pcr.FormulaRuleSetVersion = ActivityEmissionFormula.PcrFormulaRuleSetV1;
+        var factor = CreateFactorVersion(organizationId, Guid.NewGuid(), "Freshness factor", 2m,
+            FactorPublicationStatus.Published, FactorReviewStatus.Approved,
+            "https://example.test/factor", "factor.csv", new string('a', 64));
+        context.Organizations.Add(new OrganizationRecord { Id = organizationId, Name = "Freshness" });
+        context.Products.Add(product);
+        context.ProductVersions.Add(productVersion);
+        context.PcrVersions.Add(pcr);
+        context.EmissionFactorVersions.Add(factor);
+        var reviewerId = Guid.NewGuid();
+        context.Users.Add(new ApplicationUser { Id = reviewerId, UserName = $"freshness-{reviewerId:N}" });
+        var provenance = CalculationBuildProvenance.Create("freshness-test", new string('c', 40));
+        var store = new CalculationRunStore(context);
+        var projects = new List<InventoryProjectVersionRecord>();
+        async Task SeedProjects(int count)
+        {
+            for (var index = 0; index < count; index++)
+            {
+                var project = new InventoryProjectVersionRecord
+                {
+                    Id = Guid.NewGuid(),
+                    OrganizationId = organizationId,
+                    ProductVersionId = productVersion.Id,
+                    VersionNumber = projects.Count + 1,
+                    PeriodStart = new DateOnly(2026, 1, 1),
+                    PeriodEnd = new DateOnly(2026, 12, 31),
+                    FunctionalUnit = "1 kg product",
+                    DeclaredUnit = "kg",
+                    SystemBoundary = "cradle-to-grave",
+                    PcrVersionId = pcr.Id,
+                    PcrVersion = "freshness-pcr-v1",
+                    WorkflowStatus = "Draft"
+                };
+                projects.Add(project);
+                context.InventoryProjectVersions.Add(project);
+                context.ActivityData.Add(new ActivityDataRecord
+                {
+                    Id = Guid.NewGuid(),
+                    OrganizationId = organizationId,
+                    InventoryProjectVersionId = project.Id,
+                    LifecycleStage = (int)LifecycleStage.RawMaterial,
+                    Name = "Material",
+                    ActivityKind = "Material",
+                    RawValue = 1m,
+                    RawUnitCode = "kg",
+                    CanonicalValue = 1m,
+                    CanonicalUnitCode = "kg",
+                    AmountFormulaId = ActivityAmountFormula.DirectFormulaId,
+                    FormulaInputsJson = "{}",
+                    ConversionRuleVersion = "units-p0-v1",
+                    PeriodStart = project.PeriodStart,
+                    PeriodEnd = project.PeriodEnd,
+                    FactorVersionId = factor.Id,
+                    AllocationFactor = 1m,
+                    EvidenceSha256 = new string('b', 64),
+                    DataQuality = "measured"
+                });
+                context.LifecycleStageDeclarations.AddRange(Enum.GetValues<LifecycleStage>().Select(stage =>
+                    new LifecycleStageDeclarationRecord
+                    {
+                        Id = Guid.NewGuid(),
+                        OrganizationId = organizationId,
+                        InventoryProjectVersionId = project.Id,
+                        LifecycleStage = (int)stage,
+                        IsApplicable = stage == LifecycleStage.RawMaterial,
+                        Reason = stage == LifecycleStage.RawMaterial ? "" : "Test exclusion"
+                    }));
+                await context.SaveChangesAsync();
+                await using var snapshotContext = CreateContext(organizationId);
+                await store.SaveAsync(new CalculationEngine().Calculate(Guid.NewGuid(),
+                    await new InventorySnapshotReader(snapshotContext).ReadAsync(project.Id, CancellationToken.None), provenance), CancellationToken.None);
+            }
+        }
+        await SeedProjects(1);
+        var selected = projects[0];
+        async Task<(WorkspaceModel Page, IActionResult Result, int Queries, double Milliseconds)> Request(
+            Func<WorkspaceModel, Task<IActionResult>>? action = null, Guid? projectId = null, string section = "calculation")
+        {
+            var counter = new QueryCounter();
+            await using var requestContext = new CarbonFootprintDbContext(
+                new DbContextOptionsBuilder<CarbonFootprintDbContext>(CreateOptions()).AddInterceptors(counter).Options,
+                new TestOrganizationScope(organizationId));
+            using var services = new ServiceCollection().AddSingleton(requestContext).AddLogging()
+                .AddIdentityCore<ApplicationUser>().AddEntityFrameworkStores<CarbonFootprintDbContext>()
+                .Services.BuildServiceProvider();
+            var http = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, reviewerId.ToString())], "test"))
+            };
+            var page = new WorkspaceModel(requestContext, new TestOrganizationScope(organizationId), null!, null!, null!,
+                services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new InventorySnapshotReader(requestContext),
+                new AllowAuthorization(), null!, null!, new EphemeralDataProtectionProvider(), provenance)
+            {
+                PageContext = new PageContext { HttpContext = http },
+                TempData = new TempDataDictionary(http, new MemoryTempDataProvider()),
+                Section = section,
+                ProjectVersionId = projectId ?? selected.Id
+            };
+            var watch = Stopwatch.StartNew();
+            var result = await (action?.Invoke(page) ?? page.OnGetAsync(CancellationToken.None));
+            watch.Stop();
+            Assert.False(requestContext.ChangeTracker.HasChanges());
+            return (page, result, counter.Count, watch.Elapsed.TotalMilliseconds);
+        }
+        await Request(); // Warm EF query compilation before measuring.
+        var one = await Request();
+        Assert.Contains(selected.Id, one.Page.CurrentRunProjectIds);
+        await SeedProjects(99);
+        var hundred = await Request();
+        output.WriteLine($"Freshness benchmark: 1 project={one.Queries} queries/{one.Milliseconds:F2} ms; 100 projects={hundred.Queries} queries/{hundred.Milliseconds:F2} ms.");
+        Assert.Equal(one.Queries, hundred.Queries);
+        Assert.InRange(hundred.Queries, 1, 40);
+        Assert.Equal(selected.Id, Assert.Single(hundred.Page.CurrentRunProjectIds));
+        var switched = await Request(projectId: projects[99].Id);
+        Assert.Equal(projects[99].Id, Assert.Single(switched.Page.CurrentRunProjectIds));
+        Assert.Empty((await Request(section: "product")).Page.CurrentRunProjectIds);
+
+        var activity = await context.ActivityData.SingleAsync(item => item.InventoryProjectVersionId == selected.Id);
+        var stage = await context.LifecycleStageDeclarations.SingleAsync(item =>
+            item.InventoryProjectVersionId == selected.Id && item.LifecycleStage == (int)LifecycleStage.Manufacturing);
+        var originalRun = await context.CalculationRuns.SingleAsync(item => item.ProjectVersionId == selected.Id);
+        var originalManifest = originalRun.CanonicalInputManifest;
+        var replacementPcr = CreatePcrVersion(organizationId, PcrPublicationStatus.Published);
+        replacementPcr.FormulaRuleSetVersion = "changed-formula-rules-v2";
+        context.PcrVersions.Add(replacementPcr);
+        await context.SaveChangesAsync();
+        var mutations = new (string Name, Action Change, Action Restore)[]
+        {
+            ("functional unit", () => selected.FunctionalUnit = "2 kg product", () => selected.FunctionalUnit = "1 kg product"),
+            ("system boundary", () => selected.SystemBoundary = "cradle-to-gate", () => selected.SystemBoundary = "cradle-to-grave"),
+            ("activity quantity", () => activity.CanonicalValue = 2m, () => activity.CanonicalValue = 1m),
+            ("raw unit", () => activity.RawUnitCode = "g", () => activity.RawUnitCode = "kg"),
+            ("unit catalogue", () => activity.ConversionRuleVersion = "units-p0-v2", () => activity.ConversionRuleVersion = "units-p0-v1"),
+            ("allocation", () => activity.AllocationFactor = 0.5m, () => activity.AllocationFactor = 1m),
+            ("formula inputs", () => activity.FormulaInputsJson = "{\"amount\":2}", () => activity.FormulaInputsJson = "{}"),
+            ("evidence reference", () => activity.EvidenceSha256 = new string('d', 64), () => activity.EvidenceSha256 = new string('b', 64)),
+            ("stage declaration", () => stage.Reason = "Changed exclusion", () => stage.Reason = "Test exclusion"),
+            ("activity retirement", () => activity.RetiredAt = DateTimeOffset.UtcNow, () => activity.RetiredAt = null),
+            ("factor withdrawal", () => factor.PublicationStatus = "Withdrawn", () => factor.PublicationStatus = "Published"),
+            ("factor review", () => factor.ReviewStatus = "Rejected", () => factor.ReviewStatus = "Approved"),
+            ("factor validity", () => factor.ValidTo = new DateOnly(2026, 6, 30), () => factor.ValidTo = null),
+            ("factor value", () => factor.Value = 3m, () => factor.Value = 2m),
+            ("PCR withdrawal", () => pcr.PublicationStatus = "Withdrawn", () => pcr.PublicationStatus = "Published"),
+            ("PCR deprecation", () => pcr.DeprecatedAt = DateTimeOffset.UtcNow, () => pcr.DeprecatedAt = null),
+            ("PCR formula version", () => selected.PcrVersionId = replacementPcr.Id, () => selected.PcrVersionId = pcr.Id)
+        };
+        foreach (var mutation in mutations)
+        {
+            mutation.Change();
+            await context.SaveChangesAsync();
+            Assert.Empty((await Request()).Page.CurrentRunProjectIds);
+            var submission = await Request(page => page.OnPostSubmitInventoryAsync(selected.Id, CancellationToken.None));
+            Assert.IsType<PageResult>(submission.Result);
+            Assert.False(submission.Page.ModelState.IsValid);
+            selected.WorkflowStatus = "Submitted";
+            await context.SaveChangesAsync();
+            var approval = await Request(page => page.OnPostReviewInventoryAsync(selected.Id,
+                InventoryWorkflowStatus.Approved, "Reviewed", CancellationToken.None));
+            Assert.IsType<PageResult>(approval.Result);
+            Assert.False(approval.Page.ModelState.IsValid);
+            await context.Entry(selected).ReloadAsync();
+            Assert.Equal("Submitted", selected.WorkflowStatus);
+            selected.WorkflowStatus = "Draft";
+            mutation.Restore();
+            await context.SaveChangesAsync();
+            Assert.Contains(selected.Id, (await Request()).Page.CurrentRunProjectIds);
+            output.WriteLine($"Freshness and governance reject changed {mutation.Name}.");
+        }
+        // A stale submission must remain returnable for correction, even when approval is blocked.
+        selected.WorkflowStatus = "Submitted";
+        factor.PublicationStatus = "Withdrawn";
+        await context.SaveChangesAsync();
+        Assert.IsType<RedirectToPageResult>((await Request(page => page.OnPostReviewInventoryAsync(selected.Id,
+            InventoryWorkflowStatus.ChangesRequested, "Replace withdrawn factor", CancellationToken.None))).Result);
+        await context.Entry(selected).ReloadAsync();
+        Assert.Equal("ChangesRequested", selected.WorkflowStatus);
+        factor.PublicationStatus = "Published";
+        await context.SaveChangesAsync();
+        Assert.IsType<RedirectToPageResult>((await Request(page =>
+            page.OnPostSubmitInventoryAsync(selected.Id, CancellationToken.None))).Result);
+        Assert.IsType<RedirectToPageResult>((await Request(page => page.OnPostReviewInventoryAsync(selected.Id,
+            InventoryWorkflowStatus.Approved, "Reviewed", CancellationToken.None))).Result);
+        await context.Entry(selected).ReloadAsync();
+        Assert.Equal("Approved", selected.WorkflowStatus);
+        await context.Entry(originalRun).ReloadAsync();
+        Assert.Equal(originalManifest, originalRun.CanonicalInputManifest);
+        Assert.True(CanonicalManifest.HasValidSha256(originalRun.CanonicalInputManifest, originalRun.InputSha256));
+
+        // Corrupt only a synthetic new run, leaving the historical run untouched.
+        context.CalculationRuns.Add(new CalculationRunRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            ProjectVersionId = selected.Id,
+            CanonicalInputManifest = originalManifest + " ",
+            InputSha256 = originalRun.InputSha256,
+            EngineBuild = originalRun.EngineBuild,
+            RuleSetVersion = originalRun.RuleSetVersion,
+            UnitCatalogueVersion = originalRun.UnitCatalogueVersion,
+            GwpVersion = originalRun.GwpVersion,
+            PcrVersion = originalRun.PcrVersion,
+            DataQualitySummaryJson = "{}",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        selected.WorkflowStatus = "Draft";
+        await context.SaveChangesAsync();
+        var corrupted = await Request();
+        Assert.Empty(corrupted.Page.CurrentRunProjectIds);
+        Assert.False(corrupted.Page.LatestManifestHashValid);
+        Assert.IsType<PageResult>((await Request(page => page.OnPostSubmitInventoryAsync(selected.Id, CancellationToken.None))).Result);
+        selected.WorkflowStatus = "Submitted";
+        await context.SaveChangesAsync();
+        Assert.IsType<PageResult>((await Request(page => page.OnPostReviewInventoryAsync(selected.Id,
+            InventoryWorkflowStatus.Approved, "Reviewed", CancellationToken.None))).Result);
+        var export = await Request(page => page.OnGetExportExcelAsync(selected.Id, CancellationToken.None));
+        Assert.Equal(StatusCodes.Status409Conflict, Assert.IsType<ObjectResult>(export.Result).StatusCode);
+    }
+
+    private sealed class QueryCounter : DbCommandInterceptor
+    {
+        public int Count { get; private set; }
+        public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result)
+        {
+            Count++;
+            return result;
+        }
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Count++;
+            return new(result);
+        }
+    }
+
     [Fact]
     public async Task InventorySnapshotReader_PreservesProvenanceAndDetectsChangedInputsWithoutWriting()
     {

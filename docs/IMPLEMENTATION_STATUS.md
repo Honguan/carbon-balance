@@ -16,6 +16,15 @@
 | 7 | complete（係數 staging） | Legacy raw/staging/validate/conflict、checksum、防重、CLI、映射與差異分類；本次已找到三類五階段候選工作簿，尚未完成領域對帳或整本匯入 |
 | 8 | complete | threat model、CI 安全閘門、SBOM、環境範例、runbooks、空庫/升級/備份還原、效能與 WCAG 基礎稽核 |
 
+## Issue #50：計算結果有效性查詢與核准前驗證（2026-10-02）
+
+- 計算頁只對目前選定盤查重建 canonical manifest；不再逐一重建整個組織的快照，也不新增容易漏更新的 dirty marker。既有全組織清單載入與分頁仍由 #49 處理。
+- 頁面、送審與核准共用目前輸入／完整雜湊比對，另重用 PCR 規則與係數有效性驗證，防止係數／PCR 撤回後仍核准舊結果。退回補正不受此限制；GET 不寫入或重算結果。
+- PostgreSQL 18.4、每筆盤查各有五階段宣告、一筆活動與已持久化 run：修正前 1／100 筆盤查為 22／517 次查詢；修正後（含新增治理驗證）固定 27／27 次。單次暖機後量測為 156.08／95.08 ms，僅作回歸觀察，不宣稱 P95 或硬體無關效能保證。
+- 可重現：設定獨立測試資料庫 `CARBON_TEST_DB_CONNECTION`，執行 `dotnet test tests/Integration/CarbonFootprint.Integration.Tests.csproj --configuration Release --filter FullyQualifiedName~CalculationFreshness --logger "console;verbosity=detailed"`。涵蓋 100 筆盤查、選取切換、17 類輸入／依賴變更、送審／核准拒絕及補正／正常核准路徑。
+- locked restore、Release build（0 warning／error）、完整 format 檢查及 159 個測試通過（Integration 24）；新增的毀損快照案例同時驗證頁面、送審、核准與匯出拒絕，不更改舊 run 原文或雜湊。
+- 不改 schema、計算公式、manifest 格式或歷史結果。現有報表匯出仍依凍結快照驗證原始雜湊；完整查驗封存包仍屬 #30，並行寫入控制屬 #55，不能以本項取代。
+
 ## Issue #53：CSV 匯出安全（2026-10-02）
 
 - 盤查清冊與證據索引共用試算表安全編碼；公式、前置空白／控制字元及全形公式符號加上文字前綴，真正的數值維持數值。
