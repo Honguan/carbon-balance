@@ -9,7 +9,7 @@ usage() {
     cat <<'EOF'
 Usage: bash scripts/setup-local.sh [--manual] [--no-start] [--reset-data]
 
-  --manual      Interactively enter PostgreSQL and MinIO passwords.
+  --manual      Interactively enter PostgreSQL and object storage passwords.
   --no-start    Create or validate .env without starting Docker services.
   --reset-data  Delete this project's Docker containers and volumes before startup.
 EOF
@@ -135,7 +135,7 @@ EOF
 
     if [ "$manual" = true ]; then
         postgres_password="$(read_password 'PostgreSQL password')"
-        minio_password="$(read_password 'MinIO password')"
+        minio_password="$(read_password 'Object storage password')"
     else
         postgres_password="$(new_password)"
         minio_password="$(new_password)"
@@ -143,7 +143,7 @@ EOF
     administrator_bootstrap_token="$(new_password)"
 
     if [ "$postgres_password" = "$minio_password" ]; then
-        echo 'PostgreSQL and MinIO must use different passwords.' >&2
+        echo 'PostgreSQL and object storage must use different passwords.' >&2
         exit 1
     fi
 
@@ -153,10 +153,10 @@ ASPNETCORE_ENVIRONMENT=Development
 POSTGRES_DB=carbon_footprint
 POSTGRES_USER=carbon_app
 POSTGRES_PASSWORD=$postgres_password
-MINIO_ROOT_USER=carbon_minio
-MINIO_ROOT_PASSWORD=$minio_password
+OBJECT_STORAGE_ACCESS_KEY=carbon_storage
+OBJECT_STORAGE_SECRET_KEY=$minio_password
 ADMIN_BOOTSTRAP_TOKEN=$administrator_bootstrap_token
-OBJECTSTORAGE__ENDPOINT=http://minio:9000
+OBJECTSTORAGE__ENDPOINT=http://object-storage:9000
 OBJECTSTORAGE__BUCKET=carbon-evidence
 MAIL__HOST=mailpit
 MAIL__PORT=1025
@@ -169,8 +169,8 @@ EOF
 Created .env with these local credentials:
   PostgreSQL user: carbon_app
   PostgreSQL password: $postgres_password
-  MinIO user: carbon_minio
-  MinIO password: $minio_password
+  Object storage access key: carbon_storage
+  Object storage secret key: $minio_password
   Administrator bootstrap token: $administrator_bootstrap_token
   Settings file: $env_path
 
@@ -181,7 +181,10 @@ else
 fi
 
 postgres_password="$(get_env_value POSTGRES_PASSWORD)"
-minio_password="$(get_env_value MINIO_ROOT_PASSWORD)"
+minio_password="$(get_env_value OBJECT_STORAGE_SECRET_KEY)"
+if [ -z "$minio_password" ]; then
+    minio_password="$(get_env_value MINIO_ROOT_PASSWORD)"
+fi
 administrator_bootstrap_token="$(get_env_value ADMIN_BOOTSTRAP_TOKEN)"
 
 if [ -z "$administrator_bootstrap_token" ]; then
@@ -199,13 +202,13 @@ esac
 
 case "$minio_password" in
     ''|*change-this*|*replace-with*)
-        echo 'MINIO_ROOT_PASSWORD is not configured. Edit .env, or remove an unused .env and rerun this script.' >&2
+        echo 'OBJECT_STORAGE_SECRET_KEY is not configured. Edit .env, or remove an unused .env and rerun this script.' >&2
         exit 1
         ;;
 esac
 
 if [ "$postgres_password" = "$minio_password" ]; then
-    echo 'POSTGRES_PASSWORD and MINIO_ROOT_PASSWORD must be different.' >&2
+    echo 'POSTGRES_PASSWORD and OBJECT_STORAGE_SECRET_KEY must be different.' >&2
     exit 1
 fi
 
@@ -224,6 +227,12 @@ if [ "$reset_data" = true ]; then
     docker compose down -v --remove-orphans
 fi
 
+if [ "$reset_data" = false ] && docker volume inspect carbon-footprint_minio-data >/dev/null 2>&1 &&
+    [ "$(get_env_value OBJECT_STORAGE_MIGRATION_VERIFIED)" != true ]; then
+    echo 'Existing MinIO data was preserved. Complete docs/runbooks/OBJECT_STORAGE_MIGRATION.md before switching storage.' >&2
+    exit 1
+fi
+
 docker compose config --quiet
 docker compose up -d --build
 docker compose ps -a
@@ -233,7 +242,7 @@ cat <<'EOF'
 Startup command completed. ClamAV can take longer on the first run.
   Application: http://127.0.0.1:8088
   Mailpit:     http://127.0.0.1:8025
-  MinIO:       http://127.0.0.1:9001
+  S3 API:      http://127.0.0.1:9000
   Status:      docker compose ps -a
   Logs:        docker compose logs --tail=200
 
