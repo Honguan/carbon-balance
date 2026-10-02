@@ -305,16 +305,31 @@ try {
     );
 
     // Enroll the built-in authenticator flow and retain one recovery code for one-time-use coverage.
+    const preEnrollmentCookie = (await context.cookies(baseUrl))
+        .find((cookie) => cookie.name.includes("Identity.Application"));
+    assert(preEnrollmentCookie, "Enrollment setup did not have an application cookie.");
     await page.goto(`${baseUrl}/Identity/Account/Manage/TwoFactorAuthentication`, { waitUntil: "domcontentloaded" });
     await page.locator('a[href*="EnableAuthenticator"]').click();
     await expectUrl(page, "/Identity/Account/Manage/EnableAuthenticator", "Authenticator enrollment did not open");
     const sharedKey = (await page.locator("kbd").first().textContent())?.replace(/\s/g, "") ?? "";
     assert(sharedKey.length > 0, "Authenticator enrollment did not expose a shared key.");
+    // Key generation changes the security stamp; enrollment must survive the next validation interval.
+    await page.waitForTimeout(1_100);
+    const staleEnrollmentContext = await browser.newContext();
+    await staleEnrollmentContext.addCookies([preEnrollmentCookie]);
+    const staleEnrollmentPage = await staleEnrollmentContext.newPage();
+    await staleEnrollmentPage.goto(`${baseUrl}/Workspace`, { waitUntil: "domcontentloaded" });
+    await expectUrl(staleEnrollmentPage, "/Identity/Account/Login", "Authenticator key generation did not invalidate the pre-change session");
+    await staleEnrollmentContext.close();
     await page.locator('input[name="Input.Code"]').fill(totp(sharedKey));
     await page.getByRole("button", { name: "Verify", exact: true }).click();
     await expectUrl(page, "/Identity/Account/Manage/ShowRecoveryCodes", "Authenticator enrollment did not issue recovery codes");
     let recoveryCodes = (await page.locator("code").allTextContents()).map((code) => code.trim()).filter(Boolean);
     assert(recoveryCodes.length > 0, "Authenticator enrollment did not issue recovery codes.");
+    await page.waitForTimeout(1_100);
+    await page.goto(`${baseUrl}/Workspace`, { waitUntil: "domcontentloaded" });
+    await expectUrl(page, "/Workspace", "Completed enrollment invalidated the current session");
+    assert(await page.locator("#invitationEmail").isDisabled(), "Enrollment refresh incorrectly granted an MFA login claim.");
 
     const preRecoveryCodeRotationCookie = (await context.cookies(baseUrl))
         .find((cookie) => cookie.name.includes("Identity.Application"));

@@ -61,6 +61,7 @@
 - 新增唯讀預覽、不可覆寫的複製及逐物件下載比對工具與[遷移／復原手冊](runbooks/OBJECT_STORAGE_MIGRATION.md)。來源空 bucket、不同內容的目標物件及比對失敗都拒絕通過；不自動切換應用程式或改動資料庫。
 - Web runtime 安裝目前可用的發行版安全更新；原有 High／Critical 漏洞閘門保留，另納入儲存與遷移工具映像。
 - 修正既有瀏覽器負向測試：先確認未完成 MFA 的邀請表單停用，再直接送出含有效防偽 token 的 POST 驗證後端拒絕，避免測試卡在 disabled 欄位而未測到授權。盤查／活動按鈕與計算頁盤查選擇器同步至現行 UI，保留原驗證條件。
+- 首輪遠端 CI 另揭露 MFA 設定的登入狀態競態：ASP.NET Core 10.0.11 [內建設定頁](https://github.com/dotnet/aspnetcore/blob/v10.0.11/src/Identity/UI/src/Areas/Identity/Pages/V5/Account/Manage/EnableAuthenticator.cshtml.cs) 建立金鑰／啟用 MFA 時更新 security stamp，卻未更新自己的 cookie。新增僅套用該頁的 handler filter，成功變更 stamp 後以框架 API 更新目前 session，不更新其他 cookie、不提升 MFA claim。瀏覽器回歸刻意等待超過 stamp 驗證間隔，檢查目前 session 可完成設定、舊 cookie 被拒絕、設定完成仍須正式 MFA 登入才能管理組織。
 
 本機隔離驗證：locked restore、Release build（0 warning／error）、format、133 項測試（Unit 82、Integration 23、Security 20、Architecture 3、Contract 1、Golden 4）、20 筆空庫 migration、Compose 安全檢查、PowerShell／Bash 語法與 actionlint 通過。Trivy 對 Web、SeaweedFS 與固定遷移工具映像均未發現可修復 High／Critical。
 
