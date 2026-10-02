@@ -1859,37 +1859,10 @@ public sealed class WorkspaceModel : PageModel
             .Where(item => item.ProjectVersionId == project.Id)
             .OrderByDescending(item => item.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
-        if (latestRun is null)
+        var currentRunError = await GetCurrentRunErrorAsync(project, latestRun, cancellationToken);
+        if (currentRunError is not null)
         {
-            ModelState.AddModelError("review", "盤查至少需要一個不可變計算版本才能送審。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        if (string.Equals(latestRun.RuleSetVersion, PendingStageFormulaRuleSetVersion, StringComparison.Ordinal))
-        {
-            ModelState.AddModelError("review", "階段計算公式尚待領域審查，目前不可統一提交。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        if (!CanonicalManifest.TryReadBuildProvenance(
-                latestRun.CanonicalInputManifest,
-                out var buildProvenance)
-            || !buildProvenance.IsVerifiable)
-        {
-            ModelState.AddModelError("review", "計算版本缺少可追溯的 build provenance，不可送審。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var currentSnapshot = await _snapshotReader.ReadAsync(project.Id, cancellationToken);
-        if (!CanonicalManifest.Matches(
-                currentSnapshot,
-                latestRun.CanonicalInputManifest,
-                latestRun.InputSha256))
-        {
-            ModelState.AddModelError("review", "盤查資料已在最近一次計算後變更，請重新計算再提交。");
+            ModelState.AddModelError("review", currentRunError);
             await LoadAsync(cancellationToken);
             return Page();
         }
@@ -1964,6 +1937,21 @@ public sealed class WorkspaceModel : PageModel
             ModelState.AddModelError("review", exception.Message);
             await LoadAsync(cancellationToken);
             return Page();
+        }
+
+        if (decision == InventoryWorkflowStatus.Approved)
+        {
+            var latestRun = await _dbContext.CalculationRuns
+                .Where(item => item.ProjectVersionId == project.Id)
+                .OrderByDescending(item => item.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            var currentRunError = await GetCurrentRunErrorAsync(project, latestRun, cancellationToken);
+            if (currentRunError is not null)
+            {
+                ModelState.AddModelError("review", currentRunError);
+                await LoadAsync(cancellationToken);
+                return Page();
+            }
         }
 
         project.WorkflowStatus = decision.ToString();
@@ -2267,15 +2255,10 @@ public sealed class WorkspaceModel : PageModel
         if (Section == "calculation")
         {
             var currentRunProjectIds = new HashSet<Guid>();
-            foreach (var project in InventoryProjects)
+            foreach (var project in InventoryProjects.Where(item => item.Id == ProjectVersionId))
             {
                 var latestRun = Runs.FirstOrDefault(item => item.ProjectVersionId == project.Id);
-                if (latestRun is not null
-                    && !string.Equals(latestRun.RuleSetVersion, PendingStageFormulaRuleSetVersion, StringComparison.Ordinal)
-                    && CanonicalManifest.Matches(
-                        await _snapshotReader.ReadAsync(project.Id, cancellationToken),
-                        latestRun.CanonicalInputManifest,
-                        latestRun.InputSha256))
+                if (await GetCurrentRunErrorAsync(project, latestRun, cancellationToken) is null)
                 {
                     currentRunProjectIds.Add(project.Id);
                 }
@@ -2322,6 +2305,38 @@ public sealed class WorkspaceModel : PageModel
                     .ToDictionary(item => (LifecycleStage)item.LifecycleStage, item => item.Emissions));
             LatestDifference = CalculationRunDiff.Compare(baseline, candidate);
         }
+    }
+
+    private async Task<string?> GetCurrentRunErrorAsync(
+        InventoryProjectVersionRecord project,
+        CalculationRunRecord? run,
+        CancellationToken cancellationToken)
+    {
+        if (run is null)
+        {
+            return "盤查至少需要一個不可變計算版本才能提交或核准。";
+        }
+        if (string.Equals(run.RuleSetVersion, PendingStageFormulaRuleSetVersion, StringComparison.Ordinal))
+        {
+            return "階段計算公式尚待領域審查，目前不可提交或核准。";
+        }
+        if (!CanonicalManifest.TryReadBuildProvenance(run.CanonicalInputManifest, out var provenance)
+            || !provenance.IsVerifiable)
+        {
+            return "計算版本缺少可追溯的 build provenance，不可提交或核准。";
+        }
+        var pcrViolations = await ValidatePcrProjectAsync(project, requireCompleteInventory: true, cancellationToken);
+        if (pcrViolations.Count > 0)
+        {
+            return string.Join("；", pcrViolations.Select(violation => $"{violation.Code}：{violation.Message}"));
+        }
+        var snapshot = await _snapshotReader.ReadAsync(project.Id, cancellationToken);
+        if (snapshot.Activities.Any(activity => !activity.FactorVersion.IsSelectableOn(activity.PeriodEnd)))
+        {
+            return "計算所引用的係數未發布、已撤回、未通過審查或不在有效期，不可提交或核准。";
+        }
+        return CanonicalManifest.Matches(snapshot, run.CanonicalInputManifest, run.InputSha256)
+            ? null : "盤查資料已在最近一次計算後變更或快照雜湊不符，請重新計算再提交或核准。";
     }
 
     private Guid RequireOrganization() => OrganizationId
