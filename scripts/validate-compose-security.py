@@ -25,6 +25,16 @@ with open(sys.argv[2], encoding="utf-8") as source:
 require_loopback(development, "development")
 require_loopback(production, "production")
 
+storage = development.get("services", {}).get("object-storage", {})
+if not storage.get("image", "").startswith("chrislusf/seaweedfs:4.48@sha256:"):
+    fail("development: object storage must use the pinned supported image")
+if {str(port.get("target")) for port in published_ports(storage)} != {"9000"}:
+    fail("development: only the S3 API may be published, not storage administration services")
+if not storage.get("environment", {}).get("AWS_SECRET_ACCESS_KEY"):
+    fail("development: object storage authentication is required")
+if any(volume.get("source", "").endswith("minio-data") for volume in storage.get("volumes", [])):
+    fail("development: legacy MinIO data must never be mounted by the replacement service")
+
 production_services = production.get("services", {})
 unexpected = set(production_services) - {"migrate", "web"}
 if unexpected:

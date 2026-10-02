@@ -20,6 +20,7 @@ RUN dotnet publish src/CarbonFootprint.Web/CarbonFootprint.Web.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.11 AS runtime
 WORKDIR /app
 RUN apt-get update \
+    && apt-get upgrade --yes \
     && apt-get install --yes --no-install-recommends curl libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /keys \

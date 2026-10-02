@@ -112,7 +112,7 @@ Restore the original .env, or delete disposable local data with:
 
         if ($Manual) {
             $postgresPassword = Read-LocalPassword 'PostgreSQL password'
-            $minioPassword = Read-LocalPassword 'MinIO password'
+            $minioPassword = Read-LocalPassword 'Object storage password'
         }
         else {
             $postgresPassword = New-LocalPassword
@@ -121,7 +121,7 @@ Restore the original .env, or delete disposable local data with:
         $administratorBootstrapToken = New-LocalPassword
 
         if ($postgresPassword -eq $minioPassword) {
-            throw 'PostgreSQL and MinIO must use different passwords.'
+            throw 'PostgreSQL and object storage must use different passwords.'
         }
 
         $content = @"
@@ -129,10 +129,10 @@ ASPNETCORE_ENVIRONMENT=Development
 POSTGRES_DB=carbon_footprint
 POSTGRES_USER=carbon_app
 POSTGRES_PASSWORD=$postgresPassword
-MINIO_ROOT_USER=carbon_minio
-MINIO_ROOT_PASSWORD=$minioPassword
+OBJECT_STORAGE_ACCESS_KEY=carbon_storage
+OBJECT_STORAGE_SECRET_KEY=$minioPassword
 ADMIN_BOOTSTRAP_TOKEN=$administratorBootstrapToken
-OBJECTSTORAGE__ENDPOINT=http://minio:9000
+OBJECTSTORAGE__ENDPOINT=http://object-storage:9000
 OBJECTSTORAGE__BUCKET=carbon-evidence
 MAIL__HOST=mailpit
 MAIL__PORT=1025
@@ -148,8 +148,8 @@ MAIL__PORT=1025
         Write-Host 'Created .env with these local credentials:' -ForegroundColor Green
         Write-Host '  PostgreSQL user: carbon_app'
         Write-Host "  PostgreSQL password: $postgresPassword"
-        Write-Host '  MinIO user: carbon_minio'
-        Write-Host "  MinIO password: $minioPassword"
+        Write-Host '  Object storage access key: carbon_storage'
+        Write-Host "  Object storage secret key: $minioPassword"
         Write-Host "  Administrator bootstrap token: $administratorBootstrapToken"
         Write-Host "  Settings file: $envPath"
         Write-Warning 'Keep .env private. Do not commit it, paste it into chat, or share it.'
@@ -159,7 +159,10 @@ MAIL__PORT=1025
     }
 
     $postgresPassword = Get-EnvValue 'POSTGRES_PASSWORD'
-    $minioPassword = Get-EnvValue 'MINIO_ROOT_PASSWORD'
+    $minioPassword = Get-EnvValue 'OBJECT_STORAGE_SECRET_KEY'
+    if ([string]::IsNullOrWhiteSpace($minioPassword)) {
+        $minioPassword = Get-EnvValue 'MINIO_ROOT_PASSWORD'
+    }
     $administratorBootstrapToken = Get-EnvValue 'ADMIN_BOOTSTRAP_TOKEN'
 
     if ([string]::IsNullOrWhiteSpace($administratorBootstrapToken)) {
@@ -178,15 +181,15 @@ MAIL__PORT=1025
 
     if ([string]::IsNullOrWhiteSpace($minioPassword) -or
         $minioPassword -match 'change-this|replace-with') {
-        throw 'MINIO_ROOT_PASSWORD is not configured. Edit .env, or remove an unused .env and rerun this script.'
+        throw 'OBJECT_STORAGE_SECRET_KEY is not configured. Edit .env, or remove an unused .env and rerun this script.'
     }
 
     Assert-LocalPassword -Password $postgresPassword -Name 'POSTGRES_PASSWORD'
-    Assert-LocalPassword -Password $minioPassword -Name 'MINIO_ROOT_PASSWORD'
+    Assert-LocalPassword -Password $minioPassword -Name 'OBJECT_STORAGE_SECRET_KEY'
     Assert-LocalPassword -Password $administratorBootstrapToken -Name 'ADMIN_BOOTSTRAP_TOKEN'
 
     if ($postgresPassword -eq $minioPassword) {
-        throw 'POSTGRES_PASSWORD and MINIO_ROOT_PASSWORD must be different.'
+        throw 'POSTGRES_PASSWORD and OBJECT_STORAGE_SECRET_KEY must be different.'
     }
 
     if ($NoStart) {
@@ -199,6 +202,11 @@ MAIL__PORT=1025
         Invoke-Compose -Arguments @('down', '-v', '--remove-orphans')
     }
 
+    if (-not $ResetData -and $dockerVolumes -contains 'carbon-footprint_minio-data' -and
+        (Get-EnvValue 'OBJECT_STORAGE_MIGRATION_VERIFIED') -ne 'true') {
+        throw 'Existing MinIO data was preserved. Complete docs/runbooks/OBJECT_STORAGE_MIGRATION.md before switching storage.'
+    }
+
     Invoke-Compose -Arguments @('config', '--quiet')
     Invoke-Compose -Arguments @('up', '-d', '--build')
     Invoke-Compose -Arguments @('ps', '-a')
@@ -207,7 +215,7 @@ MAIL__PORT=1025
     Write-Host 'Startup command completed. ClamAV can take longer on the first run.' -ForegroundColor Green
     Write-Host '  Application: http://127.0.0.1:8088'
     Write-Host '  Mailpit:     http://127.0.0.1:8025'
-    Write-Host '  MinIO:       http://127.0.0.1:9001'
+    Write-Host '  S3 API:      http://127.0.0.1:9000'
     Write-Host '  Status:      docker compose ps -a'
     Write-Host '  Logs:        docker compose logs --tail=200'
     Write-Host 'migrate showing Exited (0) means the database migration completed successfully.'

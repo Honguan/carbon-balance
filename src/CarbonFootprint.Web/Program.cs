@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -109,7 +110,10 @@ builder.Services.AddHttpClient<IMoenvFactorSource, MoenvFactorClient>(client =>
 builder.Services.AddScoped<MoenvFactorSynchronizationService>();
 builder.Services.AddScoped<IAuthorizationHandler, OrganizationPermissionHandler>();
 builder.Services.AddScoped<IAuthorizationHandler, MfaEnabledHandler>();
-builder.Services.AddRazorPages();
+builder.Services.AddScoped<RefreshAuthenticatorSessionFilter>();
+builder.Services.AddRazorPages(options => options.Conventions.AddAreaPageApplicationModelConvention(
+    "Identity", "/Account/Manage/EnableAuthenticator",
+    model => model.Filters.Add(new ServiceFilterAttribute(typeof(RefreshAuthenticatorSessionFilter)))));
 builder.Services.AddProblemDetails();
 var dataProtectionPath = builder.Configuration["DataProtection:KeyPath"];
 if (!string.IsNullOrWhiteSpace(dataProtectionPath))

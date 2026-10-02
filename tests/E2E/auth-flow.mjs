@@ -288,12 +288,16 @@ try {
     await expectUrl(page, "/Workspace", "Current user could not reauthenticate after the organization security change");
 
     // A password-only application cookie must not authorize governance operations.
-    await page.locator("#invitationEmail").fill(`password-only-${Date.now()}@example.test`);
-    const forbiddenInvitePromise = page.waitForResponse(
-        (candidate) => candidate.url().includes("handler=InviteMember") && candidate.request().method() === "POST"
-    );
-    await page.getByRole("button", { name: "寄送邀請" }).click();
-    const forbiddenInvite = await forbiddenInvitePromise;
+    assert(await page.locator("#invitationEmail").isDisabled(), "Password-only governance form was enabled.");
+    const invitationForm = page.locator('form[action*="handler=InviteMember"]');
+    const forbiddenInvite = await context.request.post(new URL(await invitationForm.getAttribute("action"), page.url()).href, {
+        form: {
+            invitationEmail: `password-only-${Date.now()}@example.test`,
+            invitationRole: await page.locator("#invitationRole").inputValue(),
+            __RequestVerificationToken: await invitationForm.locator('input[name="__RequestVerificationToken"]').inputValue()
+        },
+        maxRedirects: 0
+    });
     assert(
         forbiddenInvite.status() === 302
             && forbiddenInvite.headers().location?.includes("/Identity/Account/AccessDenied"),
@@ -301,16 +305,31 @@ try {
     );
 
     // Enroll the built-in authenticator flow and retain one recovery code for one-time-use coverage.
+    const preEnrollmentCookie = (await context.cookies(baseUrl))
+        .find((cookie) => cookie.name.includes("Identity.Application"));
+    assert(preEnrollmentCookie, "Enrollment setup did not have an application cookie.");
     await page.goto(`${baseUrl}/Identity/Account/Manage/TwoFactorAuthentication`, { waitUntil: "domcontentloaded" });
     await page.locator('a[href*="EnableAuthenticator"]').click();
     await expectUrl(page, "/Identity/Account/Manage/EnableAuthenticator", "Authenticator enrollment did not open");
     const sharedKey = (await page.locator("kbd").first().textContent())?.replace(/\s/g, "") ?? "";
     assert(sharedKey.length > 0, "Authenticator enrollment did not expose a shared key.");
+    // Key generation changes the security stamp; enrollment must survive the next validation interval.
+    await page.waitForTimeout(1_100);
+    const staleEnrollmentContext = await browser.newContext();
+    await staleEnrollmentContext.addCookies([preEnrollmentCookie]);
+    const staleEnrollmentPage = await staleEnrollmentContext.newPage();
+    await staleEnrollmentPage.goto(`${baseUrl}/Workspace`, { waitUntil: "domcontentloaded" });
+    await expectUrl(staleEnrollmentPage, "/Identity/Account/Login", "Authenticator key generation did not invalidate the pre-change session");
+    await staleEnrollmentContext.close();
     await page.locator('input[name="Input.Code"]').fill(totp(sharedKey));
     await page.getByRole("button", { name: "Verify", exact: true }).click();
     await expectUrl(page, "/Identity/Account/Manage/ShowRecoveryCodes", "Authenticator enrollment did not issue recovery codes");
     let recoveryCodes = (await page.locator("code").allTextContents()).map((code) => code.trim()).filter(Boolean);
     assert(recoveryCodes.length > 0, "Authenticator enrollment did not issue recovery codes.");
+    await page.waitForTimeout(1_100);
+    await page.goto(`${baseUrl}/Workspace`, { waitUntil: "domcontentloaded" });
+    await expectUrl(page, "/Workspace", "Completed enrollment invalidated the current session");
+    assert(await page.locator("#invitationEmail").isDisabled(), "Enrollment refresh incorrectly granted an MFA login claim.");
 
     const preRecoveryCodeRotationCookie = (await context.cookies(baseUrl))
         .find((cookie) => cookie.name.includes("Identity.Application"));
@@ -447,7 +466,7 @@ try {
         await productSelect.selectOption({ label: `${productLabel} 第 1 版` });
         await pcrSelect.selectOption({ label: `${pcrRegistration} 第 1 版－E2E PCR 規範` });
         await page.locator("#functionalUnit").fill(functionalUnit);
-        await page.getByRole("button", { name: "儲存盤查第 1 版" }).click();
+        await page.getByRole("button", { name: "建立盤查版本" }).click();
         await page.getByText("盤查專案第 1 版已建立。").waitFor({ state: "visible" });
     }
 
@@ -455,7 +474,7 @@ try {
     await page.locator("#productVersionId").selectOption({ label: "E2E 產品 A 第 1 版" });
     await page.locator("#pcrVersionId").selectOption({ label: `${pcrRegistration} 第 1 版－E2E PCR 規範` });
     await page.locator("#declaredUnit").selectOption("kg");
-    await page.getByRole("button", { name: "儲存盤查第 1 版" }).click();
+    await page.getByRole("button", { name: "建立盤查版本" }).click();
     await page.getByText("PCR-DECLARED-UNIT").waitFor({ state: "visible" });
 
     await createInventory("E2E 產品 A", "1 件 E2E 產品 A");
@@ -540,11 +559,11 @@ try {
     await page.locator("#collection-raw-material").selectOption("供應商聲明／問卷");
     await page.locator("#source-reference-raw-material").fill("E2E-SUPPLIER-001");
     await page.locator("#value-raw-material").fill("2");
-    await page.getByRole("button", { name: "儲存「原料取得階段」活動" }).click();
+    await page.getByRole("button", { name: "儲存活動", exact: true }).click();
     await page.getByText("活動數據已保存。").waitFor({ state: "visible" });
 
     await page.goto(`${baseUrl}/Workspace/calculation`, { waitUntil: "networkidle" });
-    const calculationProjectSelect = page.locator("#calculationProjectVersionId");
+    const calculationProjectSelect = page.locator("#projectVersionId");
     await expectSelectOptions(calculationProjectSelect, 2, "Calculation project-version select is unusable");
     const calculationValues = await calculationProjectSelect.locator("option").evaluateAll((options) => options.map((option) => option.value));
     const calculationCurrent = await calculationProjectSelect.inputValue();
