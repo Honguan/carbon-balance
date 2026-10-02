@@ -143,7 +143,10 @@ jobs:
           @echo off
           if "%1"=="info" exit /b 0
           if "%1"=="compose" exit /b 0
-          if "%1"=="volume" if "%2"=="ls" exit /b 0
+          if "%1"=="volume" if "%2"=="ls" (
+            if defined CARBON_TEST_LEGACY_VOLUME echo carbon-footprint_minio-data
+            exit /b 0
+          )
           exit /b 1
           '@ | Set-Content -LiteralPath (Join-Path $mockDirectory 'docker.cmd') -Encoding Ascii
 
@@ -159,16 +162,28 @@ jobs:
             Where-Object { $_ -like 'POSTGRES_PASSWORD=*' } |
             Select-Object -Last 1) -replace '^POSTGRES_PASSWORD=', ''
           $minioPassword = (Get-Content -LiteralPath '.env' |
-            Where-Object { $_ -like 'MINIO_ROOT_PASSWORD=*' } |
-            Select-Object -Last 1) -replace '^MINIO_ROOT_PASSWORD=', ''
+            Where-Object { $_ -like 'OBJECT_STORAGE_SECRET_KEY=*' } |
+            Select-Object -Last 1) -replace '^OBJECT_STORAGE_SECRET_KEY=', ''
 
           if ([string]::IsNullOrWhiteSpace($postgresPassword) -or
               [string]::IsNullOrWhiteSpace($minioPassword)) {
             throw 'The setup script did not generate both required passwords.'
           }
           if ($postgresPassword -eq $minioPassword) {
-            throw 'The generated PostgreSQL and MinIO passwords must be different.'
+            throw 'The generated PostgreSQL and object storage passwords must be different.'
           }
+          $env:CARBON_TEST_LEGACY_VOLUME = 'true'
+          $migrationBlocked = $false
+          try {
+            .\scripts\setup-local.ps1
+          } catch {
+            $migrationBlocked = $_.Exception.Message -like 'Existing MinIO data was preserved.*'
+          }
+          if (-not $migrationBlocked) { throw 'Existing storage did not require migration verification.' }
+          (Get-Content -LiteralPath '.env') -replace '^OBJECT_STORAGE_SECRET_KEY=', 'MINIO_ROOT_PASSWORD=' |
+            Set-Content -LiteralPath '.env' -Encoding Ascii
+          Add-Content -LiteralPath '.env' -Value 'OBJECT_STORAGE_MIGRATION_VERIFIED=true'
+          .\scripts\setup-local.ps1
           Remove-Item -LiteralPath '.env' -Force
 
   auth-browser-e2e:
@@ -211,12 +226,15 @@ jobs:
       - name: Start evidence services
         run: |
           docker run --detach \
-            --name carbon-minio-e2e \
+            --name carbon-storage-e2e \
             --network host \
-            --env MINIO_ROOT_USER=carbon_e2e_minio \
-            --env MINIO_ROOT_PASSWORD=auth-e2e-minio-password \
-            minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1 \
-            server /data --address ":9000"
+            --volume carbon-e2e-storage-data:/data \
+            --env AWS_ACCESS_KEY_ID=carbon_e2e_storage \
+            --env AWS_SECRET_ACCESS_KEY=auth-e2e-storage-password \
+            --env S3_BUCKET=carbon-e2e-evidence \
+            chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d \
+            mini -dir=/data -s3.port=9000 -webdav=false -admin.ui=false \
+            -s3.port.iceberg=0 -s3.port.lance=0 -master.telemetry=false
 
           docker run --detach \
             --name carbon-clamav-e2e \
@@ -224,17 +242,45 @@ jobs:
             clamav/clamav:1.5-debian13-slim@sha256:a73435b0fa51886e9e6dd1881656023ba9dce756e055f23981270badbb8ca3d7
 
           for attempt in {1..80}; do
-            if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null \
+            if curl --fail --silent http://127.0.0.1:9000/healthz >/dev/null \
               && docker exec carbon-clamav-e2e clamdscan --ping 1 >/dev/null 2>&1; then
               exit 0
             fi
             if [ "$attempt" -eq 80 ]; then
-              docker logs carbon-minio-e2e
+              docker logs carbon-storage-e2e
               docker logs carbon-clamav-e2e
               exit 1
             fi
             sleep 2
           done
+      - name: Verify storage authentication, migration and restart persistence
+        shell: pwsh
+        run: |
+          $status = curl --silent --output /dev/null --write-out '%{http_code}' --request PUT --data unauthorized http://127.0.0.1:9000/carbon-e2e-evidence/unauthorized
+          if ($status -ne '403') { throw "Unauthenticated S3 write returned $status" }
+          $env:RCLONE_CONFIG_SOURCE_TYPE = 's3'
+          $env:RCLONE_CONFIG_SOURCE_PROVIDER = 'Other'
+          $env:RCLONE_CONFIG_SOURCE_ENDPOINT = 'http://127.0.0.1:9000'
+          $env:RCLONE_CONFIG_SOURCE_ACCESS_KEY_ID = 'carbon_e2e_storage'
+          $env:RCLONE_CONFIG_SOURCE_SECRET_ACCESS_KEY = 'auth-e2e-storage-password'
+          $env:RCLONE_CONFIG_TARGET_ACCESS_KEY_ID = 'carbon_e2e_storage'
+          $env:RCLONE_CONFIG_TARGET_SECRET_ACCESS_KEY = 'auth-e2e-storage-password'
+          docker run --rm --network host --mount "type=bind,source=$env:GITHUB_WORKSPACE,target=/work,readonly" `
+            --env RCLONE_CONFIG_SOURCE_TYPE --env RCLONE_CONFIG_SOURCE_PROVIDER --env RCLONE_CONFIG_SOURCE_ENDPOINT `
+            --env RCLONE_CONFIG_SOURCE_ACCESS_KEY_ID --env RCLONE_CONFIG_SOURCE_SECRET_ACCESS_KEY `
+            rclone/rclone:beta@sha256:75f55eab503b6f7fd8e48559c8459cc652e6911f6d6d2eed9db4f156f5e71c1c `
+            copyto /work/README.md source:migration-source/organizations/test/evidence/fixture.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to seed migration fixture' }
+          ./scripts/migrate-object-storage.ps1 -SourceEndpoint http://127.0.0.1:9000 -TargetEndpoint http://127.0.0.1:9000 -SourceBucket migration-source -TargetBucket migration-target -Network host
+          ./scripts/migrate-object-storage.ps1 -SourceEndpoint http://127.0.0.1:9000 -TargetEndpoint http://127.0.0.1:9000 -SourceBucket migration-source -TargetBucket migration-target -Network host -Apply
+          docker restart carbon-storage-e2e
+          if ($LASTEXITCODE -ne 0) { throw 'Storage restart failed' }
+          for ($attempt = 0; $attempt -lt 30; $attempt++) {
+            curl --fail --silent http://127.0.0.1:9000/healthz > $null
+            if ($LASTEXITCODE -eq 0) { break }
+            Start-Sleep -Seconds 2
+          }
+          ./scripts/migrate-object-storage.ps1 -SourceEndpoint http://127.0.0.1:9000 -TargetEndpoint http://127.0.0.1:9000 -SourceBucket migration-source -TargetBucket migration-target -Network host -Apply
       - name: Start web application
         run: |
           docker run --detach \
@@ -247,8 +293,8 @@ jobs:
             --env MAIL__PORT=1025 \
             --env OBJECTSTORAGE__ENDPOINT=http://127.0.0.1:9000 \
             --env OBJECTSTORAGE__BUCKET=carbon-e2e-evidence \
-            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_minio \
-            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-minio-password \
+            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_storage \
+            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-storage-password \
             --env MALWARESCANNER__HOST=127.0.0.1 \
             --env MALWARESCANNER__PORT=3310 \
             --env RateLimiting__PermitLimit=300 \
@@ -325,8 +371,8 @@ jobs:
             --env MAIL__PORT=1025 \
             --env OBJECTSTORAGE__ENDPOINT=http://127.0.0.1:9000 \
             --env OBJECTSTORAGE__BUCKET=carbon-e2e-evidence \
-            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_minio \
-            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-minio-password \
+            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_storage \
+            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-storage-password \
             --env MALWARESCANNER__HOST=127.0.0.1 \
             --env MALWARESCANNER__PORT=3310 \
             --env RateLimiting__PermitLimit=300 \
@@ -374,7 +420,7 @@ jobs:
           docker rm --force carbon-auth-e2e >/dev/null 2>&1 || true
           docker rm --force carbon-auth-mail-outage-e2e >/dev/null 2>&1 || true
           docker rm --force carbon-auth-stale-e2e >/dev/null 2>&1 || true
-          docker rm --force carbon-minio-e2e >/dev/null 2>&1 || true
+          docker rm --force carbon-storage-e2e >/dev/null 2>&1 || true
           docker rm --force carbon-clamav-e2e >/dev/null 2>&1 || true
 
   secret-scan:
@@ -450,9 +496,10 @@ jobs:
           grep --quiet '把產品碳排放' /tmp/home.html
           grep --quiet '廢棄與回收' /tmp/home.html
 
-          ! grep --quiet 'Forgot your password' /tmp/login.html
-          ! grep --quiet 'Use another service' /tmp/login.html
-          ! grep --quiet 'Register as a new user' /tmp/login.html
+          if grep --quiet -E 'Forgot your password|Use another service|Register as a new user' /tmp/login.html; then
+            echo 'Unexpected untranslated login content'
+            exit 1
+          fi
 
           forgot_status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18088/Identity/Account/ForgotPassword)"
           mfa_status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18088/Identity/Account/LoginWith2fa)"
@@ -497,6 +544,20 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: carbon-footprint:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+      - name: Scan object storage image for Critical and High vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: 1
+      - name: Scan migration tool image for Critical and High vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: rclone/rclone:beta@sha256:75f55eab503b6f7fd8e48559c8459cc652e6911f6d6d2eed9db4f156f5e71c1c
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: 1

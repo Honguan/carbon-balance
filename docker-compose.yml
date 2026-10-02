@@ -17,19 +17,19 @@ services:
       timeout: 5s
       retries: 20
 
-  minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1
-    command: server /data --console-address ":9001"
+  object-storage:
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    command: ["mini", "-dir=/data", "-s3.port=9000", "-webdav=false", "-admin.ui=false", "-s3.port.iceberg=0", "-s3.port.lance=0", "-master.telemetry=false"]
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-carbon_minio}
-      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required; run the local setup script or create .env}"
+      AWS_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY:-${MINIO_ROOT_USER:-carbon_storage}}
+      AWS_SECRET_ACCESS_KEY: "${OBJECT_STORAGE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:?OBJECT_STORAGE_SECRET_KEY is required; run the local setup script or create .env}}"
+      S3_BUCKET: ${OBJECTSTORAGE__BUCKET:-carbon-evidence}
     ports:
       - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
     volumes:
-      - minio-data:/data
+      - object-storage-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:9000/healthz"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -81,10 +81,10 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__Database: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-carbon_footprint};Username=${POSTGRES_USER:-carbon_app};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required; run the local setup script or create .env}"
-      OBJECTSTORAGE__ENDPOINT: http://minio:9000
+      OBJECTSTORAGE__ENDPOINT: http://object-storage:9000
       OBJECTSTORAGE__BUCKET: ${OBJECTSTORAGE__BUCKET:-carbon-evidence}
-      OBJECTSTORAGE__ACCESSKEY: ${MINIO_ROOT_USER:-carbon_minio}
-      OBJECTSTORAGE__SECRETKEY: "${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required; run the local setup script or create .env}"
+      OBJECTSTORAGE__ACCESSKEY: ${OBJECT_STORAGE_ACCESS_KEY:-${MINIO_ROOT_USER:-carbon_storage}}
+      OBJECTSTORAGE__SECRETKEY: "${OBJECT_STORAGE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:?OBJECT_STORAGE_SECRET_KEY is required; run the local setup script or create .env}}"
       MALWARESCANNER__HOST: clamav
       MALWARESCANNER__PORT: 3310
       MAIL__HOST: mailpit
@@ -98,7 +98,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      minio:
+      object-storage:
         condition: service_healthy
       clamav:
         condition: service_healthy
@@ -112,7 +112,7 @@ services:
 
 volumes:
   postgres-data:
-  minio-data:
+  object-storage-data:
   mailpit-data:
   data-protection-keys:
   clamav-data:

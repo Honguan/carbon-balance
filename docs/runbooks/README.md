@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | Web | `127.0.0.1:8088` | `127.0.0.1:${APP_HOST_PORT}`，僅供同機 reverse proxy |
 | PostgreSQL | `127.0.0.1:${POSTGRES_HOST_PORT}` | 外部受管服務／私有網路，不發布 |
-| MinIO API／Console | `127.0.0.1:9000`／`127.0.0.1:9001` | HTTPS 物件儲存；管理介面不發布 |
+| SeaweedFS S3 API | `127.0.0.1:9000`；不發布管理介面 | HTTPS 物件儲存；管理介面不發布 |
 | Mailpit SMTP／UI | `127.0.0.1:1025`／`127.0.0.1:8025` | 不部署；SMTP 必須啟用 TLS |
 | ClamAV | 僅 Compose 私有網路 | 私有隔離網路或同 pod TLS sidecar，不發布 |
 

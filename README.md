@@ -34,7 +34,7 @@ macOS／Linux：
 bash scripts/setup-local.sh
 ```
 
-腳本會自動建立 `.env`、產生 PostgreSQL 與 MinIO 密碼、執行 migration 並啟動服務。
+腳本會自動建立 `.env`、產生 PostgreSQL 與物件儲存密碼、執行 migration 並啟動服務。既有 MinIO 附件須先依[儲存遷移手冊](docs/runbooks/OBJECT_STORAGE_MIGRATION.md)複製及驗證；腳本不會刪除或重用舊 MinIO volume。
 
 確認狀態：
 
@@ -47,7 +47,7 @@ docker compose ps -a
 ```text
 migrate    Exited (0)
 postgres   Up (healthy)
-minio      Up (healthy)
+object-storage Up (healthy)
 clamav     Up (healthy)
 web        Up (healthy)
 ```
@@ -76,11 +76,11 @@ web        Up (healthy)
 |---|---|
 | 碳衡系統 | `http://127.0.0.1:8088` |
 | Mailpit 測試信箱 | `http://127.0.0.1:8025` |
-| MinIO Console | `http://127.0.0.1:9001` |
+| SeaweedFS S3 API（非管理網頁） | `http://127.0.0.1:9000` |
 | PostgreSQL | `127.0.0.1:15432` |
 | 健康狀態 | `http://127.0.0.1:8088/health/ready` |
 
-MinIO 帳號與密碼位於 `.env`。
+S3 憑證使用 `.env` 的 `OBJECT_STORAGE_ACCESS_KEY`／`OBJECT_STORAGE_SECRET_KEY`；舊 `.env` 的 `MINIO_ROOT_USER`／`MINIO_ROOT_PASSWORD` 僅作升級相容來源。管理介面與 filer 不發布至主機。
 
 正式環境必須由 secrets provider 設定 32 至 128 個字元的 `AdministratorBootstrap:Token`；不要使用本機 token、提交 token，或透過公開管道傳送。bootstrap 成功後，即使相同 token 仍在設定中也無法再次取得管理者權限。
 
@@ -181,5 +181,5 @@ docker compose logs migrate --tail=200
 
 - .NET 10 / ASP.NET Core Razor Pages
 - PostgreSQL 18 / Entity Framework Core
-- MinIO / ClamAV / Mailpit
+- SeaweedFS（S3 相容物件儲存）/ ClamAV / Mailpit
 - Docker Compose

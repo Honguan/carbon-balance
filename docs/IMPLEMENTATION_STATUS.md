@@ -10,7 +10,7 @@
 | 1 | complete | .NET 10 modular monolith、PostgreSQL、EF migrations、Docker Compose、Golden Vertical Slice |
 | 2 | complete | Identity、12 字元 production 長密語與常見密碼拒絕、列舉防護 recovery、TOTP／recovery code、absolute session、獨立 auth throttling、組織與角色治理 |
 | 3 | complete | 版本化單位/alias/複合單位、PCR 與係數 review/publish/withdraw/supersede/applicability、staging 匯入 |
-| 4 | complete | 五階段活動類型、適用性、供應商/情境、估算、資料品質、Evidence SHA-256/ClamAV/MinIO |
+| 4 | complete | 五階段活動類型、適用性、供應商/情境、估算、資料品質、Evidence SHA-256/ClamAV/S3（SeaweedFS） |
 | 5 | complete | decimal 計算、受控換算、分配、canonical manifest/hash、不可變 run、lineage/diff、警告與品質摘要 |
 | 6 | complete | Draft/Submitted/ChangesRequested/Approved、角色限制、CSV、Evidence index、manifest、可歸檔 HTML 報告與 audit |
 | 7 | complete（係數 staging） | Legacy raw/staging/validate/conflict、checksum、防重、CLI、映射與差異分類；本次已找到三類五階段候選工作簿，尚未完成領域對帳或整本匯入 |
@@ -53,3 +53,17 @@
 | 文件與來源 | 本機連結檢查、11份原始 DOCX／XLSX hash核對及 `git diff --check` 通過 |
 
 公式與資料表未變動；未重做正式資料庫升級／還原演練、人工 UAT、完整瀏覽器 E2E 或對外發布。舊案例不因工程測試通過而成為經核准的 Golden Case。
+
+## Issue #69：受維護的儲存服務與容器安全更新（2026-10-02）
+
+- 本機與 CI 以固定 digest 的 SeaweedFS 4.48 取代已封存、無法乾淨下載映像的 MinIO。維持 S3 介面，使用獨立 volume；不掛載、不刪除原 MinIO 資料。
+- setup 支援新儲存憑證名稱與舊憑證回退；偵測舊 volume 時，必須先完成附件遷移確認才啟動新堆疊。正式環境仍使用外部 TLS S3 服務。
+- 新增唯讀預覽、不可覆寫的複製及逐物件下載比對工具與[遷移／復原手冊](runbooks/OBJECT_STORAGE_MIGRATION.md)。來源空 bucket、不同內容的目標物件及比對失敗都拒絕通過；不自動切換應用程式或改動資料庫。
+- Web runtime 安裝目前可用的發行版安全更新；原有 High／Critical 漏洞閘門保留，另納入儲存與遷移工具映像。
+- 修正既有瀏覽器負向測試：先確認未完成 MFA 的邀請表單停用，再直接送出含有效防偽 token 的 POST 驗證後端拒絕，避免測試卡在 disabled 欄位而未測到授權。盤查／活動按鈕與計算頁盤查選擇器同步至現行 UI，保留原驗證條件。
+
+本機隔離驗證：locked restore、Release build（0 warning／error）、format、133 項測試（Unit 82、Integration 23、Security 20、Architecture 3、Contract 1、Golden 4）、20 筆空庫 migration、Compose 安全檢查、PowerShell／Bash 語法與 actionlint 通過。Trivy 對 Web、SeaweedFS 與固定遷移工具映像均未發現可修復 High／Critical。
+
+使用一次性測試附件完成 MinIO → SeaweedFS 預覽、複製、bytes 比對及重啟持久化；衝突物件與空來源拒絕測試通過，未認證寫入回傳 403。Windows PowerShell 5.1 的乾淨 setup、舊資料阻擋及舊憑證回退測試通過。Chromium 完整認證／工作區流程（含 PCR 原始文件上傳）、SMTP 中斷、MFA 過期拒絕及前端互動回歸均通過。
+
+固定 rclone 工具為已掃描及演練的預發布 build，限制與更新條件詳見手冊；這些結果不代表正式附件遷移或人工 UAT 已完成。遠端 CI 仍需於 PR 確認。
