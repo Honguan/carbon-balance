@@ -124,9 +124,9 @@ services:
       mailpit:
         condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/live"]
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/ready"]
       interval: 10s
-      timeout: 5s
+      timeout: 8s
       retries: 10
 
 volumes:

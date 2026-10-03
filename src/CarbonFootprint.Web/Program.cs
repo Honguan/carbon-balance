@@ -125,7 +125,15 @@ else if (!builder.Environment.IsDevelopment())
     throw new InvalidOperationException(
         "正式環境必須設定 DataProtection:KeyPath，才能持久化組織 SMTP 密碼的加密金鑰。");
 }
-builder.Services.AddHealthChecks().AddDbContextCheck<CarbonFootprintDbContext>("postgresql");
+var readinessTimeout = TimeSpan.FromSeconds(3);
+builder.Services.AddSingleton<KeyRingReadinessCheck>();
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<CarbonFootprintDbContext>("postgresql", tags: ["ready"])
+    .AddCheck<ObjectStorageReadinessCheck>("object-storage", tags: ["ready"], timeout: readinessTimeout)
+    .AddCheck<MalwareScannerReadinessCheck>("malware-scanner", tags: ["ready"], timeout: readinessTimeout)
+    .AddCheck<KeyRingReadinessCheck>("keyring", tags: ["ready"], timeout: readinessTimeout);
+builder.Services.Configure<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckServiceOptions>(options =>
+    options.Registrations.Single(check => check.Name == "postgresql").Timeout = readinessTimeout);
 var rateLimitPermitCount = builder.Configuration.GetValue("RateLimiting:PermitLimit", 120);
 if (rateLimitPermitCount <= 0)
 {
@@ -255,6 +263,11 @@ if (args.Contains("--sync-factors", StringComparer.Ordinal))
     return;
 }
 
+if (!string.IsNullOrWhiteSpace(dataProtectionPath))
+{
+    KeyRingReadinessCheck.Initialize(app.Services, dataProtectionPath);
+}
+
 app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
@@ -358,7 +371,15 @@ app.Use(async (context, next) =>
 app.UseAuthorization();
 app.MapStaticAssets();
 app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
-app.MapHealthChecks("/health/ready");
+app.MapHealthChecks("/health/ready", new()
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = (context, report) => context.Response.WriteAsJsonAsync(new
+    {
+        status = report.Status.ToString(),
+        components = report.Entries.ToDictionary(entry => entry.Key, entry => entry.Value.Status.ToString())
+    }, context.RequestAborted)
+});
 app.MapRazorPages().WithStaticAssets();
 app.Run();
 
