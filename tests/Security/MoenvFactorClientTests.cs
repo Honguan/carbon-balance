@@ -46,6 +46,23 @@ public sealed class MoenvFactorClientTests
         Assert.Contains("api_key=public-resource-key", handler.RequestUris[1].Query, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("{", "configured-test-key", "source-schema-invalid")]
+    [InlineData("{", "", "metadata-schema-invalid")]
+    [InlineData("{}", "", "metadata-distribution-missing")]
+    [InlineData("{\"result\":{\"distribution\":[]}}", "", "metadata-download-missing")]
+    [InlineData("{\"result\":{\"distribution\":[{\"resourceFormat\":\"JSON\",\"resourceDownloadUrl\":\"http://127.0.0.1/?api_key=secret\"}]}}", "", "metadata-url-invalid")]
+    public async Task DownloadAsync_ReportsControlledFailureCode(string json, string apiKey, string code)
+    {
+        var client = new MoenvFactorClient(new HttpClient(new RecordingHandler(json)),
+            Options.Create(new MoenvFactorSourceOptions { ApiKey = apiKey }));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => client.DownloadAsync(CancellationToken.None));
+
+        Assert.Equal(code, error.Data["MoenvErrorCode"]);
+        Assert.DoesNotContain("secret", error.Message, StringComparison.Ordinal);
+    }
+
     private sealed class RecordingHandler(string responseJson) : HttpMessageHandler
     {
         public Uri? RequestUri { get; private set; }

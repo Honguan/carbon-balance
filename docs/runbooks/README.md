@@ -6,7 +6,7 @@
 
 ## 部署 Profile 與網路邊界
 
-`docker-compose.yml` 只供本機開發，所有 published ports 均綁定 `127.0.0.1`。`docker-compose.production.yml` 是 hardened production 範例，只包含 `migrate` 與 `web`；PostgreSQL、物件儲存管理介面、Mailpit 與 ClamAV 不得由此 profile 對外發布。
+`docker-compose.yml` 只供本機開發，所有 published ports 均綁定 `127.0.0.1`。`docker-compose.production.yml` 是 hardened production 範例，只包含 `migrate`、獨立 `factor-sync` 與 `web`；PostgreSQL、物件儲存管理介面、Mailpit 與 ClamAV 不得由此 profile 對外發布。
 
 | 服務 | 開發環境 | 正式環境 |
 | --- | --- | --- |
@@ -25,11 +25,13 @@ Reverse proxy 必須終止公開 HTTPS 並傳送 `X-Forwarded-Proto`；`TRUSTED_
 1. 確認映像 digest、內嵌 Git commit provenance、SBOM、測試與 Critical/High 掃描均通過；正式映像缺少完整 commit SHA 時應用程式必須拒絕啟動。
 2. 執行 `scripts/migration-preflight.ps1`，確認 EF 模型與遷移一致。
 3. 執行 `scripts/backup.ps1` 並將 SHA-256 記入變更單。
-4. 先執行單次 `migrate` 工作；migration 後會為既有組織同步、直接寫入並發布環境部係數，外部來源或寫入失敗時不得更新 `web`。
-5. 從 `migrate` 結構化日誌確認同步的組織、新增發布、舊草稿啟用、未變更與略過筆數；全新空資料庫顯示零組織屬預期結果。
+4. 先執行單次 `migrate` 工作，只套用 schema 與必要靜態種子，不需要 Internet；其成功後 Web 即可啟動。
+5. 獨立 `factor-sync` 工作執行 `--sync-factors --deployment`。從其日誌與 `identity.system_audit_events` 查 `resource_type = 'FactorSynchronization'`，依批次、時間及來源確認開始、失敗、重試與完成事件，以及來源版本、輸入雜湊及新增／未變更筆數；全新空庫顯示零組織屬預期結果。同步中斷不阻擋 Web，也不清除最後可用目錄。
 6. 驗證 `/health/live`、`/health/ready`、登入、Golden Case、已發布係數與報表總額。
 
-若部署環境暫時無法連線公開來源，經變更核准後設定 `MOENV_IMPORT_ON_DEPLOYMENT=false` 完成部署，並建立待辦在連線恢復後由係數資料庫手動同步。停用自動同步不會刪除既有版本；回滾應保留已產生的係數版本與稽核事件，不執行破壞性刪除。
+下載遇到 DNS／網路錯誤、HTTP 408／429／5xx 或逾時，最多嘗試三次、退避 1／2 秒；格式、分頁超限或資料套用失敗直接回報，修正原因後重試。Migration 已完成後，操作人員執行 `docker compose -f docker-compose.production.yml run --rm --no-deps factor-sync --sync-factors`，不需重跑 migration；失敗回傳非零。`MOENV_IMPORT_ON_DEPLOYMENT=false` 只停用部署自動同步，明確重試命令仍可執行。停用不刪除既有版本，回滾保留已產生的係數版本與稽核事件。
+
+受控原因碼 `source-schema-invalid`／`metadata-schema-invalid` 表示來源 JSON 不符格式；`source-page-limit` 表示需確認下載範圍；`metadata-distribution-missing`／`metadata-download-missing`／`metadata-url-invalid` 表示需確認官方下載詮釋資料。其他失敗保留例外類型、階段及 HTTP 狀態，禁止直接記錄含 URL／金鑰的任意例外訊息。最後成功時間及來源版本由最近一筆 `factor.synchronization.completed` 系統事件查得；下載失敗沒有可驗證輸入時，輸入雜湊為空。
 
 組織 SMTP 可由工作區「郵件服務設定」分頁維護。寄件密碼只保存 Data Protection 密文；正式環境仍應優先使用秘密管理服務注入的預設 `Mail` 設定，並以測試信及稽核事件確認變更。
 

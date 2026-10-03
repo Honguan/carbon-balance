@@ -87,9 +87,11 @@ S3 憑證使用 `.env` 的 `OBJECT_STORAGE_ACCESS_KEY`／`OBJECT_STORAGE_SECRET_
 ## 環境部係數同步
 
 1. 執行 `docker compose up -d --build`。
-2. `migrate` 工作會在 migration 完成後下載一次資料，並為當時已存在的每個組織直接寫入及發布可用係數；相同資料重複部署不會重複新增版本。
+2. `migrate` 只處理 schema 與必要靜態種子；獨立 `factor-sync` 工作在 migration 完成後為既有組織下載及發布係數，其失敗不阻擋 Web。相同資料重複同步不會重複新增版本。
 3. 登入後可開啟「係數資料庫」，按「同步並導入可用係數」手動重試或取得後續更新。
 4. 如需使用自有環境部 API Key，可在 `.env` 加入 `MOENV_API_KEY=取得的金鑰` 後重新啟動；未設定時會解析政府資料開放平臺提供的官方 JSON 公開下載網址。
+
+Migration 已完成後，操作人員可用 `docker compose run --rm --no-deps factor-sync --sync-factors` 單獨重試，不需重跑 migration。命令失敗回傳非零；`docker compose logs factor-sync` 與 `identity.system_audit_events` 的 `FactorSynchronization` 事件可查批次、嘗試、來源版本、輸入雜湊與結果。失敗事件保留受控原因碼及 HTTP 狀態，不記錄 API Key 或任意外部錯誤訊息。
 
 同步來源為環境部資料集 `CFP_P_02`。重新整理瀏覽器不會觸發同步；環境部自動導入資料免人工審查並直接發布，手動新增或更新的係數仍建立待審查草稿。係數表單不要求人工輸入原始文件 SHA-256；公開來源的原始紀錄 SHA-256 由系統自動保存。舊版本與歷史計算不會被覆寫。全新空資料庫若尚無組織，部署匯入會記錄 0 個組織且不寫入係數；建立組織後由係數資料庫手動同步。若部署環境無法連線公開來源，可設定 `MOENV_IMPORT_ON_DEPLOYMENT=false` 暫停預設匯入，待連線恢復後再手動同步。
 

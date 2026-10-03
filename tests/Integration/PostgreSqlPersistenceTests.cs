@@ -1010,6 +1010,74 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task MoenvFactorSynchronization_AuditsRetriesAndPreservesLastGoodCatalogue()
+    {
+        var organizationId = Guid.NewGuid();
+        await using var context = CreateContext(organizationId);
+        context.Organizations.Add(new OrganizationRecord { Id = organizationId, Name = "Sync outage test" });
+        await context.SaveChangesAsync();
+        var download = new MoenvFactorDownload(
+            [new MoenvFactorRecord("Known good", 2m, "kg", "Test source", 2026, new string('a', 64))], 0);
+        var baseline = new MoenvFactorSynchronizationService(CreateOptions(), new StubMoenvFactorSource(download));
+        await baseline.SynchronizeOrganizationAsync(organizationId, null, $"seed-{organizationId:N}", CancellationToken.None);
+        var original = await context.EmissionFactorVersions.AsNoTracking().SingleAsync();
+
+        var correlation = $"outage-{organizationId:N}";
+        var source = new SequenceMoenvFactorSource(attempt => attempt <= 3
+            ? throw new HttpRequestException("secret-api-key-must-not-be-audited", null, System.Net.HttpStatusCode.ServiceUnavailable)
+            : download);
+        var service = new MoenvFactorSynchronizationService(CreateOptions(), source);
+        await Assert.ThrowsAsync<HttpRequestException>(() => service.SynchronizeOrganizationAsync(
+            organizationId, null, correlation, CancellationToken.None));
+        Assert.Equal(3, source.Attempts);
+        var preserved = await context.EmissionFactorVersions.AsNoTracking().SingleAsync();
+        Assert.Equal(original.Id, preserved.Id);
+        Assert.Equal(original.Value, preserved.Value);
+        Assert.Equal("Published", preserved.PublicationStatus);
+        var attempts = await context.SystemAuditEvents.Where(item => item.CorrelationId == correlation)
+            .OrderBy(item => item.Timestamp).ToArrayAsync();
+        Assert.Equal(6, attempts.Length);
+        Assert.Single(attempts.Select(item => item.ResourceId).Distinct());
+        Assert.Equal(3, attempts.Count(item => item.Action == "factor.synchronization.failed"));
+        Assert.All(attempts, item => Assert.DoesNotContain("secret-api-key", item.MetadataJson, StringComparison.Ordinal));
+        var failures = attempts.Where(item => item.Action == "factor.synchronization.failed")
+            .Select(item => JsonDocument.Parse(item.MetadataJson).RootElement.GetProperty("RetryAfterSeconds").GetInt32()).ToArray();
+        Assert.Equal([1, 2, 0], failures);
+
+        // Operator retry does not rerun migrations or duplicate an already published version.
+        var retryCorrelation = $"retry-{organizationId:N}";
+        var retry = await service.SynchronizeOrganizationAsync(organizationId, null, retryCorrelation, CancellationToken.None);
+        Assert.Equal(0, retry.CreatedCount);
+        Assert.Equal(1, retry.UnchangedCount);
+        Assert.Equal(1, await context.EmissionFactorVersions.CountAsync());
+        var success = await context.SystemAuditEvents.SingleAsync(item => item.CorrelationId == retryCorrelation
+            && item.Action == "factor.synchronization.completed");
+        Assert.Equal(MoenvFactorClient.DatasetReference, success.Source);
+        using var metadata = JsonDocument.Parse(success.MetadataJson);
+        Assert.Equal(64, metadata.RootElement.GetProperty("InputSha256").GetString()!.Length);
+        Assert.Equal("CFP_P_02-2026", metadata.RootElement.GetProperty("SourceVersions")[0].GetString());
+
+        var transient = new SequenceMoenvFactorSource(attempt => attempt < 3 ? throw new HttpRequestException("temporary") : download);
+        var recovered = await new MoenvFactorSynchronizationService(CreateOptions(), transient)
+            .SynchronizeOrganizationAsync(organizationId, null, $"recovered-{organizationId:N}", CancellationToken.None);
+        Assert.Equal(3, transient.Attempts);
+        Assert.Equal(1, recovered.UnchangedCount);
+        var invalidCorrelation = $"invalid-{organizationId:N}";
+        var invalid = new SequenceMoenvFactorSource(_ => throw new InvalidOperationException("secret source payload")
+        {
+            Data = { ["MoenvErrorCode"] = "source-schema-invalid" }
+        });
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new MoenvFactorSynchronizationService(CreateOptions(), invalid)
+            .SynchronizeOrganizationAsync(organizationId, null, invalidCorrelation, CancellationToken.None));
+        Assert.Equal(1, invalid.Attempts);
+        var invalidAudit = await context.SystemAuditEvents.SingleAsync(item => item.CorrelationId == invalidCorrelation
+            && item.Action == "factor.synchronization.failed");
+        using var invalidMetadata = JsonDocument.Parse(invalidAudit.MetadataJson);
+        Assert.Equal("source-schema-invalid", invalidMetadata.RootElement.GetProperty("ErrorCode").GetString());
+        Assert.DoesNotContain("secret", invalidAudit.MetadataJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task MoenvFactorSynchronization_DoesNotAutoPublishManualOrWithdrawnVersions()
     {
         var organizationId = Guid.NewGuid();
@@ -1595,6 +1663,12 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
     {
         public Task<MoenvFactorDownload> DownloadAsync(CancellationToken cancellationToken)
             => Task.FromResult(download);
+    }
+
+    private sealed class SequenceMoenvFactorSource(Func<int, MoenvFactorDownload> download) : IMoenvFactorSource
+    {
+        public int Attempts { get; private set; }
+        public Task<MoenvFactorDownload> DownloadAsync(CancellationToken cancellationToken) => Task.FromResult(download(++Attempts));
     }
 
     private static EmissionFactorVersionRecord CreateFactorVersion(

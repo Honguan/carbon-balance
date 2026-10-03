@@ -223,6 +223,27 @@ jobs:
             --env ASPNETCORE_ENVIRONMENT=Development \
             --env "ConnectionStrings__Database=${E2E_DATABASE}" \
             carbon-footprint-auth-e2e:${{ github.sha }} --migrate
+      - name: Verify migrations without external networking
+        run: |
+          docker network create --internal carbon-migration-offline
+          docker network connect --alias postgres carbon-migration-offline ${{ job.services.postgres.id }}
+          docker exec ${{ job.services.postgres.id }} psql -U carbon_e2e -d postgres -c 'CREATE DATABASE carbon_migration_offline'
+          migration_connection='Host=postgres;Database=carbon_migration_offline;Username=carbon_e2e;Password=auth-e2e-postgres-password;SSL Mode=Disable;GSS Encryption Mode=Disable'
+          migrate_offline() {
+            docker run --rm --network carbon-migration-offline \
+              --env ASPNETCORE_ENVIRONMENT=Development \
+              --env "ConnectionStrings__Database=$migration_connection" \
+              --env EXTERNALFACTORSOURCES__MOENV__IMPORTONDEPLOYMENT=true \
+              --env EXTERNALFACTORSOURCES__MOENV__APIKEY=offline-test-key \
+              carbon-footprint-auth-e2e:${{ github.sha }} --migrate
+          }
+          migrate_offline
+          docker exec ${{ job.services.postgres.id }} psql -U carbon_e2e -d carbon_migration_offline \
+            -c "INSERT INTO app.organizations (id, name, created_at) VALUES ('00000000-0000-0000-0000-000000000051', 'Offline migration test', CURRENT_TIMESTAMP)"
+          migrate_offline
+          test "$(docker exec ${{ job.services.postgres.id }} psql -U carbon_e2e -d carbon_migration_offline -Atc 'SELECT COUNT(*) FROM app.organizations')" = 1
+          test "$(docker exec ${{ job.services.postgres.id }} psql -U carbon_e2e -d carbon_migration_offline -Atc 'SELECT COUNT(*) FROM app.emission_factor_versions')" = 0
+
       - name: Start evidence services
         run: |
           docker run --detach \
