@@ -37,6 +37,9 @@ public static class DependencyInjection
         services.AddScoped<ClamAvMalwareScanner>();
         services.AddScoped<EvidenceStorageService>();
         services.Configure<MailOptions>(configuration.GetSection(MailOptions.SectionName));
+        services.AddSingleton(provider => new SmtpEgressPolicy(
+            provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<MailOptions>>().Value,
+            useDevelopmentAuthenticationPolicy));
         services.AddScoped<SmtpEmailSender>();
         services.AddScoped<IEmailSender<ApplicationUser>>(provider => provider.GetRequiredService<SmtpEmailSender>());
         services.AddDefaultIdentity<ApplicationUser>(options =>

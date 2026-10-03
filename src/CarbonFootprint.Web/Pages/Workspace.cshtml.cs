@@ -323,6 +323,19 @@ public sealed class WorkspaceModel : PageModel
             return Page();
         }
 
+        try
+        {
+            await _emailSender.ValidateSettingsAsync(normalizedHost, port, enableSsl, cancellationToken);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            ModelState.AddModelError("mail", exception.Message);
+            Section = "settings";
+            Stage = "mail";
+            await LoadAsync(cancellationToken);
+            return Page();
+        }
+
         var organizationId = RequireOrganization();
         var settings = await _dbContext.OrganizationMailSettings.SingleOrDefaultAsync(cancellationToken);
         var userId = Guid.TryParse(_userManager.GetUserId(User), out var parsedUserId) ? parsedUserId : (Guid?)null;
@@ -395,7 +408,7 @@ public sealed class WorkspaceModel : PageModel
 
         try
         {
-            await _emailSender.SendTestMessageAsync(normalizedRecipient);
+            await _emailSender.SendTestMessageAsync(normalizedRecipient, cancellationToken);
             var organizationId = RequireOrganization();
             var mailSettingsId = await _dbContext.OrganizationMailSettings
                 .AsNoTracking()
@@ -484,7 +497,7 @@ public sealed class WorkspaceModel : PageModel
                 cancellationToken);
             var link = Url.Page("/AcceptInvitation", pageHandler: null, values: new { token }, protocol: Request.Scheme)
                 ?? throw new InvalidOperationException("無法建立邀請連結。");
-            await _emailSender.SendOrganizationInvitationAsync(invitationEmail.Trim(), link);
+            await _emailSender.SendOrganizationInvitationAsync(invitationEmail.Trim(), link, cancellationToken);
             StatusMessage = "組織邀請已寄出。";
             return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
         }

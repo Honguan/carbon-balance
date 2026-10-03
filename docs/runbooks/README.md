@@ -35,6 +35,14 @@ Reverse proxy 必須終止公開 HTTPS 並傳送 `X-Forwarded-Proto`；`TRUSTED_
 
 組織 SMTP 可由工作區「郵件服務設定」分頁維護。寄件密碼只保存 Data Protection 密文；正式環境仍應優先使用秘密管理服務注入的預設 `Mail` 設定，並以測試信及稽核事件確認變更。
 
+SMTP 預設拒絕所有內部／metadata 目的地。每次寄送解析並驗證所有 DNS 位址，再直接連線到核准 IP；原 hostname 用於 TLS 憑證驗證。TLS 為強制 STARTTLS，465 為直接 TLS，不允許降級。舊設定若未啟用 TLS 或使用未核准內部目的地，寄送會明確失敗，部署前須重新確認設定。
+
+`Mail:TimeoutSeconds` 預設 30 秒，允許 1–120 秒，涵蓋資料庫設定讀取至 DNS、TCP、TLS、AUTH、SEND 及斷線的總時間；HTTP request abort 會取消。正式平台必須另設 SMTP 輸出防火牆，只放行核准目的地／port，拒絕內部及 metadata 網路。
+
+內部 relay 由伺服器管理員配置，例如 `Mail__TrustedRelays__0__Host=relay.example.net`、`Mail__TrustedRelays__0__Port=587`、`Mail__TrustedRelays__0__AddressRanges__0=10.20.30.4/32`；如需明文，另設 `AllowInsecure=true` 並記錄核准理由。例外僅限完整 hostname、port 及 IP/CIDR 組合，不能由組織管理員設定。
+
+Development 的 `Mail:DevelopmentMailpit` 預設只放行 `localhost:1025` 至 `127.0.0.1/32`／`::1/128`。Compose 明確設定 `mailpit:1025` 與 Docker 私有 CIDR；CIDR 只對 `mailpit` 端點生效，其他內部主機仍被拒絕。自訂 Docker subnet 時調整該端點的 `AddressRanges`，不得把 Development 帶入正式環境。
+
 ## 回滾
 
 應用程式回滾使用前一個已核准的 immutable image digest。資料庫遷移預設只向前修復；若新版本寫入不相容資料，立即停止流量，從部署前備份還原至新的資料庫實例，驗證後切換連線。不得直接在唯一正式資料庫執行破壞性 down migration。
