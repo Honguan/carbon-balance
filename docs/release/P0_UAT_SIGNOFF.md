@@ -1,6 +1,8 @@
 # P0 人工 UAT 簽核紀錄
 
-> 此文件為待填範本。未完成實際驗收前，不得勾選 P0 RC 檢核表的人工 UAT 項目。
+> 此文件為待填範本。未完成實際驗收前，不得將發布閘門的人工 UAT 判定為通過。
+
+依 [RELEASE_READINESS](RELEASE_READINESS.md) 判定成熟度。2026-10-03 使用者確認尚無領域與人工 UAT 紀錄；所有空白、範本及 Pending 不屬通過證據。
 
 ## Release 資訊
 
@@ -39,9 +41,9 @@
 
 | 等級 | 未關閉數量 | 接受方式 |
 |---|---:|---|
-| Blocker | 0 | 不允許接受 |
-| Major | 0 | 不允許接受 |
-| Minor | 0 | 需列出 Issue、負責人與處置決策 |
+| Blocker | 待盤點 | 不允許接受；須連結候選範圍內全部未完成 Issue |
+| Major | 待盤點 | 不允許接受 |
+| Minor | 待盤點 | 需列出 Issue、負責人與處置決策 |
 
 ## Golden Case 核對
 
@@ -50,6 +52,18 @@
 - [ ] 輸入變更後建立新 run，舊 run 不可變。
 - [ ] supersedes lineage 與 run diff 正確。
 - [ ] 畫面、CSV、manifest 與 HTML 報告總額一致。
+
+以上 `7 kgCO2e` 只驗證合成最小案例，不代表完整領域正確性。另須記錄 #57 的獨立參考案例版本、expected line／stage／product totals、容許差異規則、來源／hash，以及獨立領域審查者的簽核。
+
+| 領域證據 | 版本／適用範圍 | 來源位置／hash | 獨立審查者／日期／決定 |
+|---|---|---|---|
+| PCR／rule set | 待填 | 待填 | Pending |
+| 公式／分配／情境 | 待填 | 待填 | Pending |
+| GWP／factor／unit catalogue | 待填 | 待填 | Pending |
+| 獨立 Golden reference suite | 待填 | 待填 | Pending |
+| 指定 run／archive 的外部查驗接受 | 待填 | 待填 | Pending |
+
+Expected outputs 不得從 production engine 回填；審查者必須能依獨立來源或參考計算重核。工程實作者不得代填外部接受或簽名。
 
 ## 外部發布條件
 
