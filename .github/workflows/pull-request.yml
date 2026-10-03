@@ -364,6 +364,12 @@ jobs:
             --env MAIL__DEVELOPMENTMAILPIT__HOST=127.0.0.1 \
             --env MAIL__DEVELOPMENTMAILPIT__PORT=1 \
             --env MAIL__DEVELOPMENTMAILPIT__ADDRESSRANGES__0=127.0.0.1/32 \
+            --env OBJECTSTORAGE__ENDPOINT=http://127.0.0.1:9000 \
+            --env OBJECTSTORAGE__BUCKET=carbon-e2e-evidence \
+            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_storage \
+            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-storage-password \
+            --env MALWARESCANNER__HOST=127.0.0.1 \
+            --env MALWARESCANNER__PORT=3310 \
             --env RateLimiting__PermitLimit=300 \
             carbon-footprint-auth-e2e:${{ github.sha }}
 
