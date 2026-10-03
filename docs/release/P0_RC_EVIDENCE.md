@@ -1,5 +1,7 @@
 # P0 Release Candidate 驗證紀錄
 
+> 歷史工程紀錄；不是目前版本發布就緒判定。本文未完整提供原始 commit、完整 image digest 與各 artifact 的可驗證位置，不可直接沿用為新候選通過證據。目前閘門與待驗項目見 [RELEASE_READINESS](RELEASE_READINESS.md)。
+
 驗證日期：2026-07-18（Asia/Taipei）
 環境：Windows 11、Docker Desktop、.NET SDK 10.0.302、PostgreSQL 18.4
 
@@ -19,4 +21,4 @@
 | SBOM | 產生 739,978 bytes 的容器 SBOM；CI 另發布 CycloneDX artifact |
 | 基礎無障礙 | Lighthouse 首頁 accessibility score 1.00，binary failed audits 0 |
 
-上述為本機實測，不代表人工 UAT 簽核。正式發布仍須完成 `P0_RC_CHECKLIST.md` 的產品負責人與領域審查者簽核，且 CI 必須再次通過相同安全閘門。
+上述保留為歷史本機實測紀錄，不代表目前 commit、領域簽核、人工 UAT 或正式等效部署通過。新候選依 [RELEASE_READINESS](RELEASE_READINESS.md) 重建同版證據並取得適用簽核；不可只將最後一項 UAT 勾選視為完成。
