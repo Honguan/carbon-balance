@@ -23,6 +23,8 @@ x-app-environment: &app-environment
   MAIL__USERNAME: "${SMTP_USERNAME:-}"
   MAIL__PASSWORD: "${SMTP_PASSWORD:-}"
   MAIL__FROMADDRESS: "${SMTP_FROM_ADDRESS:?SMTP_FROM_ADDRESS is required}"
+  EXTERNALFACTORSOURCES__MOENV__APIKEY: "${MOENV_API_KEY:-}"
+  EXTERNALFACTORSOURCES__MOENV__IMPORTONDEPLOYMENT: "${MOENV_IMPORT_ON_DEPLOYMENT:-true}"
 
 services:
   migrate:
@@ -31,6 +33,17 @@ services:
     environment: *app-environment
     volumes:
       - data-protection-keys:/keys
+    restart: "no"
+
+  factor-sync:
+    image: "${CARBON_APP_IMAGE:?CARBON_APP_IMAGE is required}"
+    command: ["--sync-factors", "--deployment"]
+    environment: *app-environment
+    volumes:
+      - data-protection-keys:/keys
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     restart: "no"
 
   web:
