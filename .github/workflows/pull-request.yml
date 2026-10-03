@@ -291,6 +291,9 @@ jobs:
             --env "ConnectionStrings__Database=${E2E_DATABASE}" \
             --env MAIL__HOST=127.0.0.1 \
             --env MAIL__PORT=1025 \
+            --env MAIL__DEVELOPMENTMAILPIT__HOST=127.0.0.1 \
+            --env MAIL__DEVELOPMENTMAILPIT__PORT=1025 \
+            --env MAIL__DEVELOPMENTMAILPIT__ADDRESSRANGES__0=127.0.0.1/32 \
             --env OBJECTSTORAGE__ENDPOINT=http://127.0.0.1:9000 \
             --env OBJECTSTORAGE__BUCKET=carbon-e2e-evidence \
             --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_storage \
@@ -337,6 +340,9 @@ jobs:
             --env "ConnectionStrings__Database=${E2E_DATABASE}" \
             --env MAIL__HOST=127.0.0.1 \
             --env MAIL__PORT=1 \
+            --env MAIL__DEVELOPMENTMAILPIT__HOST=127.0.0.1 \
+            --env MAIL__DEVELOPMENTMAILPIT__PORT=1 \
+            --env MAIL__DEVELOPMENTMAILPIT__ADDRESSRANGES__0=127.0.0.1/32 \
             --env RateLimiting__PermitLimit=300 \
             carbon-footprint-auth-e2e:${{ github.sha }}
 
@@ -369,6 +375,9 @@ jobs:
             --env "ConnectionStrings__Database=${E2E_DATABASE}" \
             --env MAIL__HOST=127.0.0.1 \
             --env MAIL__PORT=1025 \
+            --env MAIL__DEVELOPMENTMAILPIT__HOST=127.0.0.1 \
+            --env MAIL__DEVELOPMENTMAILPIT__PORT=1025 \
+            --env MAIL__DEVELOPMENTMAILPIT__ADDRESSRANGES__0=127.0.0.1/32 \
             --env OBJECTSTORAGE__ENDPOINT=http://127.0.0.1:9000 \
             --env OBJECTSTORAGE__BUCKET=carbon-e2e-evidence \
             --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_storage \
