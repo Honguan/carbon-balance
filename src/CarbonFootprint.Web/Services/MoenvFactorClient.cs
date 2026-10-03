@@ -63,7 +63,7 @@ public sealed class MoenvFactorClient : IMoenvFactorSource
             }
             catch (JsonException exception)
             {
-                throw new InvalidOperationException("環境部係數資料格式無法解析。", exception);
+                throw SourceFailure("source-schema-invalid", "環境部係數資料格式無法解析。", exception);
             }
             records.AddRange(dataset.Records);
             skippedCount += dataset.SkippedCount;
@@ -76,7 +76,7 @@ public sealed class MoenvFactorClient : IMoenvFactorSource
 
         if (!downloadCompleted)
         {
-            throw new InvalidOperationException("環境部係數資料超過單次同步上限，未導入任何係數；請由系統管理者確認資料範圍。");
+            throw SourceFailure("source-page-limit", "環境部係數資料超過單次同步上限，未導入任何係數；請由系統管理者確認資料範圍。");
         }
 
         var latestRecords = records
@@ -117,7 +117,7 @@ public sealed class MoenvFactorClient : IMoenvFactorSource
             var distributions = result.HasValue ? FindProperty(result.Value, "distribution") : null;
             if (!distributions.HasValue || distributions.Value.ValueKind != JsonValueKind.Array)
             {
-                throw new InvalidOperationException("政府資料開放平臺未提供環境部係數下載資訊。");
+                throw SourceFailure("metadata-distribution-missing", "政府資料開放平臺未提供環境部係數下載資訊。");
             }
 
             foreach (var distribution in distributions.Value.EnumerateArray())
@@ -134,7 +134,7 @@ public sealed class MoenvFactorClient : IMoenvFactorSource
                     || !string.Equals(resourceUri.Host, "data.moenv.gov.tw", StringComparison.OrdinalIgnoreCase)
                     || !string.Equals(resourceUri.AbsolutePath, "/api/v2/cfp_p_02", StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new InvalidOperationException("政府資料開放平臺提供的環境部係數下載網址無效。");
+                    throw SourceFailure("metadata-url-invalid", "政府資料開放平臺提供的環境部係數下載網址無效。");
                 }
 
                 var apiKey = ReadQueryParameter(resourceUri.Query, "api_key");
@@ -146,11 +146,14 @@ public sealed class MoenvFactorClient : IMoenvFactorSource
         }
         catch (JsonException exception)
         {
-            throw new InvalidOperationException("政府資料開放平臺詮釋資料格式無法解析。", exception);
+            throw SourceFailure("metadata-schema-invalid", "政府資料開放平臺詮釋資料格式無法解析。", exception);
         }
 
-        throw new InvalidOperationException("政府資料開放平臺未提供環境部係數 JSON 公開下載網址。");
+        throw SourceFailure("metadata-download-missing", "政府資料開放平臺未提供環境部係數 JSON 公開下載網址。");
     }
+
+    private static InvalidOperationException SourceFailure(string code, string message, Exception? inner = null) =>
+        new(message, inner) { Data = { ["MoenvErrorCode"] = code } };
 
     private static JsonElement? FindProperty(JsonElement element, string name)
     {

@@ -2,6 +2,8 @@ using CarbonFootprint.Domain.Modules.Factors;
 using CarbonFootprint.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace CarbonFootprint.Web.Services;
 
@@ -43,34 +45,7 @@ public sealed class MoenvFactorSynchronizationService
             .OrderBy(item => item.Id)
             .Select(item => item.Id)
             .ToArrayAsync(cancellationToken);
-        if (organizationIds.Length == 0)
-        {
-            return new MoenvDeploymentSynchronizationResult(0, 0, 0, 0, 0);
-        }
-
-        var download = await _factorSource.DownloadAsync(cancellationToken);
-        var createdCount = 0;
-        var unchangedCount = 0;
-        var publishedExistingCount = 0;
-        foreach (var organizationId in organizationIds)
-        {
-            var result = await SynchronizeOrganizationAsync(
-                organizationId,
-                actorId: null,
-                correlationId,
-                download,
-                cancellationToken);
-            createdCount += result.CreatedCount;
-            unchangedCount += result.UnchangedCount;
-            publishedExistingCount += result.PublishedExistingCount;
-        }
-
-        return new MoenvDeploymentSynchronizationResult(
-            organizationIds.Length,
-            createdCount,
-            unchangedCount,
-            publishedExistingCount,
-            download.SkippedCount);
+        return await SynchronizeAsync(organizationIds, actorId: null, correlationId, cancellationToken);
     }
 
     public async Task<MoenvFactorSynchronizationResult> SynchronizeOrganizationAsync(
@@ -79,13 +54,104 @@ public sealed class MoenvFactorSynchronizationService
         string correlationId,
         CancellationToken cancellationToken)
     {
-        var download = await _factorSource.DownloadAsync(cancellationToken);
-        return await SynchronizeOrganizationAsync(
-            organizationId,
-            actorId,
-            correlationId,
-            download,
-            cancellationToken);
+        var result = await SynchronizeAsync([organizationId], actorId, correlationId, cancellationToken);
+        return new MoenvFactorSynchronizationResult(result.CreatedCount, result.UnchangedCount,
+            result.PublishedExistingCount, result.SkippedCount);
+    }
+
+    private async Task<MoenvDeploymentSynchronizationResult> SynchronizeAsync(
+        Guid[] organizationIds, Guid? actorId, string correlationId, CancellationToken cancellationToken)
+    {
+        var batchId = Guid.NewGuid();
+        for (var attempt = 1; ; attempt++)
+        {
+            MoenvFactorDownload? download = null;
+            string? inputSha256 = null;
+            var sourceVersions = Array.Empty<string>();
+            var phase = "download";
+            var completedOrganizations = 0;
+            var created = 0;
+            var unchanged = 0;
+            var published = 0;
+
+            async Task RecordOutcomeAsync(string outcome, Exception? error = null, int retryAfterSeconds = 0)
+            {
+                await using var auditContext = new CarbonFootprintDbContext(_dbContextOptions, new UnscopedOrganizationScope());
+                auditContext.SystemAuditEvents.Add(new SystemAuditEventRecord
+                {
+                    Id = Guid.NewGuid(),
+                    Timestamp = DateTimeOffset.UtcNow,
+                    ActorId = actorId,
+                    Action = $"factor.synchronization.{outcome}",
+                    ResourceType = "FactorSynchronization",
+                    ResourceId = batchId,
+                    Source = MoenvFactorClient.DatasetReference,
+                    CorrelationId = correlationId,
+                    MetadataJson = JsonSerializer.Serialize(new
+                    {
+                        BatchId = batchId,
+                        Attempt = attempt,
+                        Outcome = outcome,
+                        Phase = phase,
+                        OrganizationIds = organizationIds,
+                        CompletedOrganizations = completedOrganizations,
+                        InputSha256 = inputSha256,
+                        InputHashKind = "ordered-source-record-sha256-list-v1",
+                        SourceVersions = sourceVersions,
+                        CreatedCount = created,
+                        UnchangedCount = unchanged,
+                        PublishedExistingCount = published,
+                        SkippedCount = download?.SkippedCount,
+                        ErrorCode = error?.Data["MoenvErrorCode"] as string ?? error?.GetType().Name,
+                        HttpStatusCode = (error as HttpRequestException)?.StatusCode,
+                        RetryAfterSeconds = retryAfterSeconds
+                    })
+                });
+                // Persist cancellation/failure separately from catalogue writes; never log request URLs or keys.
+                await auditContext.SaveChangesAsync(CancellationToken.None);
+            }
+
+            await RecordOutcomeAsync("started");
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (organizationIds.Length == 0)
+                {
+                    await RecordOutcomeAsync("skipped-no-organizations");
+                    return new MoenvDeploymentSynchronizationResult(0, 0, 0, 0, 0);
+                }
+                download = await _factorSource.DownloadAsync(cancellationToken);
+                inputSha256 = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
+                    string.Join('\n', download.Records.Select(record => record.SourceRecordSha256).Order(StringComparer.Ordinal)))));
+                sourceVersions = download.Records.Select(record => $"CFP_P_02-{record.AnnouncementYear?.ToString() ?? "未標示年份"}")
+                    .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+                phase = "apply";
+                foreach (var organizationId in organizationIds)
+                {
+                    var result = await SynchronizeOrganizationAsync(organizationId, actorId, correlationId, download, cancellationToken);
+                    created += result.CreatedCount;
+                    unchanged += result.UnchangedCount;
+                    published += result.PublishedExistingCount;
+                    completedOrganizations++;
+                }
+                await RecordOutcomeAsync("completed");
+                return new MoenvDeploymentSynchronizationResult(organizationIds.Length, created, unchanged, published, download.SkippedCount);
+            }
+            catch (Exception exception)
+            {
+                var transient = exception is HttpRequestException { StatusCode: null or System.Net.HttpStatusCode.RequestTimeout or System.Net.HttpStatusCode.TooManyRequests }
+                    || exception is HttpRequestException { StatusCode: >= System.Net.HttpStatusCode.InternalServerError }
+                    || exception is TaskCanceledException && !cancellationToken.IsCancellationRequested;
+                var retryAfterSeconds = phase == "download" && transient && attempt < 3 && !cancellationToken.IsCancellationRequested
+                    ? 1 << (attempt - 1) : 0;
+                await RecordOutcomeAsync(cancellationToken.IsCancellationRequested ? "cancelled" : "failed", exception, retryAfterSeconds);
+                if (retryAfterSeconds == 0)
+                {
+                    throw;
+                }
+                await Task.Delay(TimeSpan.FromSeconds(retryAfterSeconds), cancellationToken);
+            }
+        }
     }
 
     private async Task<MoenvFactorSynchronizationResult> SynchronizeOrganizationAsync(

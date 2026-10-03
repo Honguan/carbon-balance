@@ -80,6 +80,7 @@ public sealed class AdministratorBootstrapTests
 
             var audits = await dbContext.SystemAuditEvents
                 .AsNoTracking()
+                .Where(item => item.Action.StartsWith("identity.administrator."))
                 .OrderBy(item => item.Timestamp)
                 .ToArrayAsync();
             Assert.Collection(
@@ -216,7 +217,7 @@ public sealed class AdministratorBootstrapTests
         await using var scope = provider.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CarbonFootprintDbContext>();
         await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM identity.administrator_bootstrap");
-        await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM identity.system_audit_events");
+        await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM identity.system_audit_events WHERE action LIKE 'identity.administrator.%'");
         await dbContext.Database.ExecuteSqlRawAsync($$"""
             DELETE FROM identity.user_roles
             WHERE user_id IN (

@@ -1,6 +1,6 @@
 # 實作狀態與原始目的對照
 
-更新日期：2026-10-02
+更新日期：2026-10-03
 
 目前以[產品需求](04_PRODUCT_REQUIREMENTS.md)及[技術架構](05_ARCHITECTURE.md)為有效入口。以下 Phase 表保留早期 P0 工程交付範圍，`complete` 不代表 `old` 原始產品需求已全部實作或已通過領域核准；舊 RC 檢核證據也不自動代表本次變更已通過驗證。
 
@@ -15,6 +15,14 @@
 | 6 | complete | Draft/Submitted/ChangesRequested/Approved、角色限制、CSV、Evidence index、manifest、可歸檔 HTML 報告與 audit |
 | 7 | complete（係數 staging） | Legacy raw/staging/validate/conflict、checksum、防重、CLI、映射與差異分類；本次已找到三類五階段候選工作簿，尚未完成領域對帳或整本匯入 |
 | 8 | complete | threat model、CI 安全閘門、SBOM、環境範例、runbooks、空庫/升級/備份還原、效能與 WCAG 基礎稽核 |
+
+## Issue #51：獨立官方係數同步（2026-10-03）
+
+- `--migrate` 只處理 schema 與必要靜態種子；`--sync-factors` 及獨立 Compose 工作處理同步，不阻擋 Web 啟動。部署停用旗標只影響 `--deployment`，操作人員可在 migration 完成後以 `run --rm --no-deps factor-sync --sync-factors` 重試。
+- 系統稽核保存批次、每次嘗試、來源版本、輸入紀錄指紋集合 hash、結果及受控錯誤碼。暫時性下載錯誤最多三次、退避 1／2 秒；格式與套用錯誤直接失敗，保留最後已發布版本與歷史 run。
+- locked restore、Release build（0 warning／error）、format、165 項測試通過：Unit 107、Integration 25、Security 25、Architecture 3、Contract 1、GoldenCases 4。管理者測試限定自身稽核事件的讀取／清理，原本精確斷言保留，避免與新同步稽核互相干擾。
+- PostgreSQL 18.4 空庫套用 20 筆 migration；同一映像在 internal-only Docker network 完成空庫及既有組織 migration（組織 1、係數 0），實際外部連線被阻擋。來源中斷時明確同步命令回傳非零並記錄三次失敗，容器內 `/health/ready` 回傳 200（internal network 不發布主機 port）；停用部署同步正常退出。Compose 安全檢查與 actionlint 通過。CI 增加同樣的斷網 CLI 驗證；遠端 CI 尚待 PR 確認。
+- 不改 schema、碳足跡公式、manifest 或歷史結果；全球主目錄與並行草稿治理分別仍屬 #27／#55。
 
 ## Issue #50：計算結果有效性查詢與核准前驗證（2026-10-02）
 

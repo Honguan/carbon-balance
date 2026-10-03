@@ -36,11 +36,11 @@ if any(volume.get("source", "").endswith("minio-data") for volume in storage.get
     fail("development: legacy MinIO data must never be mounted by the replacement service")
 
 production_services = production.get("services", {})
-unexpected = set(production_services) - {"migrate", "web"}
+unexpected = set(production_services) - {"migrate", "factor-sync", "web"}
 if unexpected:
     fail(f"production: infrastructure services must not be published: {sorted(unexpected)}")
 
-for service_name in ("migrate", "web"):
+for service_name in ("migrate", "factor-sync", "web"):
     service = production_services.get(service_name, {})
     environment = service.get("environment", {})
     if environment.get("ASPNETCORE_ENVIRONMENT") != "Production":
@@ -59,3 +59,11 @@ for service_name in ("migrate", "web"):
 
 if published_ports(production_services.get("migrate", {})):
     fail("production: migrate must not publish ports")
+for profile, compose in (("development", development), ("production", production)):
+    services = compose["services"]
+    if "factor-sync" in services["web"].get("depends_on", {}):
+        fail(f"{profile}: factor synchronization must not block web startup")
+    if services["factor-sync"].get("command") != ["--sync-factors", "--deployment"]:
+        fail(f"{profile}: factor synchronization must use its independent deployment command")
+    if published_ports(services["factor-sync"]):
+        fail(f"{profile}: factor synchronization must not publish ports")

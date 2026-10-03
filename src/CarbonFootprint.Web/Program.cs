@@ -218,10 +218,21 @@ if (args.Contains("--migrate", StringComparer.Ordinal))
         }
     }
 
+    return;
+}
+
+if (args.Contains("--sync-factors", StringComparer.Ordinal))
+{
     var moenvOptions = builder.Configuration
         .GetSection(MoenvFactorSourceOptions.SectionName)
         .Get<MoenvFactorSourceOptions>() ?? new MoenvFactorSourceOptions();
-    if (moenvOptions.ImportOnDeployment)
+    if (args.Contains("--deployment", StringComparer.Ordinal) && !moenvOptions.ImportOnDeployment)
+    {
+        app.Logger.LogInformation("Deployment factor synchronization is disabled; database migration is unaffected.");
+        return;
+    }
+    await using var scope = app.Services.CreateAsyncScope();
+    try
     {
         var synchronizationService = scope.ServiceProvider
             .GetRequiredService<MoenvFactorSynchronizationService>();
@@ -236,7 +247,11 @@ if (args.Contains("--migrate", StringComparer.Ordinal))
             result.UnchangedCount,
             result.SkippedCount);
     }
-
+    catch (Exception exception)
+    {
+        app.Logger.LogError("Factor synchronization failed ({ErrorCode}); inspect FactorSynchronization audit events and retry --sync-factors. Database migration and web startup are independent.", exception.Data["MoenvErrorCode"] as string ?? exception.GetType().Name);
+        Environment.ExitCode = 1;
+    }
     return;
 }
 
