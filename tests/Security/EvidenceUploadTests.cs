@@ -7,6 +7,9 @@ using Microsoft.Extensions.Options;
 
 namespace CarbonFootprint.Security.Tests;
 
+// The allocation assertion reads a process-wide counter, so this class must not overlap other tests.
+[CollectionDefinition(nameof(EvidenceUploadTests), DisableParallelization = true)]
+[Collection(nameof(EvidenceUploadTests))]
 public sealed class EvidenceUploadTests : IDisposable
 {
     private readonly string _quarantine = Path.Combine(Path.GetTempPath(), $"carbon-quarantine-{Guid.NewGuid():N}");
