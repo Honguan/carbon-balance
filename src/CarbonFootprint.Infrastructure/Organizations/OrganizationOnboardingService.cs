@@ -14,7 +14,8 @@ public sealed class OrganizationOnboardingService
         _options = options;
     }
 
-    public async Task<Guid> CreateAsync(ApplicationUser user, string organizationName, CancellationToken cancellationToken)
+    public async Task<Guid> CreateAsync(ApplicationUser user, string organizationName, CancellationToken cancellationToken,
+        string? correlationId = null, string? sessionReference = null)
     {
         if (string.IsNullOrWhiteSpace(organizationName))
         {
@@ -31,34 +32,28 @@ public sealed class OrganizationOnboardingService
                 throw new InvalidOperationException("此帳號已有目前組織；P0 onboarding 不允許重複建立。");
             }
 
-            dbContext.Organizations.Add(new OrganizationRecord
+            var organization = new OrganizationRecord
             {
                 Id = organizationId,
                 Name = organizationName.Trim(),
                 CreatedAt = DateTimeOffset.UtcNow
-            });
-            dbContext.OrganizationMemberships.Add(new OrganizationMembershipRecord
+            };
+            dbContext.Organizations.Add(organization);
+            var membership = new OrganizationMembershipRecord
             {
                 Id = Guid.NewGuid(),
                 OrganizationId = organizationId,
                 UserId = user.Id,
                 Role = OrganizationRole.Owner.ToString(),
                 CreatedAt = DateTimeOffset.UtcNow
-            });
-            dbContext.AuditEvents.Add(new AuditEventRecord
-            {
-                Id = Guid.NewGuid(),
-                Timestamp = DateTimeOffset.UtcNow,
-                ActorId = user.Id,
-                OrganizationId = organizationId,
-                Action = "organization.created",
-                ResourceType = "Organization",
-                ResourceId = organizationId,
-                BeforeHash = null,
-                AfterHash = null,
-                CorrelationId = organizationId.ToString("N"),
-                MetadataJson = "{}"
-            });
+            };
+            dbContext.OrganizationMemberships.Add(membership);
+            correlationId ??= organizationId.ToString("N");
+            var audit = new AuditWriter(dbContext);
+            audit.AppendTracked("organization.created", dbContext.Entry(organization), user.Id,
+                "User requested organization creation", correlationId, sessionReference);
+            audit.AppendTracked("organization.membership.created", dbContext.Entry(membership), user.Id,
+                "Organization creator receives owner membership", correlationId, sessionReference);
             try
             {
                 await dbContext.SaveChangesAsync(cancellationToken);

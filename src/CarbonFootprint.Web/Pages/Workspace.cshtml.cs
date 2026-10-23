@@ -264,7 +264,8 @@ public sealed class WorkspaceModel : PageModel
         }
         try
         {
-            await _onboardingService.CreateAsync(user, organizationName, cancellationToken);
+            await _onboardingService.CreateAsync(user, organizationName, cancellationToken,
+                HttpContext.TraceIdentifier, AuditWriter.RequestSessionReference(HttpContext));
             await _signInManager.RefreshSignInAsync(user);
             StatusMessage = "組織已建立。";
             return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
@@ -373,7 +374,8 @@ public sealed class WorkspaceModel : PageModel
             settings.UpdatedBy = userId;
         }
 
-        AddAudit("organization.mail_settings.updated", "OrganizationMailSettings", settings.Id);
+        AddAudit("organization.mail_settings.updated", "OrganizationMailSettings", settings.Id,
+            metadata: new Dictionary<string, object?> { ["credentialsChanged"] = !string.IsNullOrWhiteSpace(normalizedPassword) });
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = "SMTP 設定已儲存。密碼以資料保護機制加密保存。";
         return RedirectToPage(new { section = "settings", stage = "mail", projectVersionId = ProjectVersionId });
@@ -494,7 +496,7 @@ public sealed class WorkspaceModel : PageModel
                 invitedBy,
                 invitationEmail,
                 invitationRole,
-                cancellationToken);
+                cancellationToken, HttpContext.TraceIdentifier, AuditWriter.RequestSessionReference(HttpContext));
             var link = Url.Page("/AcceptInvitation", pageHandler: null, values: new { token }, protocol: Request.Scheme)
                 ?? throw new InvalidOperationException("無法建立邀請連結。");
             await _emailSender.SendOrganizationInvitationAsync(invitationEmail.Trim(), link, cancellationToken);
@@ -1974,7 +1976,7 @@ public sealed class WorkspaceModel : PageModel
         AddAudit(
             decision == InventoryWorkflowStatus.Approved ? "inventory.approved" : "inventory.changes-requested",
             "InventoryProjectVersion",
-            project.Id);
+            project.Id, reason: project.ReviewComment);
         await _dbContext.SaveChangesAsync(cancellationToken);
         StatusMessage = decision == InventoryWorkflowStatus.Approved ? "盤查版本已核准。" : "盤查版本已退回補正。";
         return RedirectToPage(new { section = Section, projectVersionId = project.Id });
@@ -2709,22 +2711,33 @@ public sealed class WorkspaceModel : PageModel
         && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
             || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
 
-    private void AddAudit(string action, string resourceType, Guid resourceId)
+    private void AddAudit(string action, string resourceType, Guid resourceId,
+        string? reason = null, IReadOnlyDictionary<string, object?>? metadata = null)
     {
         var organizationId = RequireOrganization();
-        _dbContext.AuditEvents.Add(new AuditEventRecord
+        var actorId = _userManager.GetUserId(User) is { } value && Guid.TryParse(value, out var id) ? id : (Guid?)null;
+        var correlation = HttpContext.TraceIdentifier;
+        var session = AuditWriter.RequestSessionReference(HttpContext);
+        var writer = new AuditWriter(_dbContext);
+        if (action == "organization.mail_settings.tested")
         {
-            Id = Guid.NewGuid(),
-            Timestamp = DateTimeOffset.UtcNow,
-            ActorId = _userManager.GetUserId(User) is { } value && Guid.TryParse(value, out var id) ? id : null,
-            OrganizationId = organizationId,
-            Action = action,
-            ResourceType = resourceType,
-            ResourceId = resourceId,
-            BeforeHash = null,
-            AfterHash = null,
-            CorrelationId = HttpContext.TraceIdentifier,
-            MetadataJson = "{}"
-        });
+            writer.Append(action, resourceType, resourceId, organizationId, actorId, null, null,
+                "SMTP test; no resource state mutation", correlation, session, "attempt");
+            return;
+        }
+        _dbContext.ChangeTracker.DetectChanges();
+        var entries = _dbContext.ChangeTracker.Entries().Where(entry => AuditProjection.Supports(entry.Metadata.ClrType)).ToArray();
+        var primary = entries.Single(entry => AuditProjection.ResourceType(entry.Metadata.ClrType) == resourceType
+            && (Guid)entry.Property("Id").CurrentValue! == resourceId);
+        writer.AppendTracked(action, primary, actorId, string.IsNullOrWhiteSpace(reason) ? $"Authorized workspace operation: {action}" : reason,
+            correlation, session, metadata);
+        // Related resources (e.g. product+version, PCR+rules, evidence+activity) share this request's transaction/correlation.
+        foreach (var related in entries.Where(entry => entry.Metadata.ClrType != primary.Metadata.ClrType
+                     && entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+        {
+            var relatedId = (Guid)related.Property("Id").CurrentValue!;
+            if (_dbContext.AuditEvents.Local.Any(audit => audit.ResourceId == relatedId && audit.CorrelationId == correlation)) continue;
+            writer.AppendTracked($"{action}.related", related, actorId, $"Related resource changed by {action}", correlation, session);
+        }
     }
 }

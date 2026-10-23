@@ -153,25 +153,9 @@ public sealed class LegacyFactorCsvImporter
         }
 
         batch.CompletedAt = DateTimeOffset.UtcNow;
-        _dbContext.AuditEvents.Add(new AuditEventRecord
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = DateTimeOffset.UtcNow,
-            ActorId = null,
-            OrganizationId = organizationId,
-            Action = "legacy.factor-staging.imported",
-            ResourceType = "LegacyImportBatch",
-            ResourceId = batchId,
-            BeforeHash = null,
-            AfterHash = sourceSha256,
-            CorrelationId = batchId.ToString("N"),
-            MetadataJson = JsonSerializer.Serialize(new
-            {
-                batch.ParsedRows,
-                batch.InvalidRows,
-                batch.ConflictRows
-            })
-        });
+        new AuditWriter(_dbContext).AppendTracked("legacy.factor-staging.imported", _dbContext.Entry(batch), null,
+            "Explicit legacy CSV import into staging; not approved domain data", batchId.ToString("N"),
+            metadata: new Dictionary<string, object?> { ["sourceFileSha256"] = sourceSha256 });
         await _dbContext.SaveChangesAsync(cancellationToken);
         return new LegacyImportReport(
             batchId,

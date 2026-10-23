@@ -1777,6 +1777,14 @@ namespace CarbonFootprint.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("actor_id");
 
+                    b.Property<string>("AfterHash")
+                        .HasColumnType("text")
+                        .HasColumnName("after_hash");
+
+                    b.Property<string>("BeforeHash")
+                        .HasColumnType("text")
+                        .HasColumnName("before_hash");
+
                     b.Property<string>("CorrelationId")
                         .IsRequired()
                         .HasMaxLength(100)
