@@ -977,7 +977,7 @@ public sealed class WorkspaceModel : PageModel
                 originalDocument.ContentType,
                 cancellationToken);
         }
-        catch (InvalidOperationException exception)
+        catch (EvidenceUploadException exception)
         {
             ModelState.AddModelError("pcr", exception.Message);
             await LoadAsync(cancellationToken);
@@ -1845,7 +1845,7 @@ public sealed class WorkspaceModel : PageModel
                 projectVersionId = activity.InventoryProjectVersionId
             });
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (EvidenceUploadException exception)
         {
             ModelState.AddModelError("evidence", $"佐證檔案未保存：{exception.Message}");
             await LoadAsync(cancellationToken);

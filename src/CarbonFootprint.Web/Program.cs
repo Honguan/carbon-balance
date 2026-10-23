@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Domain.Modules.Calculations;
 using CarbonFootprint.Infrastructure;
+using CarbonFootprint.Infrastructure.Evidence;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Web.Security;
@@ -19,6 +20,10 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// 10 MiB file limit plus multipart framing; the deadline covers the whole request including scan and storage.
+const long MultipartRequestLimitBytes = 12 * 1024 * 1024;
+var MultipartRequestDeadline = TimeSpan.FromSeconds(90);
 var buildProvenance = ApplicationBuildProvenance.Resolve(
     typeof(Program).Assembly,
     builder.Environment.IsDevelopment());
@@ -338,6 +343,34 @@ app.Use(async (context, next) =>
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRateLimiter();
+// Admission runs before any multipart body is read so excess uploads never reach model-binding temp storage.
+app.Use(async (context, next) =>
+{
+    if (!HttpMethods.IsPost(context.Request.Method) || !context.Request.HasFormContentType
+        || !context.Request.ContentType!.StartsWith("multipart/", StringComparison.OrdinalIgnoreCase))
+    {
+        await next(context);
+        return;
+    }
+
+    using var lease = context.RequestServices.GetRequiredService<EvidenceUploadGate>().TryEnter();
+    if (lease is null)
+    {
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        context.Response.Headers.RetryAfter = "5";
+        return;
+    }
+
+    if (context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } limit)
+    {
+        limit.MaxRequestBodySize = MultipartRequestLimitBytes;
+    }
+
+    using var deadline = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+    deadline.CancelAfter(MultipartRequestDeadline);
+    context.RequestAborted = deadline.Token;
+    await next(context);
+});
 app.UseRouting();
 app.UseAuthentication();
 app.Use(async (context, next) =>

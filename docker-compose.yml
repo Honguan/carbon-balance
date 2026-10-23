@@ -34,6 +34,22 @@ services:
       timeout: 5s
       retries: 10
 
+  # Explicit provisioning: bucket, least-privilege application identity and readiness sentinel.
+  # Admin access stays here; the web container only gets OBJECT_STORAGE_APP_* credentials.
+  object-storage-provision:
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    entrypoint: ["/bin/sh", "/provision/provision-object-storage.sh"]
+    environment:
+      OBJECT_STORAGE_BUCKET: ${OBJECTSTORAGE__BUCKET:-carbon-evidence}
+      OBJECT_STORAGE_APP_ACCESS_KEY: ${OBJECT_STORAGE_APP_ACCESS_KEY:-carbon_app_storage}
+      OBJECT_STORAGE_APP_SECRET_KEY: "${OBJECT_STORAGE_APP_SECRET_KEY:?OBJECT_STORAGE_APP_SECRET_KEY is required; run the local setup script or create .env}"
+    volumes:
+      - ./scripts/provision-object-storage.sh:/provision/provision-object-storage.sh:ro
+    depends_on:
+      object-storage:
+        condition: service_healthy
+    restart: "no"
+
   mailpit:
     image: axllent/mailpit:v1.30
     environment:
@@ -98,8 +114,8 @@ services:
       ConnectionStrings__Database: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-carbon_footprint};Username=${POSTGRES_USER:-carbon_app};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required; run the local setup script or create .env}"
       OBJECTSTORAGE__ENDPOINT: http://object-storage:9000
       OBJECTSTORAGE__BUCKET: ${OBJECTSTORAGE__BUCKET:-carbon-evidence}
-      OBJECTSTORAGE__ACCESSKEY: ${OBJECT_STORAGE_ACCESS_KEY:-${MINIO_ROOT_USER:-carbon_storage}}
-      OBJECTSTORAGE__SECRETKEY: "${OBJECT_STORAGE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:?OBJECT_STORAGE_SECRET_KEY is required; run the local setup script or create .env}}"
+      OBJECTSTORAGE__ACCESSKEY: ${OBJECT_STORAGE_APP_ACCESS_KEY:-carbon_app_storage}
+      OBJECTSTORAGE__SECRETKEY: "${OBJECT_STORAGE_APP_SECRET_KEY:?OBJECT_STORAGE_APP_SECRET_KEY is required; run the local setup script or create .env}"
       MALWARESCANNER__HOST: clamav
       MALWARESCANNER__PORT: 3310
       MAIL__HOST: mailpit
@@ -117,8 +133,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      object-storage:
-        condition: service_healthy
+      object-storage-provision:
+        condition: service_completed_successfully
       clamav:
         condition: service_healthy
       mailpit:

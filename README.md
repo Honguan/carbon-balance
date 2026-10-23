@@ -82,7 +82,7 @@ web        Up (healthy)
 | PostgreSQL | `127.0.0.1:15432` |
 | 健康狀態 | `http://127.0.0.1:8088/health/ready` |
 
-S3 憑證使用 `.env` 的 `OBJECT_STORAGE_ACCESS_KEY`／`OBJECT_STORAGE_SECRET_KEY`；舊 `.env` 的 `MINIO_ROOT_USER`／`MINIO_ROOT_PASSWORD` 僅作升級相容來源。管理介面與 filer 不發布至主機。
+物件儲存管理憑證使用 `.env` 的 `OBJECT_STORAGE_ACCESS_KEY`／`OBJECT_STORAGE_SECRET_KEY`，只提供儲存服務與一次性 `object-storage-provision`；舊 `.env` 的 `MINIO_ROOT_USER`／`MINIO_ROOT_PASSWORD` 僅作升級相容來源。Web 只取得 `OBJECT_STORAGE_APP_ACCESS_KEY`／`OBJECT_STORAGE_APP_SECRET_KEY` 最小權限身分，見[物件儲存佈建手冊](docs/runbooks/OBJECT_STORAGE_PROVISIONING.md)。管理介面與 filer 不發布至主機。
 
 正式環境必須由 secrets provider 設定 32 至 128 個字元的 `AdministratorBootstrap:Token`；不要使用本機 token、提交 token，或透過公開管道傳送。bootstrap 成功後，即使相同 token 仍在設定中也無法再次取得管理者權限。
 
