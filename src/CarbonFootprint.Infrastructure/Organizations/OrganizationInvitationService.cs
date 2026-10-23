@@ -23,7 +23,7 @@ public sealed class OrganizationInvitationService
         Guid invitedBy,
         string email,
         OrganizationRole role,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string? correlationId = null, string? sessionReference = null)
     {
         if (string.IsNullOrWhiteSpace(email) || !new EmailAddressAttribute().IsValid(email))
         {
@@ -46,7 +46,7 @@ public sealed class OrganizationInvitationService
         }
 
         var invitationId = Guid.NewGuid();
-        context.OrganizationInvitations.Add(new OrganizationInvitationRecord
+        var invitation = new OrganizationInvitationRecord
         {
             Id = invitationId,
             OrganizationId = organizationId,
@@ -56,24 +56,16 @@ public sealed class OrganizationInvitationService
             InvitedBy = invitedBy,
             CreatedAt = DateTimeOffset.UtcNow,
             ExpiresAt = DateTimeOffset.UtcNow.AddDays(7)
-        });
-        context.AuditEvents.Add(new AuditEventRecord
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = DateTimeOffset.UtcNow,
-            ActorId = invitedBy,
-            OrganizationId = organizationId,
-            Action = "organization.invitation.created",
-            ResourceType = "OrganizationInvitation",
-            ResourceId = invitationId,
-            CorrelationId = invitationId.ToString("N"),
-            MetadataJson = "{}"
-        });
+        };
+        context.OrganizationInvitations.Add(invitation);
+        new AuditWriter(context).AppendTracked("organization.invitation.created", context.Entry(invitation), invitedBy,
+            "Administrator requested member invitation", correlationId ?? invitationId.ToString("N"), sessionReference);
         await context.SaveChangesAsync(cancellationToken);
         return token;
     }
 
-    public async Task<Guid> AcceptAsync(ApplicationUser user, string token, CancellationToken cancellationToken)
+    public async Task<Guid> AcceptAsync(ApplicationUser user, string token, CancellationToken cancellationToken,
+        string? correlationId = null, string? sessionReference = null)
     {
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -114,26 +106,21 @@ public sealed class OrganizationInvitationService
         }
 
         invitation.AcceptedAt = now;
-        context.OrganizationMemberships.Add(new OrganizationMembershipRecord
+        var membership = new OrganizationMembershipRecord
         {
             Id = Guid.NewGuid(),
             OrganizationId = organizationId,
             UserId = user.Id,
             Role = invitation.Role,
             CreatedAt = now
-        });
-        context.AuditEvents.Add(new AuditEventRecord
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = now,
-            ActorId = user.Id,
-            OrganizationId = organizationId,
-            Action = "organization.invitation.accepted",
-            ResourceType = "OrganizationInvitation",
-            ResourceId = invitation.Id,
-            CorrelationId = invitation.Id.ToString("N"),
-            MetadataJson = "{}"
-        });
+        };
+        context.OrganizationMemberships.Add(membership);
+        correlationId ??= invitation.Id.ToString("N");
+        var audit = new AuditWriter(context);
+        audit.AppendTracked("organization.invitation.accepted", context.Entry(invitation), user.Id,
+            "Invited authenticated user accepted invitation", correlationId, sessionReference);
+        audit.AppendTracked("organization.membership.created", context.Entry(membership), user.Id,
+            "Accepted invitation creates membership", correlationId, sessionReference);
         try
         {
             await context.SaveChangesAsync(cancellationToken);

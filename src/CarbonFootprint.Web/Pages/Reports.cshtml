@@ -59,6 +59,10 @@ else
                                 <input type="hidden" name="runId" value="@run.Id" />
                                 <button class="btn btn-sm btn-outline-secondary" type="submit">標準輸入清單</button>
                             </form>
+                            <form class="d-inline" method="post" data-download asp-page-handler="VerificationArchive">
+                                <input type="hidden" name="runId" value="@run.Id" />
+                                <button class="btn btn-sm btn-outline-secondary" type="submit">稽核驗證封存 ZIP</button>
+                            </form>
                             @if (isValid && Model.CanExport)
                             {
                                 <a class="btn btn-sm btn-outline-dark" asp-page="/Workspace" asp-page-handler="ExportExcel" asp-route-section="calculation" asp-route-projectVersionId="@run.ProjectVersionId" asp-route-runId="@run.Id">此版本 Excel</a>

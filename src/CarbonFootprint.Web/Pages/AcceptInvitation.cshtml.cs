@@ -53,7 +53,8 @@ public sealed class AcceptInvitationModel : PageModel
 
         try
         {
-            await _invitationService.AcceptAsync(user, Token, cancellationToken);
+            await _invitationService.AcceptAsync(user, Token, cancellationToken,
+                HttpContext.TraceIdentifier, CarbonFootprint.Infrastructure.Persistence.AuditWriter.RequestSessionReference(HttpContext));
             await _signInManager.RefreshSignInAsync(user);
             return RedirectToPage("/Workspace");
         }

@@ -4,6 +4,7 @@ using CarbonFootprint.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Http;
 
 namespace CarbonFootprint.Infrastructure.Identity;
 
@@ -30,15 +31,17 @@ public sealed class SystemAdministratorService
     private readonly CarbonFootprintDbContext _dbContext;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly AdministratorBootstrapOptions _options;
+    private readonly IHttpContextAccessor? _http;
 
     public SystemAdministratorService(
         CarbonFootprintDbContext dbContext,
         UserManager<ApplicationUser> userManager,
-        IOptions<AdministratorBootstrapOptions> options)
+        IOptions<AdministratorBootstrapOptions> options, IHttpContextAccessor? http = null)
     {
         _dbContext = dbContext;
         _userManager = userManager;
         _options = options.Value;
+        _http = http;
     }
 
     public Task<bool> IsBootstrapOpenAsync(CancellationToken cancellationToken) =>
@@ -57,7 +60,7 @@ public sealed class SystemAdministratorService
     {
         if (string.IsNullOrWhiteSpace(bootstrapToken))
         {
-            return await RegisterViewerAsync(user, password);
+            return await RegisterViewerAsync(user, password, correlationId, cancellationToken);
         }
 
         if (!TokenMatches(bootstrapToken))
@@ -95,18 +98,11 @@ public sealed class SystemAdministratorService
             return Failure(roleResult);
         }
 
-        _dbContext.SystemAuditEvents.Add(new SystemAuditEventRecord
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = claimedAt,
-            ActorId = user.Id,
-            Action = "identity.administrator.bootstrapped",
-            ResourceType = nameof(ApplicationUser),
-            ResourceId = user.Id,
-            Source = "public-registration-bootstrap-token",
-            CorrelationId = correlationId,
-            MetadataJson = "{}"
-        });
+        new AuditWriter(_dbContext).AppendSystem("identity.administrator.bootstrapped", nameof(ApplicationUser), user.Id,
+            user.Id, "public-registration-bootstrap-token", null,
+            new Dictionary<string, object?> { ["UserId"] = user.Id, ["Administrator"] = true },
+            "Single-use administrator bootstrap authorization", correlationId, AuditWriter.RequestSessionReference(_http?.HttpContext),
+            metadata: new Dictionary<string, object?> { ["credentialsChanged"] = true });
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(AccountRegistrationOutcome.Succeeded, user, true, []);
@@ -147,25 +143,21 @@ public sealed class SystemAdministratorService
             return stampResult;
         }
 
-        _dbContext.SystemAuditEvents.Add(new SystemAuditEventRecord
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = DateTimeOffset.UtcNow,
-            ActorId = actor.Id,
-            Action = "identity.administrator.granted",
-            ResourceType = nameof(ApplicationUser),
-            ResourceId = target.Id,
-            Source = "authenticated-administrator",
-            CorrelationId = correlationId,
-            MetadataJson = "{}"
-        });
+        new AuditWriter(_dbContext).AppendSystem("identity.administrator.granted", nameof(ApplicationUser), target.Id,
+            actor.Id, "authenticated-administrator",
+            new Dictionary<string, object?> { ["UserId"] = target.Id, ["Administrator"] = false },
+            new Dictionary<string, object?> { ["UserId"] = target.Id, ["Administrator"] = true },
+            "Authenticated administrator explicitly granted administrator role", correlationId, AuditWriter.RequestSessionReference(_http?.HttpContext),
+            metadata: new Dictionary<string, object?> { ["credentialsChanged"] = true });
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return IdentityResult.Success;
     }
 
-    private async Task<AccountRegistrationResult> RegisterViewerAsync(ApplicationUser user, string password)
+    private async Task<AccountRegistrationResult> RegisterViewerAsync(ApplicationUser user, string password, string correlationId,
+        CancellationToken cancellationToken)
     {
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         var createResult = await _userManager.CreateAsync(user, password);
         if (!createResult.Succeeded)
         {
@@ -175,10 +167,15 @@ public sealed class SystemAdministratorService
         var roleResult = await _userManager.AddToRoleAsync(user, SystemRoles.Viewer);
         if (roleResult.Succeeded)
         {
+            new AuditWriter(_dbContext).AppendSystem("identity.viewer.registered", nameof(ApplicationUser), user.Id, user.Id,
+                "public-registration", null, new Dictionary<string, object?> { ["UserId"] = user.Id, ["Role"] = SystemRoles.Viewer },
+                "Public viewer account registration", correlationId, AuditWriter.RequestSessionReference(_http?.HttpContext),
+                metadata: new Dictionary<string, object?> { ["credentialsChanged"] = true });
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
             return new(AccountRegistrationOutcome.Succeeded, user, false, []);
         }
 
-        await _userManager.DeleteAsync(user);
         return Failure(roleResult);
     }
 

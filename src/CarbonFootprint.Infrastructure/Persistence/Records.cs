@@ -357,6 +357,8 @@ public sealed class SystemAuditEventRecord
     public required string Source { get; set; }
     public required string CorrelationId { get; set; }
     public required string MetadataJson { get; set; }
+    public string? BeforeHash { get; set; }
+    public string? AfterHash { get; set; }
 }
 
 public sealed class LegacyImportBatchRecord : IOrganizationOwned

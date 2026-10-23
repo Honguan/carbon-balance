@@ -232,6 +232,18 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
             InventoryWorkflowStatus.Approved, "Reviewed", CancellationToken.None))).Result);
         await context.Entry(selected).ReloadAsync();
         Assert.Equal("Approved", selected.WorkflowStatus);
+        var workflowAudits = await context.AuditEvents.AsNoTracking().Where(item => item.ResourceId == selected.Id
+            && (item.Action == "inventory.submitted" || item.Action == "inventory.approved" || item.Action == "inventory.changes-requested")).ToArrayAsync();
+        Assert.Contains(workflowAudits, item => item.Action == "inventory.submitted");
+        Assert.Contains(workflowAudits, item => item.Action == "inventory.approved");
+        foreach (var workflowAudit in workflowAudits)
+        {
+            Assert.Equal(reviewerId, workflowAudit.ActorId); Assert.NotNull(workflowAudit.BeforeHash); Assert.NotNull(workflowAudit.AfterHash);
+            Assert.NotEqual(workflowAudit.BeforeHash, workflowAudit.AfterHash);
+            using var workflowMetadata = JsonDocument.Parse(workflowAudit.MetadataJson);
+            Assert.Equal(AuditWriter.SchemaVersion, workflowMetadata.RootElement.GetProperty("schemaVersion").GetString());
+            Assert.Contains(workflowMetadata.RootElement.GetProperty("changedFields").EnumerateArray(), field => field.GetString() == "WorkflowStatus");
+        }
         await context.Entry(originalRun).ReloadAsync();
         Assert.Equal(originalManifest, originalRun.CanonicalInputManifest);
         Assert.True(CanonicalManifest.HasValidSha256(originalRun.CanonicalInputManifest, originalRun.InputSha256));
@@ -411,6 +423,14 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
         var store = new CalculationRunStore(context);
         await store.SaveAsync(noEvidenceRun, CancellationToken.None);
         await store.SaveAsync(run, CancellationToken.None);
+        var createdRunAudit = await context.AuditEvents.SingleAsync(item => item.ResourceId == run.Id && item.Action == "calculation.run.created");
+        Assert.Null(createdRunAudit.BeforeHash);
+        Assert.NotNull(createdRunAudit.AfterHash);
+        using (var createdRunMetadata = JsonDocument.Parse(createdRunAudit.MetadataJson))
+        {
+            Assert.Equal(AuditWriter.SchemaVersion, createdRunMetadata.RootElement.GetProperty("schemaVersion").GetString());
+            Assert.Equal(run.InputSha256, createdRunMetadata.RootElement.GetProperty("inputManifestSha256").GetString());
+        }
         var transport = ActivityAmountFormula.Derive(ActivityDataKind.MaterialTransport, null, "",
             12.3456m, 7.890m, null, null, null);
         var use = ActivityAmountFormula.Derive(ActivityDataKind.UseEnergy, null, "kWh",
@@ -486,6 +506,10 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
             PageContext = new PageContext { HttpContext = new DefaultHttpContext() }
         };
         var before = Assert.IsType<FileContentResult>(await reports.OnPostEvidenceIndexCsvAsync(noEvidenceRun.Id, CancellationToken.None));
+        var exportAudit = await context.AuditEvents.AsNoTracking().SingleAsync(item => item.ResourceId == noEvidenceRun.Id && item.Action == "report.evidence-index-exported");
+        Assert.Null(exportAudit.BeforeHash); Assert.Null(exportAudit.AfterHash);
+        using (var exportMetadata = JsonDocument.Parse(exportAudit.MetadataJson))
+            Assert.Equal("export", exportMetadata.RootElement.GetProperty("operation").GetString());
         Assert.DoesNotContain("later-evidence.pdf", Encoding.UTF8.GetString(before.FileContents), StringComparison.Ordinal);
         var csvSnapshot = snapshot with
         {
@@ -884,6 +908,13 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
 
             Assert.Equal(1, report.ParsedRows);
             Assert.Equal(1, report.InvalidRows);
+            var legacyAudit = await context.AuditEvents.SingleAsync(item => item.ResourceId == report.BatchId && item.Action == "legacy.factor-staging.imported");
+            Assert.Null(legacyAudit.BeforeHash); Assert.NotNull(legacyAudit.AfterHash);
+            using (var legacyMetadata = JsonDocument.Parse(legacyAudit.MetadataJson))
+            {
+                Assert.Equal(AuditWriter.SchemaVersion, legacyMetadata.RootElement.GetProperty("schemaVersion").GetString());
+                Assert.Equal(report.SourceFileSha256, legacyMetadata.RootElement.GetProperty("sourceFileSha256").GetString());
+            }
             Assert.Equal(1, report.ConflictRows);
             Assert.Equal(3, await context.LegacyStagingRows.CountAsync());
             Assert.Empty(await context.EmissionFactorVersions.ToArrayAsync());
@@ -991,6 +1022,10 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
             item => item.Action == "factor.version.synced" && item.ResourceId == factor.Id);
         Assert.Null(audit.ActorId);
         Assert.Equal("deployment-test", audit.CorrelationId);
+        Assert.Null(audit.BeforeHash);
+        Assert.NotNull(audit.AfterHash);
+        using (var factorAuditMetadata = JsonDocument.Parse(audit.MetadataJson))
+            Assert.Equal(AuditWriter.SchemaVersion, factorAuditMetadata.RootElement.GetProperty("schemaVersion").GetString());
         Assert.Single(await verification.AuditEvents
             .Where(item => item.Action == "factor.version.auto-published")
             .ToArrayAsync());
@@ -1037,6 +1072,13 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
         var attempts = await context.SystemAuditEvents.Where(item => item.CorrelationId == correlation)
             .OrderBy(item => item.Timestamp).ToArrayAsync();
         Assert.Equal(6, attempts.Length);
+        foreach (var attempt in attempts)
+        {
+            Assert.Null(attempt.BeforeHash); Assert.Null(attempt.AfterHash);
+            using var attemptMetadata = JsonDocument.Parse(attempt.MetadataJson);
+            Assert.Equal("attempt", attemptMetadata.RootElement.GetProperty("operation").GetString());
+            Assert.False(string.IsNullOrWhiteSpace(attemptMetadata.RootElement.GetProperty("noMutationReason").GetString()));
+        }
         Assert.Single(attempts.Select(item => item.ResourceId).Distinct());
         Assert.Equal(3, attempts.Count(item => item.Action == "factor.synchronization.failed"));
         Assert.All(attempts, item => Assert.DoesNotContain("secret-api-key", item.MetadataJson, StringComparison.Ordinal));

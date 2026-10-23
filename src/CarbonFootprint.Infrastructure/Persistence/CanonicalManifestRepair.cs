@@ -24,7 +24,7 @@ public static class CanonicalManifestRepair
         }
 
         var correlationId = Guid.NewGuid().ToString("N");
-        const string metadata = "{\"reason\":\"legacy-jsonb-formatting\",\"originalHashPreserved\":true}";
+        var audit = new AuditWriter(db);
         foreach (var (run, original) in repairs)
         {
             // Restore the exact originally hashed bytes without changing the calculation or its hash.
@@ -34,14 +34,20 @@ public static class CanonicalManifestRepair
                     AND canonical_input_manifest = {run.CanonicalInputManifest}
                 """, cancellationToken);
             if (changed != 1) throw new InvalidOperationException("計算快照在修復時已變更；交易已取消。");
+            var record = audit.Append("calculation.manifest.original_bytes_restored", "CalculationRun", run.Id, run.OrganizationId, null,
+                new Dictionary<string, object?> { ["manifestBytesSha256"] = CanonicalManifest.ComputeSha256(run.CanonicalInputManifest) },
+                new Dictionary<string, object?> { ["manifestBytesSha256"] = CanonicalManifest.ComputeSha256(original) },
+                "Explicit offline recovery of legacy JSONB formatting damage", correlationId,
+                metadata: new Dictionary<string, object?> { ["originalHashPreserved"] = true, ["inputManifestSha256"] = run.InputSha256 });
+            // Offline repair spans tenants; preserve its explicit administrative SQL transaction and safe audit contract.
+            db.Entry(record).State = EntityState.Detached;
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO app.audit_events
                     (id, timestamp, actor_id, organization_id, action, resource_type, resource_id,
                      before_hash, after_hash, correlation_id, metadata_json)
-                VALUES ({Guid.NewGuid()}, {DateTimeOffset.UtcNow}, NULL, {run.OrganizationId},
-                    'calculation.manifest.original_bytes_restored', 'CalculationRun', {run.Id},
-                    {CanonicalManifest.ComputeSha256(run.CanonicalInputManifest)}, {run.InputSha256},
-                    {correlationId}, CAST({metadata} AS jsonb))
+                VALUES ({record.Id}, {record.Timestamp}, NULL, {record.OrganizationId},
+                    {record.Action}, {record.ResourceType}, {record.ResourceId},
+                    {record.BeforeHash}, {record.AfterHash}, {record.CorrelationId}, CAST({record.MetadataJson} AS jsonb))
                 """, cancellationToken);
         }
         await transaction.CommitAsync(cancellationToken);
