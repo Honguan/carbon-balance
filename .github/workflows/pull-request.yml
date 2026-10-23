@@ -254,7 +254,7 @@ jobs:
             --env AWS_ACCESS_KEY_ID=carbon_e2e_storage \
             --env AWS_SECRET_ACCESS_KEY=auth-e2e-storage-password \
             --env S3_BUCKET=carbon-e2e-evidence \
-            chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d \
+            chrislusf/seaweedfs:dev@sha256:d490b0697f63417258de70d121bcf04a0d6ae38bde09b4fbc40757ab4dcd0a3f \
             mini -dir=/data -s3.port=9000 -webdav=false -admin.ui=false \
             -s3.port.iceberg=0 -s3.port.lance=0 -master.telemetry=false
 
@@ -290,7 +290,7 @@ jobs:
           docker run --rm --network host --mount "type=bind,source=$env:GITHUB_WORKSPACE,target=/work,readonly" `
             --env RCLONE_CONFIG_SOURCE_TYPE --env RCLONE_CONFIG_SOURCE_PROVIDER --env RCLONE_CONFIG_SOURCE_ENDPOINT `
             --env RCLONE_CONFIG_SOURCE_ACCESS_KEY_ID --env RCLONE_CONFIG_SOURCE_SECRET_ACCESS_KEY `
-            rclone/rclone:beta@sha256:75f55eab503b6f7fd8e48559c8459cc652e6911f6d6d2eed9db4f156f5e71c1c `
+            rclone/rclone:beta@sha256:c40ac99161882238065bea01ae678f0ddc75e85004a2b60a3d1e58fd7f181dba `
             copyto /work/README.md source:migration-source/organizations/test/evidence/fixture.txt
           if ($LASTEXITCODE -ne 0) { throw 'Unable to seed migration fixture' }
           ./scripts/migrate-object-storage.ps1 -SourceEndpoint http://127.0.0.1:9000 -TargetEndpoint http://127.0.0.1:9000 -SourceBucket migration-source -TargetBucket migration-target -Network host
@@ -596,14 +596,14 @@ jobs:
       - name: Scan object storage image for Critical and High vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+          image-ref: chrislusf/seaweedfs:dev@sha256:d490b0697f63417258de70d121bcf04a0d6ae38bde09b4fbc40757ab4dcd0a3f
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: 1
       - name: Scan migration tool image for Critical and High vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: rclone/rclone:beta@sha256:75f55eab503b6f7fd8e48559c8459cc652e6911f6d6d2eed9db4f156f5e71c1c
+          image-ref: rclone/rclone:beta@sha256:c40ac99161882238065bea01ae678f0ddc75e85004a2b60a3d1e58fd7f181dba
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: 1
