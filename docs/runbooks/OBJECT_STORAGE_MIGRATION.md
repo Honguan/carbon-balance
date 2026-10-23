@@ -1,6 +1,6 @@
 # 物件儲存遷移與復原
 
-本機與 CI 使用 SeaweedFS 4.48（固定映像 digest），維持既有 S3 存取介面、bucket、object key、資料庫附件 metadata 與 SHA-256。正式環境仍由外部受管 S3 服務提供 TLS、持久化及備份；本機單節點 Compose 不是正式高可用方案。
+本機與 CI 使用 SeaweedFS 4.48（固定映像 digest），維持既有 S3 存取介面、bucket、object key、資料庫附件 metadata 與 SHA-256。正式環境仍由外部受管 S3 服務提供 TLS、持久化及備份；本機單節點 Compose 不是正式高可用方案。（2026-10-23 起改固定為已通過 Trivy 的 `dev` 快照 digest：4.48 是最新編號版本，但其 Go 標準函式庫有已修復的 High 弱點；該快照以最小權限矩陣與佈建腳本驗證，穩定編號版本發布後應換回。）
 
 MinIO 上游已封存，本專案原先固定的 `RELEASE.2025-09-07T16-13-09Z-cpuv1` 映像在 Docker Hub／Quay 均無法下載，不能把本機快取當成乾淨部署可用的證據。來源：[MinIO](https://github.com/minio/minio)、[SeaweedFS mini](https://github.com/seaweedfs/seaweedfs/wiki/Quick-Start-with-weed-mini)、[rclone copy](https://rclone.org/commands/rclone_copy/)、[rclone check](https://rclone.org/commands/rclone_check/)。
 
