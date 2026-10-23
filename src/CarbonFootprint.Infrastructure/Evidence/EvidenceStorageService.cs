@@ -91,6 +91,13 @@ public sealed class EvidenceStorageService
             MalwareScanStatus.Clean);
     }
 
+    public async Task<bool> IsAvailableAsync(CancellationToken cancellationToken)
+    {
+        using var client = CreateMinioClient();
+        return await client.BucketExistsAsync(new BucketExistsArgs().WithBucket(_options.Bucket), cancellationToken)
+            .WaitAsync(cancellationToken);
+    }
+
     private IMinioClient CreateMinioClient()
     {
         if (string.IsNullOrWhiteSpace(_options.AccessKey) || string.IsNullOrWhiteSpace(_options.SecretKey))

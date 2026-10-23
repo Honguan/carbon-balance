@@ -6,6 +6,8 @@
 
 > 本專案目前適合本機或封閉測試環境，請勿直接公開到網際網路。Repository 尚未提供 LICENSE。
 
+目前為工程開發／預發布準備階段；完整治理功能與領域／人工 UAT 尚未完成。發布成熟度、所有 blocker 與必要證據統一記錄於[發布閘門](docs/release/RELEASE_READINESS.md)，不以 CI 通過宣稱正式部署或查驗就緒。
+
 ## 系統需求
 
 - Windows 10／11、macOS 或 Linux

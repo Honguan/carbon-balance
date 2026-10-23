@@ -2,19 +2,19 @@
 
 更新日期：2026-10-03
 
-目前以[產品需求](04_PRODUCT_REQUIREMENTS.md)及[技術架構](05_ARCHITECTURE.md)為有效入口。以下 Phase 表保留早期 P0 工程交付範圍，`complete` 不代表 `old` 原始產品需求已全部實作或已通過領域核准；舊 RC 檢核證據也不自動代表本次變更已通過驗證。
+目前以[產品需求](04_PRODUCT_REQUIREMENTS.md)及[技術架構](05_ARCHITECTURE.md)為有效入口。[發布成熟度與證據閘門](release/RELEASE_READINESS.md)是唯一發布就緒判定入口；以下只列目前已實作範圍，不以 Phase、測試數或歷史 RC 記錄宣告整體需求完成。2026-10-03 使用者確認尚無領域簽核／人工 UAT，先完成工程修正與預發布。
 
-| Phase | 狀態 | 已完成範圍 |
+| Phase | 目前範圍與未完成項目 | 已實作基礎 |
 |---|---|---|
-| 0 | complete | 規劃基線、舊 ZIP checksum、187 筆唯讀來源清單、ADR 與治理 |
-| 1 | complete | .NET 10 modular monolith、PostgreSQL、EF migrations、Docker Compose、Golden Vertical Slice |
-| 2 | complete | Identity、12 字元 production 長密語與常見密碼拒絕、列舉防護 recovery、TOTP／recovery code、absolute session、獨立 auth throttling、組織與角色治理 |
-| 3 | complete | 版本化單位/alias/複合單位、PCR 與係數 review/publish/withdraw/supersede/applicability、staging 匯入 |
-| 4 | complete | 五階段活動類型、適用性、供應商/情境、估算、資料品質、Evidence SHA-256/ClamAV/S3（SeaweedFS） |
-| 5 | complete | decimal 計算、受控換算、分配、canonical manifest/hash、不可變 run、lineage/diff、警告與品質摘要 |
-| 6 | complete | Draft/Submitted/ChangesRequested/Approved、角色限制、CSV、Evidence index、manifest、可歸檔 HTML 報告與 audit |
-| 7 | complete（係數 staging） | Legacy raw/staging/validate/conflict、checksum、防重、CLI、映射與差異分類；本次已找到三類五階段候選工作簿，尚未完成領域對帳或整本匯入 |
-| 8 | complete | threat model、CI 安全閘門、SBOM、環境範例、runbooks、空庫/升級/備份還原、效能與 WCAG 基礎稽核 |
+| 0 | 基線已建立；授權與外部來源決策待確認 | 規劃基線、舊 ZIP checksum、187 筆唯讀來源清單、ADR 與治理 |
+| 1 | 骨架與垂直流程已建立；不代表完整產品完成 | .NET 10 modular monolith、PostgreSQL、EF migrations、Docker Compose、合成 Golden Vertical Slice |
+| 2 | 身分／租戶修補已合併；目標版本仍須重驗，SMTP #47 待完成 | Identity、長密語／常見密碼拒絕、recovery、TOTP／recovery code、session、auth throttling、組織與角色治理 |
+| 3 | 部分實作；完整 PCR 規則 #21／全球係數 #27 未整合 | 版本化單位／alias／複合單位、PCR／係數治理、staging 匯入 |
+| 4 | 部分實作；allocation #24、transport #26、evidence #28／#58 待完成 | 五階段活動、適用性、供應商／情境、估算、基本資料品質、Evidence SHA-256／ClamAV／S3 |
+| 5 | 部分實作；品質／不確定性 #23、公式 #25、獨立 reference suite #57 待完成 | decimal、受控換算、基本分配、canonical manifest/hash、不可變 run、lineage/diff |
+| 6 | 部分實作；readiness #22、查驗工作流 #29、封存包 #30、稽核 #54 待完成 | 基本送審／補正／核准、角色限制、CSV、Evidence index、manifest、HTML 報告與 audit |
+| 7 | 係數 staging 已實作；完整 inventory bulk import #60、歷史案例領域對帳待完成 | Legacy raw／staging／validate／conflict、checksum、防重、CLI、映射與差異分類 |
+| 8 | 部分工程驗證；readiness #56、安全 #58、發布 #59、正式環境與外部 UAT 閘門未完成 | threat model、CI／SBOM、環境範例、runbooks、遷移／備份還原、效能與 WCAG 基礎稽核 |
 
 ## Issue #51：獨立官方係數同步（2026-10-03）
 
@@ -60,7 +60,7 @@
 - 發布檢核：[`docs/release/P0_RC_CHECKLIST.md`](release/P0_RC_CHECKLIST.md)
 - 外部決策：[`docs/DECISIONS_NEEDED.md`](DECISIONS_NEEDED.md)
 
-人工 UAT 未完成前，狀態只能是「可供 UAT 的 P0 Release Candidate」，不得標記為正式發布、第三方查驗通過、主管機關核定或可使用碳足跡標籤。
+目前尚有工程 blocker 與未整合治理需求，成熟度為「開發中／工程預發布準備」，不是僅待人工 UAT 的完整 P0 Release Candidate。後續依 [RELEASE_READINESS](release/RELEASE_READINESS.md) 逐項提升成熟度；不得標記第三方查驗通過、主管機關核定或可使用碳足跡標籤。
 
 ## 本次架構調整的驗證（2026-09-07）
 
