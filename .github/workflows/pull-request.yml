@@ -289,7 +289,7 @@ jobs:
           docker run --rm --network host --mount "type=bind,source=$env:GITHUB_WORKSPACE,target=/work,readonly" `
             --env RCLONE_CONFIG_SOURCE_TYPE --env RCLONE_CONFIG_SOURCE_PROVIDER --env RCLONE_CONFIG_SOURCE_ENDPOINT `
             --env RCLONE_CONFIG_SOURCE_ACCESS_KEY_ID --env RCLONE_CONFIG_SOURCE_SECRET_ACCESS_KEY `
-            rclone/rclone:beta@sha256:75f55eab503b6f7fd8e48559c8459cc652e6911f6d6d2eed9db4f156f5e71c1c `
+            rclone/rclone:beta@sha256:c40ac99161882238065bea01ae678f0ddc75e85004a2b60a3d1e58fd7f181dba `
             copyto /work/README.md source:migration-source/organizations/test/evidence/fixture.txt
           if ($LASTEXITCODE -ne 0) { throw 'Unable to seed migration fixture' }
           ./scripts/migrate-object-storage.ps1 -SourceEndpoint http://127.0.0.1:9000 -TargetEndpoint http://127.0.0.1:9000 -SourceBucket migration-source -TargetBucket migration-target -Network host
@@ -593,7 +593,7 @@ jobs:
       - name: Scan migration tool image for Critical and High vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: rclone/rclone:beta@sha256:75f55eab503b6f7fd8e48559c8459cc652e6911f6d6d2eed9db4f156f5e71c1c
+          image-ref: rclone/rclone:beta@sha256:c40ac99161882238065bea01ae678f0ddc75e85004a2b60a3d1e58fd7f181dba
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: 1

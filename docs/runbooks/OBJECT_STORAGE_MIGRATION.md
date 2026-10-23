@@ -6,7 +6,7 @@ MinIO 上游已封存，本專案原先固定的 `RELEASE.2025-09-07T16-13-09Z-c
 
 ## 舊附件遷移（不自動執行）
 
-遷移工具固定為官方 rclone `v1.76.0-beta.10447.0b8e9c4cc` 的映像 digest，不追蹤浮動 beta。選擇原因：2026-10-02 掃描穩定版 1.75.1 發現 OpenSSL／gRPC 三項可修復 High，此固定 build 已無同級可修復漏洞，且另有 copy／下載驗證／重啟與衝突拒絕演練。它仍是預發布工具，正式附件操作前需先用備份副本演練；不以此宣稱上游完整測試或正式 UAT 已完成。後續穩定版須重新掃描、演練後才能更新 pin。
+遷移工具固定為官方 rclone `v1.76.0-beta.10608.81e7372f6`（2026-10-23 自 10447 版更新：舊 build 的 golang.org/x/net 0.58.0 與 Go 標準函式庫有 5 項可修復 High） 的映像 digest，不追蹤浮動 beta。選擇原因：2026-10-02 掃描穩定版 1.75.1 發現 OpenSSL／gRPC 三項可修復 High，此固定 build 已無同級可修復漏洞，且另有 copy／下載驗證／重啟與衝突拒絕演練。它仍是預發布工具，正式附件操作前需先用備份副本演練；不以此宣稱上游完整測試或正式 UAT 已完成。後續穩定版須重新掃描、演練後才能更新 pin。
 
 1. 停止 Web 寫入與背景工作，備份 PostgreSQL、原本 `.env` 及 MinIO volume。保留舊容器與其既有映像；**不要**執行 `docker compose down -v`、清除映像或把 MinIO volume 掛到 SeaweedFS。
 2. 讓既有 MinIO 透過原本的 S3 endpoint 提供來源資料；新 SeaweedFS 使用獨立 `object-storage-data` volume。可用 `docker compose up -d object-storage` 單獨啟動目標。若舊容器占用主機 9000，先以內部 Docker 網路連線遷移，或使用不同 loopback port；不要先刪除舊服務。
