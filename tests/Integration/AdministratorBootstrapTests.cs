@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 
 namespace CarbonFootprint.Integration.Tests;
 
@@ -214,18 +215,27 @@ public sealed class AdministratorBootstrapTests
 
     private static async Task ResetAsync(ServiceProvider provider)
     {
-        await using var scope = provider.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<CarbonFootprintDbContext>();
-        await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM identity.administrator_bootstrap");
-        await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM identity.system_audit_events WHERE action LIKE 'identity.administrator.%'");
-        await dbContext.Database.ExecuteSqlRawAsync($$"""
+        var connection = Environment.GetEnvironmentVariable("CARBON_TEST_ADMIN_DB_CONNECTION")
+            ?? Environment.GetEnvironmentVariable("CARBON_TEST_DB_CONNECTION")
+            ?? throw new InvalidOperationException("Test fixture cleanup requires an explicit isolated admin database connection.");
+        await using var admin = new NpgsqlConnection(connection);
+        await admin.OpenAsync();
+        await using (var role = new NpgsqlCommand("SELECT rolsuper FROM pg_roles WHERE rolname = current_user", admin))
+            Assert.True((bool)(await role.ExecuteScalarAsync())!, "Only the isolated fixture administrator can clean up append-only audit evidence.");
+        await using var transaction = await admin.BeginTransactionAsync();
+        // Only this isolated admin fixture bypasses triggers; runtime SQL guard tests use a separate non-owner connection.
+        await using var command = new NpgsqlCommand($$"""
+            SET LOCAL session_replication_role = replica;
+            DELETE FROM identity.administrator_bootstrap;
+            DELETE FROM identity.system_audit_events WHERE action LIKE 'identity.administrator.%';
+            SET LOCAL session_replication_role = origin;
             DELETE FROM identity.user_roles
             WHERE user_id IN (
                 SELECT id FROM identity.users WHERE email LIKE '{{EmailPrefix}}%'
-            )
-            """);
-        await dbContext.Database.ExecuteSqlRawAsync($$"""
-            DELETE FROM identity.users WHERE email LIKE '{{EmailPrefix}}%'
-            """);
+            );
+            DELETE FROM identity.users WHERE email LIKE '{{EmailPrefix}}%';
+            """, admin, transaction);
+        await command.ExecuteNonQueryAsync();
+        await transaction.CommitAsync();
     }
 }

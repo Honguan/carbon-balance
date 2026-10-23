@@ -22,6 +22,8 @@ Reverse proxy 必須終止公開 HTTPS 並傳送 `X-Forwarded-Proto`；`TRUSTED_
 
 ## 部署與資料庫遷移
 
+交易稽核的 runtime 帳號分離、SELECT／INSERT 權限契約及驗證 archive 見 [交易稽核手冊](TRANSACTIONAL_AUDIT.md)。migration 管理帳號不可作為正式 Web runtime 帳號。
+
 1. 確認映像 digest、內嵌 Git commit provenance、SBOM、測試與 Critical/High 掃描均通過；正式映像缺少完整 commit SHA 時應用程式必須拒絕啟動。
 2. 執行 `scripts/migration-preflight.ps1`，確認 EF 模型與遷移一致。
 3. 執行 `scripts/backup.ps1` 並將 SHA-256 記入變更單。

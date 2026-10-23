@@ -205,27 +205,41 @@ public sealed class ReportsModel : PageModel
         return mfaResult.Succeeded;
     }
 
-    private async Task AddExportAuditAsync(string action, Guid runId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostVerificationArchiveAsync(Guid runId, CancellationToken cancellationToken,
+        DateTimeOffset? cutoffTimestamp = null, Guid? cutoffId = null)
+    {
+        if (!await CanViewAsync()) return Forbid();
+        var run = await _dbContext.CalculationRuns.AsNoTracking().SingleOrDefaultAsync(item => item.Id == runId, cancellationToken);
+        if (run is null) return NotFound();
+        if (!RunExportValidation.TryReadRules(run, out _)) return RunExportValidation.ConflictResult();
+        try
+        {
+            var artifact = await new AuditArchive(_dbContext, _organizationScope).BuildAsync(runId, cancellationToken, cutoffTimestamp, cutoffId);
+            if (artifact is null) return NotFound();
+            await AddExportAuditAsync("report.verification-archive-exported", runId, cancellationToken,
+                new Dictionary<string, object?>
+                {
+                    ["auditArtifactSha256"] = artifact.AuditJsonSha256,
+                    ["cutoffTimestamp"] = artifact.CutoffTimestamp,
+                    ["cutoffId"] = artifact.CutoffId
+                });
+            return File(artifact.Bytes, "application/zip", $"verification-{runId:N}.zip");
+        }
+        catch (InvalidOperationException) { return RunExportValidation.ConflictResult(); }
+        catch (ArgumentException) { return BadRequest(); }
+    }
+
+    private async Task AddExportAuditAsync(string action, Guid runId, CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, object?>? metadata = null)
     {
         var organizationId = _organizationScope.OrganizationId
             ?? throw new InvalidOperationException("缺少組織範圍。");
         var actorId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsed)
             ? parsed
             : (Guid?)null;
-        _dbContext.AuditEvents.Add(new AuditEventRecord
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = DateTimeOffset.UtcNow,
-            ActorId = actorId,
-            OrganizationId = organizationId,
-            Action = action,
-            ResourceType = "CalculationRun",
-            ResourceId = runId,
-            BeforeHash = null,
-            AfterHash = null,
-            CorrelationId = HttpContext.TraceIdentifier,
-            MetadataJson = "{}"
-        });
+        new AuditWriter(_dbContext).Append(action, "CalculationRun", runId, organizationId, actorId, null, null,
+            "Authorized report export; no resource state mutation", HttpContext.TraceIdentifier,
+            AuditWriter.RequestSessionReference(HttpContext), operation: "export", metadata: metadata);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 

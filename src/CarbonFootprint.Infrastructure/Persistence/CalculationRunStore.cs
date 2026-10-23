@@ -2,14 +2,21 @@ using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Domain.Modules.Calculations;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
 
 namespace CarbonFootprint.Infrastructure.Persistence;
 
 public sealed class CalculationRunStore : ICalculationRunStore
 {
     private readonly CarbonFootprintDbContext _dbContext;
+    private readonly IHttpContextAccessor? _http;
 
-    public CalculationRunStore(CarbonFootprintDbContext dbContext) => _dbContext = dbContext;
+    public CalculationRunStore(CarbonFootprintDbContext dbContext, IHttpContextAccessor? http = null)
+    {
+        _dbContext = dbContext;
+        _http = http;
+    }
 
     public async Task SaveAsync(CalculationRun run, CancellationToken cancellationToken)
     {
@@ -18,7 +25,7 @@ public sealed class CalculationRunStore : ICalculationRunStore
             throw new InvalidOperationException("CalculationRun 已存在，禁止覆寫。");
         }
 
-        _dbContext.CalculationRuns.Add(new CalculationRunRecord
+        var record = new CalculationRunRecord
         {
             Id = run.Id,
             OrganizationId = run.OrganizationId,
@@ -34,7 +41,8 @@ public sealed class CalculationRunStore : ICalculationRunStore
             DataQualitySummaryJson = JsonSerializer.Serialize(run.DataQualitySummary),
             ProductTotal = run.ProductTotal,
             CreatedAt = DateTimeOffset.UtcNow
-        });
+        };
+        _dbContext.CalculationRuns.Add(record);
         _dbContext.CalculationLineItems.AddRange(run.LineItems.Select(line => new CalculationLineRecord
         {
             Id = Guid.NewGuid(),
@@ -70,20 +78,11 @@ public sealed class CalculationRunStore : ICalculationRunStore
             Code = warning.Code,
             Message = warning.Message
         }));
-        _dbContext.AuditEvents.Add(new AuditEventRecord
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = DateTimeOffset.UtcNow,
-            ActorId = null,
-            OrganizationId = run.OrganizationId,
-            Action = "calculation.run.created",
-            ResourceType = "CalculationRun",
-            ResourceId = run.Id,
-            BeforeHash = null,
-            AfterHash = run.InputSha256,
-            CorrelationId = run.Id.ToString("N"),
-            MetadataJson = "{}"
-        });
+        var actor = Guid.TryParse(_http?.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier), out var actorId) ? actorId : (Guid?)null;
+        new AuditWriter(_dbContext).AppendTracked("calculation.run.created", _dbContext.Entry(record), actor,
+            "Explicit immutable calculation run creation", _http?.HttpContext?.TraceIdentifier ?? run.Id.ToString("N"),
+            AuditWriter.RequestSessionReference(_http?.HttpContext),
+            metadata: new Dictionary<string, object?> { ["inputManifestSha256"] = run.InputSha256, ["lineCount"] = run.LineItems.Count });
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }

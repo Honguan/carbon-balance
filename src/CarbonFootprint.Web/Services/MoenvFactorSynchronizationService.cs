@@ -77,36 +77,28 @@ public sealed class MoenvFactorSynchronizationService
             async Task RecordOutcomeAsync(string outcome, Exception? error = null, int retryAfterSeconds = 0)
             {
                 await using var auditContext = new CarbonFootprintDbContext(_dbContextOptions, new UnscopedOrganizationScope());
-                auditContext.SystemAuditEvents.Add(new SystemAuditEventRecord
-                {
-                    Id = Guid.NewGuid(),
-                    Timestamp = DateTimeOffset.UtcNow,
-                    ActorId = actorId,
-                    Action = $"factor.synchronization.{outcome}",
-                    ResourceType = "FactorSynchronization",
-                    ResourceId = batchId,
-                    Source = MoenvFactorClient.DatasetReference,
-                    CorrelationId = correlationId,
-                    MetadataJson = JsonSerializer.Serialize(new
+                new AuditWriter(auditContext).AppendSystem(
+                    $"factor.synchronization.{outcome}", "FactorSynchronization", batchId, actorId, MoenvFactorClient.DatasetReference,
+                    null, null, $"Independent synchronization attempt outcome: {outcome}; no catalogue state mutation",
+                    correlationId, operation: "attempt", metadata: new Dictionary<string, object?>
                     {
-                        BatchId = batchId,
-                        Attempt = attempt,
-                        Outcome = outcome,
-                        Phase = phase,
-                        OrganizationIds = organizationIds,
-                        CompletedOrganizations = completedOrganizations,
-                        InputSha256 = inputSha256,
-                        InputHashKind = "ordered-source-record-sha256-list-v1",
-                        SourceVersions = sourceVersions,
-                        CreatedCount = created,
-                        UnchangedCount = unchanged,
-                        PublishedExistingCount = published,
-                        SkippedCount = download?.SkippedCount,
-                        ErrorCode = error?.Data["MoenvErrorCode"] as string ?? error?.GetType().Name,
-                        HttpStatusCode = (error as HttpRequestException)?.StatusCode,
-                        RetryAfterSeconds = retryAfterSeconds
-                    })
-                });
+                        ["BatchId"] = batchId,
+                        ["Attempt"] = attempt,
+                        ["Outcome"] = outcome,
+                        ["Phase"] = phase,
+                        ["OrganizationIds"] = organizationIds,
+                        ["CompletedOrganizations"] = completedOrganizations,
+                        ["InputSha256"] = inputSha256,
+                        ["InputHashKind"] = "ordered-source-record-sha256-list-v1",
+                        ["SourceVersions"] = sourceVersions,
+                        ["CreatedCount"] = created,
+                        ["UnchangedCount"] = unchanged,
+                        ["PublishedExistingCount"] = published,
+                        ["SkippedCount"] = download?.SkippedCount,
+                        ["ErrorCode"] = error?.Data["MoenvErrorCode"] as string ?? error?.GetType().Name,
+                        ["HttpStatusCode"] = (int?)(error as HttpRequestException)?.StatusCode,
+                        ["RetryAfterSeconds"] = retryAfterSeconds
+                    });
                 // Persist cancellation/failure separately from catalogue writes; never log request URLs or keys.
                 await auditContext.SaveChangesAsync(CancellationToken.None);
             }
@@ -209,13 +201,13 @@ public sealed class MoenvFactorSynchronizationService
                     current.ReviewedBy = null;
                     current.ReviewedAt = null;
                     current.PublishedAt = existingPublishedAt;
-                    dbContext.AuditEvents.Add(CreateAudit(
+                    AddFactorAudit(dbContext,
                         organizationId,
                         actorId,
                         correlationId,
                         "factor.version.auto-published",
                         current.Id,
-                        existingPublishedAt));
+                        existingPublishedAt);
                     publishedExistingCount++;
                 }
                 else
@@ -279,38 +271,27 @@ public sealed class MoenvFactorSynchronizationService
                 SupersedesVersionId = latestVersion?.Id
             };
             dbContext.EmissionFactorVersions.Add(factor);
-            dbContext.AuditEvents.Add(CreateAudit(
+            AddFactorAudit(dbContext,
                 organizationId,
                 actorId,
                 correlationId,
                 "factor.version.synced",
                 factorVersionId,
-                publishedAt));
+                publishedAt);
             groupedFactors[key] = factor;
             createdCount++;
         }
 
-        dbContext.AuditEvents.Add(new AuditEventRecord
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = DateTimeOffset.UtcNow,
-            ActorId = actorId,
-            OrganizationId = organizationId,
-            Action = "factor.synchronization.completed",
-            ResourceType = "Organization",
-            ResourceId = organizationId,
-            BeforeHash = null,
-            AfterHash = null,
-            CorrelationId = correlationId,
-            MetadataJson = JsonSerializer.Serialize(new
+        new AuditWriter(dbContext).Append("factor.synchronization.completed", "Organization", organizationId,
+            organizationId, actorId, null, null, "Synchronization summary; mutations recorded per factor version",
+            correlationId, operation: "attempt", metadata: new Dictionary<string, object?>
             {
-                SourceReference = MoenvFactorClient.DatasetReference,
-                CreatedCount = createdCount,
-                UnchangedCount = unchangedCount,
-                PublishedExistingCount = publishedExistingCount,
-                SkippedCount = download.SkippedCount
-            })
-        });
+                ["SourceReference"] = MoenvFactorClient.DatasetReference,
+                ["CreatedCount"] = createdCount,
+                ["UnchangedCount"] = unchangedCount,
+                ["PublishedExistingCount"] = publishedExistingCount,
+                ["SkippedCount"] = download.SkippedCount
+            });
         await dbContext.SaveChangesAsync(cancellationToken);
         return new MoenvFactorSynchronizationResult(
             createdCount,
@@ -335,37 +316,29 @@ public sealed class MoenvFactorSynchronizationService
         {
             predecessor.PublicationStatus = FactorPublicationStatus.Withdrawn.ToString();
             predecessor.WithdrawnAt = withdrawnAt;
-            dbContext.AuditEvents.Add(CreateAudit(
+            AddFactorAudit(dbContext,
                 predecessor.OrganizationId,
                 actorId,
                 correlationId,
                 "factor.version.auto-withdrawn",
                 predecessor.Id,
-                withdrawnAt));
+                withdrawnAt);
         }
     }
 
-    private static AuditEventRecord CreateAudit(
+    private static void AddFactorAudit(CarbonFootprintDbContext dbContext,
         Guid organizationId,
         Guid? actorId,
         string correlationId,
         string action,
         Guid resourceId,
-        DateTimeOffset timestamp) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            Timestamp = timestamp,
-            ActorId = actorId,
-            OrganizationId = organizationId,
-            Action = action,
-            ResourceType = "EmissionFactorVersion",
-            ResourceId = resourceId,
-            BeforeHash = null,
-            AfterHash = null,
-            CorrelationId = correlationId,
-            MetadataJson = "{}"
-        };
+        DateTimeOffset timestamp)
+    {
+        var factor = dbContext.EmissionFactorVersions.Local.Single(item => item.Id == resourceId);
+        new AuditWriter(dbContext).AppendTracked(action, dbContext.Entry(factor), actorId,
+            "Controlled MOENV source synchronization", correlationId,
+            metadata: new Dictionary<string, object?> { ["sourceRecordSha256"] = factor.OriginalDocumentSha256 });
+    }
 
     private static string BuildExternalFactorKey(string name, string unitCode, string sourceName) =>
         $"{name.Trim()}\u001f{unitCode.Trim()}\u001f{sourceName.Trim()}";
