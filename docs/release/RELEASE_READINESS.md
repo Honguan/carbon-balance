@@ -46,9 +46,9 @@ OPEN 表示尚未以主線驗收證據證明完成；CLOSED 表示 GitHub 已關
 | [#51](https://github.com/Honguan/carbon-balance/issues/51) | migration／同步分離 | CLOSED；[PR #72](https://github.com/Honguan/carbon-balance/pull/72) 已合併 `fadf3b8`，[主線 CI](https://github.com/Honguan/carbon-balance/actions/runs/37119150558) 5/5 |
 | [#52](https://github.com/Honguan/carbon-balance/issues/52) | immutable build provenance | CLOSED；候選 binary／image／manifest SHA 必須等於 checkout SHA |
 | [#53](https://github.com/Honguan/carbon-balance/issues/53) | CSV formula injection | CLOSED；[實測](../IMPLEMENTATION_STATUS.md)與候選匯出回歸 |
-| [#54](https://github.com/Honguan/carbon-balance/issues/54) | transactional audit | OPEN；須 before/after／metadata 與 rollback 一致性 |
+| [#54](https://github.com/Honguan/carbon-balance/issues/54) | transactional audit | 程式已合併（[PR #77](https://github.com/Honguan/carbon-balance/pull/77)，`fbde4f3`，PR CI 5/5）；尚缺 migration 升級／回復演練，Issue 仍 OPEN |
 | [#55](https://github.com/Honguan/carbon-balance/issues/55) | optimistic concurrency | OPEN；須過期 draft 拒絕、修正流程與 audit 原子性 |
-| [#56](https://github.com/Honguan/carbon-balance/issues/56) | critical dependency readiness | OPEN；須 S3／scanner／keyring／DB 故障演練 |
+| [#56](https://github.com/Honguan/carbon-balance/issues/56) | critical dependency readiness | 程式已合併（[PR #75](https://github.com/Honguan/carbon-balance/pull/75)）；尚缺正式等效環境 S3／scanner／keyring／DB 故障演練，Issue 仍 OPEN |
 | [#57](https://github.com/Honguan/carbon-balance/issues/57) | 獨立 Golden reference suite | OPEN；目前四項合成案例不可作完整領域正確性證明 |
 | [#58](https://github.com/Honguan/carbon-balance/issues/58) | 最小 S3 權限／串流上傳 | OPEN；須 bucket 權限、容量／stream bounds、scan／hash／故障測試 |
 | [#59](https://github.com/Honguan/carbon-balance/issues/59) | 本發布治理修正 | 進行中；本文件與交叉引用須主線／CI 驗收 |
