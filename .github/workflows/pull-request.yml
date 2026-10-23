@@ -102,6 +102,7 @@ jobs:
         env:
           POSTGRES_PASSWORD: ci-compose-postgres-password
           MINIO_ROOT_PASSWORD: ci-compose-minio-password
+          OBJECT_STORAGE_APP_SECRET_KEY: ci-compose-app-storage-password
           SECRET_PROVIDER: ci-secret-provider
           ALLOWED_HOSTS: carbon.example.com
           TRUSTED_PROXY_IP: 10.0.0.8
