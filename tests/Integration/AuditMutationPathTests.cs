@@ -47,7 +47,10 @@ public sealed class AuditMutationPathTests
                 TraceIdentifier = correlation,
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorId.ToString())], "fixture"))
             };
-            var page = new WorkspaceModel(db, new Scope(organizationId), null!, null!, null!,
+            var mailPolicy = new SmtpEgressPolicy(new MailOptions(), false, (_, _) => Task.FromResult(new[] { System.Net.IPAddress.Parse("8.8.8.8") }));
+            var emailSender = new SmtpEmailSender(Microsoft.Extensions.Options.Options.Create(new MailOptions()), db, new Scope(organizationId),
+                new EphemeralDataProtectionProvider(), mailPolicy, new HttpContextAccessor());
+            var page = new WorkspaceModel(db, new Scope(organizationId), null!, null!, emailSender,
                 services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new InventorySnapshotReader(db),
                 new AllowedAuthorization(), null!, null!, new EphemeralDataProtectionProvider(),
                 CalculationBuildProvenance.Create("audit-fixture", new string('a', 40)))
