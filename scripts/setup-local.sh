@@ -141,6 +141,7 @@ EOF
         minio_password="$(new_password)"
     fi
     administrator_bootstrap_token="$(new_password)"
+    object_storage_app_secret="$(new_password)"
 
     if [ "$postgres_password" = "$minio_password" ]; then
         echo 'PostgreSQL and object storage must use different passwords.' >&2
@@ -155,6 +156,8 @@ POSTGRES_USER=carbon_app
 POSTGRES_PASSWORD=$postgres_password
 OBJECT_STORAGE_ACCESS_KEY=carbon_storage
 OBJECT_STORAGE_SECRET_KEY=$minio_password
+OBJECT_STORAGE_APP_ACCESS_KEY=carbon_app_storage
+OBJECT_STORAGE_APP_SECRET_KEY=$object_storage_app_secret
 ADMIN_BOOTSTRAP_TOKEN=$administrator_bootstrap_token
 OBJECTSTORAGE__ENDPOINT=http://object-storage:9000
 OBJECTSTORAGE__BUCKET=carbon-evidence
@@ -186,6 +189,15 @@ if [ -z "$minio_password" ]; then
     minio_password="$(get_env_value MINIO_ROOT_PASSWORD)"
 fi
 administrator_bootstrap_token="$(get_env_value ADMIN_BOOTSTRAP_TOKEN)"
+
+# The web container only receives this least-privilege identity, never the object storage admin key.
+if [ -z "$(get_env_value OBJECT_STORAGE_APP_SECRET_KEY)" ]; then
+    printf '
+OBJECT_STORAGE_APP_ACCESS_KEY=carbon_app_storage
+OBJECT_STORAGE_APP_SECRET_KEY=%s
+' "$(new_password)" >> "$env_path"
+    echo "Added object storage application identity to .env"
+fi
 
 if [ -z "$administrator_bootstrap_token" ]; then
     administrator_bootstrap_token="$(new_password)"

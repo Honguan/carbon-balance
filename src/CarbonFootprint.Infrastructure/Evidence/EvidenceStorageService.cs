@@ -35,67 +35,110 @@ public sealed class EvidenceStorageService
         string contentType,
         CancellationToken cancellationToken)
     {
-        await using var buffered = new MemoryStream();
-        var copyBuffer = new byte[64 * 1024];
-        int bytesRead;
-        while ((bytesRead = await content.ReadAsync(copyBuffer, cancellationToken)) > 0)
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(_options.UploadTimeoutSeconds));
+        var token = deadline.Token;
+        var quarantinePath = Path.Combine(_options.QuarantineDirectory, $"{Guid.NewGuid():N}.quarantine");
+        try
         {
-            if (buffered.Length + bytesRead > _options.MaximumFileSizeBytes)
+            Directory.CreateDirectory(_options.QuarantineDirectory);
+            var (sha256, size) = await SpoolAndHashAsync(content, quarantinePath, token);
+
+            await using var quarantined = new FileStream(
+                quarantinePath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await _malwareScanner.ScanAsync(quarantined, token);
+
+            var resolvedContentType = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType;
+            var evidenceId = Guid.NewGuid();
+            var objectKey = $"organizations/{organizationId:N}/evidence/{evidenceId:N}";
+            quarantined.Position = 0;
+            using var minioClient = CreateMinioClient();
+            await minioClient.PutObjectAsync(
+                new PutObjectArgs()
+                    .WithBucket(_options.Bucket)
+                    .WithObject(objectKey)
+                    .WithStreamData(quarantined)
+                    .WithObjectSize(size)
+                    .WithContentType(resolvedContentType),
+                token);
+
+            return new StoredEvidence(
+                evidenceId,
+                objectKey,
+                Path.GetFileName(originalFileName),
+                resolvedContentType,
+                size,
+                sha256,
+                MalwareScanStatus.Clean);
+        }
+        catch (EvidenceUploadException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new EvidenceUploadException("Evidence 處理逾時，請稍後重試。");
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new EvidenceUploadException("Evidence 儲存服務暫時無法使用，請稍後重試。", exception);
+        }
+        finally
+        {
+            try
             {
-                throw new InvalidOperationException($"Evidence 檔案大小不得超過 {_options.MaximumFileSizeBytes} bytes。");
+                File.Delete(quarantinePath);
             }
-
-            await buffered.WriteAsync(copyBuffer.AsMemory(0, bytesRead), cancellationToken);
+            catch (IOException)
+            {
+                // Residual quarantine files are never served; an offline sweep removes them.
+            }
         }
-
-        if (buffered.Length <= 0)
-        {
-            throw new InvalidOperationException("Evidence 檔案不可為空白。");
-        }
-
-        buffered.Position = 0;
-        var sha256 = Convert.ToHexStringLower(await SHA256.HashDataAsync(buffered, cancellationToken));
-        buffered.Position = 0;
-        await _malwareScanner.ScanAsync(buffered, cancellationToken);
-
-        using var minioClient = CreateMinioClient();
-        var bucketExists = await minioClient.BucketExistsAsync(
-            new BucketExistsArgs().WithBucket(_options.Bucket),
-            cancellationToken);
-        if (!bucketExists)
-        {
-            await minioClient.MakeBucketAsync(
-                new MakeBucketArgs().WithBucket(_options.Bucket),
-                cancellationToken);
-        }
-
-        var evidenceId = Guid.NewGuid();
-        var objectKey = $"organizations/{organizationId:N}/evidence/{evidenceId:N}";
-        buffered.Position = 0;
-        await minioClient.PutObjectAsync(
-            new PutObjectArgs()
-                .WithBucket(_options.Bucket)
-                .WithObject(objectKey)
-                .WithStreamData(buffered)
-                .WithObjectSize(buffered.Length)
-                .WithContentType(string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType),
-            cancellationToken);
-
-        return new StoredEvidence(
-            evidenceId,
-            objectKey,
-            Path.GetFileName(originalFileName),
-            string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType,
-            buffered.Length,
-            sha256,
-            MalwareScanStatus.Clean);
     }
 
     public async Task<bool> IsAvailableAsync(CancellationToken cancellationToken)
     {
+        // The SDK's stat/get calls issue a bucket-level HEAD first, which the least-privilege identity cannot
+        // perform; a presigned one-byte ranged GET only needs Read on the provisioned sentinel object.
         using var client = CreateMinioClient();
-        return await client.BucketExistsAsync(new BucketExistsArgs().WithBucket(_options.Bucket), cancellationToken)
-            .WaitAsync(cancellationToken);
+        var url = await client.PresignedGetObjectAsync(
+            new PresignedGetObjectArgs()
+                .WithBucket(_options.Bucket)
+                .WithObject(_options.ReadinessSentinelKey)
+                .WithExpiry(60));
+        using var http = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 0);
+        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        return response.IsSuccessStatusCode;
+    }
+
+    private async Task<(string Sha256, long Size)> SpoolAndHashAsync(Stream content, string path, CancellationToken cancellationToken)
+    {
+        await using var spool = new FileStream(
+            path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.Asynchronous);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = new byte[64 * 1024];
+        long size = 0;
+        int bytesRead;
+        while ((bytesRead = await content.ReadAsync(buffer, cancellationToken)) > 0)
+        {
+            size += bytesRead;
+            if (size > _options.MaximumFileSizeBytes)
+            {
+                throw new EvidenceUploadException($"Evidence 檔案大小不得超過 {_options.MaximumFileSizeBytes} bytes。");
+            }
+
+            hash.AppendData(buffer, 0, bytesRead);
+            await spool.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+        }
+
+        if (size <= 0)
+        {
+            throw new EvidenceUploadException("Evidence 檔案不可為空白。");
+        }
+
+        return (Convert.ToHexStringLower(hash.GetHashAndReset()), size);
     }
 
     private IMinioClient CreateMinioClient()
@@ -109,6 +152,7 @@ public sealed class EvidenceStorageService
         return new MinioClient()
             .WithEndpoint(endpoint.Host, endpoint.Port)
             .WithCredentials(_options.AccessKey, _options.SecretKey)
+            .WithRegion(_options.Region)
             .WithSSL(endpoint.Scheme == Uri.UriSchemeHttps)
             .Build();
     }

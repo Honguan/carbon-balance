@@ -119,6 +119,7 @@ Restore the original .env, or delete disposable local data with:
             $minioPassword = New-LocalPassword
         }
         $administratorBootstrapToken = New-LocalPassword
+        $objectStorageAppSecret = New-LocalPassword
 
         if ($postgresPassword -eq $minioPassword) {
             throw 'PostgreSQL and object storage must use different passwords.'
@@ -131,6 +132,8 @@ POSTGRES_USER=carbon_app
 POSTGRES_PASSWORD=$postgresPassword
 OBJECT_STORAGE_ACCESS_KEY=carbon_storage
 OBJECT_STORAGE_SECRET_KEY=$minioPassword
+OBJECT_STORAGE_APP_ACCESS_KEY=carbon_app_storage
+OBJECT_STORAGE_APP_SECRET_KEY=$objectStorageAppSecret
 ADMIN_BOOTSTRAP_TOKEN=$administratorBootstrapToken
 OBJECTSTORAGE__ENDPOINT=http://object-storage:9000
 OBJECTSTORAGE__BUCKET=carbon-evidence
@@ -164,6 +167,15 @@ MAIL__PORT=1025
         $minioPassword = Get-EnvValue 'MINIO_ROOT_PASSWORD'
     }
     $administratorBootstrapToken = Get-EnvValue 'ADMIN_BOOTSTRAP_TOKEN'
+
+    # The web container only receives this least-privilege identity, never the object storage admin key.
+    if ([string]::IsNullOrWhiteSpace((Get-EnvValue 'OBJECT_STORAGE_APP_SECRET_KEY'))) {
+        [IO.File]::AppendAllText(
+            $envPath,
+            "OBJECT_STORAGE_APP_ACCESS_KEY=carbon_app_storage`nOBJECT_STORAGE_APP_SECRET_KEY=$(New-LocalPassword)`n",
+            [Text.UTF8Encoding]::new($false))
+        Write-Host 'Added object storage application identity to .env' -ForegroundColor Green
+    }
 
     if ([string]::IsNullOrWhiteSpace($administratorBootstrapToken)) {
         $administratorBootstrapToken = New-LocalPassword

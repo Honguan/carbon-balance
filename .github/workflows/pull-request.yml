@@ -102,6 +102,7 @@ jobs:
         env:
           POSTGRES_PASSWORD: ci-compose-postgres-password
           MINIO_ROOT_PASSWORD: ci-compose-minio-password
+          OBJECT_STORAGE_APP_SECRET_KEY: ci-compose-app-storage-password
           SECRET_PROVIDER: ci-secret-provider
           ALLOWED_HOSTS: carbon.example.com
           TRUSTED_PROXY_IP: 10.0.0.8
@@ -302,6 +303,15 @@ jobs:
             Start-Sleep -Seconds 2
           }
           ./scripts/migrate-object-storage.ps1 -SourceEndpoint http://127.0.0.1:9000 -TargetEndpoint http://127.0.0.1:9000 -SourceBucket migration-source -TargetBucket migration-target -Network host -Apply
+      - name: Provision least-privilege object storage identity
+        run: |
+          docker exec \
+            --env OBJECT_STORAGE_BUCKET=carbon-e2e-evidence \
+            --env OBJECT_STORAGE_MASTER=localhost:9333 \
+            --env OBJECT_STORAGE_FILER=localhost:8888 \
+            --env OBJECT_STORAGE_APP_ACCESS_KEY=carbon_e2e_app \
+            --env OBJECT_STORAGE_APP_SECRET_KEY=auth-e2e-app-storage-password \
+            --interactive carbon-storage-e2e sh -s < scripts/provision-object-storage.sh
       - name: Start web application
         run: |
           docker run --detach \
@@ -317,8 +327,8 @@ jobs:
             --env MAIL__DEVELOPMENTMAILPIT__ADDRESSRANGES__0=127.0.0.1/32 \
             --env OBJECTSTORAGE__ENDPOINT=http://127.0.0.1:9000 \
             --env OBJECTSTORAGE__BUCKET=carbon-e2e-evidence \
-            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_storage \
-            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-storage-password \
+            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_app \
+            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-app-storage-password \
             --env MALWARESCANNER__HOST=127.0.0.1 \
             --env MALWARESCANNER__PORT=3310 \
             --env RateLimiting__PermitLimit=300 \
@@ -366,8 +376,8 @@ jobs:
             --env MAIL__DEVELOPMENTMAILPIT__ADDRESSRANGES__0=127.0.0.1/32 \
             --env OBJECTSTORAGE__ENDPOINT=http://127.0.0.1:9000 \
             --env OBJECTSTORAGE__BUCKET=carbon-e2e-evidence \
-            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_storage \
-            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-storage-password \
+            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_app \
+            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-app-storage-password \
             --env MALWARESCANNER__HOST=127.0.0.1 \
             --env MALWARESCANNER__PORT=3310 \
             --env RateLimiting__PermitLimit=300 \
@@ -407,8 +417,8 @@ jobs:
             --env MAIL__DEVELOPMENTMAILPIT__ADDRESSRANGES__0=127.0.0.1/32 \
             --env OBJECTSTORAGE__ENDPOINT=http://127.0.0.1:9000 \
             --env OBJECTSTORAGE__BUCKET=carbon-e2e-evidence \
-            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_storage \
-            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-storage-password \
+            --env OBJECTSTORAGE__ACCESSKEY=carbon_e2e_app \
+            --env OBJECTSTORAGE__SECRETKEY=auth-e2e-app-storage-password \
             --env MALWARESCANNER__HOST=127.0.0.1 \
             --env MALWARESCANNER__PORT=3310 \
             --env RateLimiting__PermitLimit=300 \

@@ -35,6 +35,7 @@ public static class DependencyInjection
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.SectionName));
         services.Configure<MalwareScannerOptions>(configuration.GetSection(MalwareScannerOptions.SectionName));
         services.AddScoped<ClamAvMalwareScanner>();
+        services.AddSingleton<EvidenceUploadGate>();
         services.AddScoped<EvidenceStorageService>();
         services.Configure<MailOptions>(configuration.GetSection(MailOptions.SectionName));
         services.AddSingleton(provider => new SmtpEgressPolicy(

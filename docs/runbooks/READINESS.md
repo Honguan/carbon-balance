@@ -6,11 +6,11 @@
 
 ## 啟動前置條件
 
-- 先依部署／儲存服務管理流程建立配置的 bucket。Development Compose／CI 的 SeaweedFS `S3_BUCKET` 在儲存啟動階段建立測試 bucket；若建立失敗，Web 的唯讀 probe 回 503。Production 外部儲存須由平台先 provision，健康 GET 不建立 bucket 或物件。
+- 先依[物件儲存佈建手冊](OBJECT_STORAGE_PROVISIONING.md)建立 bucket、應用程式身分與 readiness sentinel（Compose 由 `object-storage-provision` 執行）。Development Compose／CI 的 SeaweedFS `S3_BUCKET` 在儲存啟動階段建立測試 bucket；若建立失敗，Web 的唯讀 probe 回 503。Production 外部儲存須由平台先 provision，健康 GET 不建立 bucket 或物件。
 - 非 Development 必須指定持久化 `DataProtection:KeyPath`。Web 啟動時檢查該目錄讀寫及框架 Protect／Unprotect，初始化全新空 keyring；失敗立即停止啟動。只有 Web 啟動做此操作，`--migrate`／`--sync-factors` 不新增對 evidence 或 keyring 初始化的依賴。
 - 配置的目錄與現有 key 必須可讀，且含可用未撤銷 key。健康檢查重新讀取 repository，驗證 key XML／encryptor，偵測遺失、毀損及撤銷，不在 GET 產生／輪替 key。
 
-S3 bucket HEAD 證明當下 bucket／連線／憑證可用，不證明所有上傳、下載或 IAM 權限；最小權限與完整儲存操作另依 #58 驗收。ClamAV 使用官方 [NUL framing PING／PONG 協定](https://docs.clamav.net/manual/Usage/ClamdProtocol.html)，不傳送掃描檔案。
+S3 sentinel 預簽名 ranged GET 證明當下 bucket 佈建／連線／應用程式憑證可讀取 `system/readiness-sentinel`，不證明上傳權限；最小權限矩陣見[物件儲存佈建手冊](OBJECT_STORAGE_PROVISIONING.md)。ClamAV 使用官方 [NUL framing PING／PONG 協定](https://docs.clamav.net/manual/Usage/ClamdProtocol.html)，不傳送掃描檔案。
 
 Filesystem 的 OS I/O 無法強制取消；keyring 使用一個共享的 in-flight 檢查，caller 可以逾時，不會因重複探測堆積讀取工作。使用本機持久化 volume，勿以可能永久掛起的網路共享作 keyring。唯讀 health 不能持續證明輪替寫入權限或所有歷史密文可解密；平台須另做權限、輪替與還原演練。
 
