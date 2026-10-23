@@ -37,7 +37,7 @@ services:
   # Explicit provisioning: bucket, least-privilege application identity and readiness sentinel.
   # Admin access stays here; the web container only gets OBJECT_STORAGE_APP_* credentials.
   object-storage-provision:
-    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    image: chrislusf/seaweedfs:dev@sha256:d490b0697f63417258de70d121bcf04a0d6ae38bde09b4fbc40757ab4dcd0a3f
     entrypoint: ["/bin/sh", "/provision/provision-object-storage.sh"]
     environment:
       OBJECT_STORAGE_BUCKET: ${OBJECTSTORAGE__BUCKET:-carbon-evidence}

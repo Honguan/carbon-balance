@@ -24,7 +24,7 @@ Compose 以一次性 `object-storage-provision` 服務執行，Web 必須等它�
 - 只有掃描回覆為完整 frame 且為 `OK`、上傳成功並提交資料庫後，才建立可用的證據關聯。
 - 使用者只會看到 `EvidenceUploadException` 的安全訊息；基礎設施例外不再回顯到畫面。
 
-## 已驗證的權限矩陣（SeaweedFS 4.48，應用程式身分）
+## 已驗證的權限矩陣（SeaweedFS `dev` 快照 digest，應用程式身分）
 
 | 操作 | 結果 |
 | --- | --- |
