@@ -17,7 +17,7 @@ RUN dotnet publish src/CarbonFootprint.Web/CarbonFootprint.Web.csproj \
     /p:UseAppHost=false \
     /p:SourceRevisionId="$SOURCE_REVISION"
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.11 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.13 AS runtime
 WORKDIR /app
 RUN apt-get update \
     && apt-get upgrade --yes \
