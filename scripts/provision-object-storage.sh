@@ -11,7 +11,7 @@ app_user="${OBJECT_STORAGE_APP_USER:-carbon_app}"
 : "${OBJECT_STORAGE_APP_ACCESS_KEY:?OBJECT_STORAGE_APP_ACCESS_KEY is required}"
 : "${OBJECT_STORAGE_APP_SECRET_KEY:?OBJECT_STORAGE_APP_SECRET_KEY is required}"
 
-shell() { printf '%s\n' "$1" | weed shell -master="$master" 2>&1; }
+shell() { printf '%s\n' "$1" | weed shell -master="$master" -filer="$filer" 2>&1; }
 
 attempt=0
 until shell "cluster.status" >/dev/null; do
