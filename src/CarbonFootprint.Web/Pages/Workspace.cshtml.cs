@@ -166,7 +166,25 @@ public sealed class WorkspaceModel : PageModel
     public IReadOnlyDictionary<Guid, IReadOnlyList<InventoryProjectVersionRecord>> PcrAffectedProjects { get; private set; } =
         new Dictionary<Guid, IReadOnlyList<InventoryProjectVersionRecord>>();
 
+    /// <summary>Active activities of the selected project; only the selected stage on the lifecycle section.</summary>
     public IReadOnlyList<ActivityDataRecord> Activities { get; private set; } = [];
+
+    public IReadOnlyDictionary<Guid, EmissionFactorVersionRecord> ReferencedFactors { get; private set; } =
+        new Dictionary<Guid, EmissionFactorVersionRecord>();
+
+    public int InventoryProjectTotal { get; private set; }
+    public int SavedStageCount { get; private set; }
+    public bool HasRun { get; private set; }
+    public int LatestLineTotal { get; private set; }
+    public int SelectableFactorTotal { get; private set; }
+    public int FactorTotal { get; private set; }
+    public int FactorPageCount { get; private set; } = 1;
+
+    [BindProperty(SupportsGet = true)]
+    public int FactorPage { get; set; } = 1;
+
+    [BindProperty(SupportsGet = true)]
+    public string? FactorQuery { get; set; }
 
     public IReadOnlyList<EvidenceFileRecord> EvidenceFiles { get; private set; } = [];
 
@@ -1877,6 +1895,10 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
+    private const int MaxAffectedProjects = 500;
+    public const int FactorPageSize = WorkspaceQueries.FactorPageSize;
+    public const int MaxListedProjects = WorkspaceQueries.MaxListedProjects;
+
     private async Task LoadAsync(CancellationToken cancellationToken)
     {
         if (!OrganizationId.HasValue)
@@ -1894,43 +1916,36 @@ public sealed class WorkspaceModel : PageModel
         CanManageFactors = await IsAllowedAsync(OrganizationPermission.ManageFactors);
         CanManageOrganization = await IsAllowedAsync(OrganizationPermission.ManageOrganization);
 
-        if (Section == "settings")
+        var section = Section;
+        var showsPcrRules = section is "setup" or "pcr" or "inventory";
+        var showsProductForms = section is "setup" or "product" or "inventory";
+        var needsUnits = section is "setup" or "product" or "pcr" or "inventory" or "factors" or "lifecycle";
+
+        if (section == "settings")
         {
             MailSettings = await _dbContext.OrganizationMailSettings
                 .AsNoTracking()
                 .SingleOrDefaultAsync(cancellationToken);
         }
 
-        ProductVersions = await _dbContext.ProductVersions.AsNoTracking().OrderBy(item => item.NameZhTw).ToArrayAsync(cancellationToken);
-        Facilities = await _dbContext.Facilities.AsNoTracking().OrderBy(item => item.Code).ToArrayAsync(cancellationToken);
-        Memberships = await _dbContext.OrganizationMemberships.AsNoTracking().OrderBy(item => item.CreatedAt).ToArrayAsync(cancellationToken);
-        var memberIds = Memberships.Select(item => item.UserId).ToArray();
-        MemberNames = await _dbContext.Users.AsNoTracking().Where(item => memberIds.Contains(item.Id))
-            .ToDictionaryAsync(item => item.Id,
-                item => string.IsNullOrWhiteSpace(item.DisplayName) ? item.UserName ?? string.Empty : item.DisplayName,
-                cancellationToken);
-        Invitations = await _dbContext.OrganizationInvitations.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
-        PcrVersions = await _dbContext.PcrVersions.AsNoTracking().OrderBy(item => item.RegistrationNumber).ThenByDescending(item => item.VersionNumber).ToArrayAsync(cancellationToken);
-        PcrStageRules = await _dbContext.PcrStageRules.AsNoTracking().OrderBy(item => item.LifecycleStage).ToArrayAsync(cancellationToken);
-        SelectablePcrVersions = PcrVersions
-            .Where(item => PcrRuleSetMapper.ToRuleSet(
-                    item,
-                    PcrStageRules.Where(rule => rule.PcrVersionId == item.Id))
-                .IsPublishedAndApproved)
-            .ToArray();
-        InventoryProjects = await _dbContext.InventoryProjectVersions.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
-        PcrAffectedProjectCounts = InventoryProjects
-            .Where(item => item.PcrVersionId.HasValue)
-            .GroupBy(item => item.PcrVersionId!.Value)
-            .ToDictionary(group => group.Key, group => group.Count());
-        PcrAffectedProjects = InventoryProjects
-            .Where(item => item.PcrVersionId.HasValue)
-            .GroupBy(item => item.PcrVersionId!.Value)
-            .ToDictionary(
-                group => group.Key,
-                group => (IReadOnlyList<InventoryProjectVersionRecord>)group
-                    .OrderBy(item => item.PeriodEnd)
-                    .ToArray());
+        if (section == "governance")
+        {
+            Memberships = await _dbContext.OrganizationMemberships.AsNoTracking().OrderBy(item => item.CreatedAt).ToArrayAsync(cancellationToken);
+            var memberIds = Memberships.Select(item => item.UserId).ToArray();
+            MemberNames = await _dbContext.Users.AsNoTracking().Where(item => memberIds.Contains(item.Id))
+                .ToDictionaryAsync(item => item.Id,
+                    item => string.IsNullOrWhiteSpace(item.DisplayName) ? item.UserName ?? string.Empty : item.DisplayName,
+                    cancellationToken);
+            Invitations = await _dbContext.OrganizationInvitations.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
+        }
+        if (section is "setup" or "product")
+        {
+            Facilities = await _dbContext.Facilities.AsNoTracking().OrderBy(item => item.Code).ToArrayAsync(cancellationToken);
+        }
+
+        var picker = await new WorkspaceQueries(_dbContext).ListProjectsAsync(ProjectVersionId, cancellationToken);
+        InventoryProjectTotal = picker.Total;
+        InventoryProjects = picker.Projects;
         if (!ProjectVersionId.HasValue || InventoryProjects.All(item => item.Id != ProjectVersionId.Value))
         {
             ProjectVersionId = InventoryProjects.FirstOrDefault()?.Id;
@@ -1940,83 +1955,130 @@ public sealed class WorkspaceModel : PageModel
             && InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(selectedProject.WorkflowStatus));
         CanEditInventory &= canEditSelectedProject;
         CanCalculate &= canEditSelectedProject;
-        StageDeclarations = await _dbContext.LifecycleStageDeclarations.AsNoTracking().OrderBy(item => item.LifecycleStage).ToArrayAsync(cancellationToken);
-        Factors = await _dbContext.EmissionFactorVersions.AsNoTracking().OrderBy(item => item.Name).ToArrayAsync(cancellationToken);
-        SelectableFactors = Factors
-            .Where(item => item.PublicationStatus == FactorPublicationStatus.Published.ToString())
-            .ToArray();
-        Activities = await _dbContext.ActivityData.AsNoTracking().Where(item => item.RetiredAt == null).OrderBy(item => item.LifecycleStage).ThenBy(item => item.Name).ToArrayAsync(cancellationToken);
-        EditingActivity = CanEditInventory ? Activities.FirstOrDefault(item => item.Id == ActivityId
-            && item.InventoryProjectVersionId == ProjectVersionId
-            && InventoryProjects.Any(project => project.Id == item.InventoryProjectVersionId
-                && InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus)))) : null;
-        var selectedUnitCatalogueVersion = ProjectVersionId.HasValue
-            ? GetActivityUnitCatalogueVersion(Activities.Where(item => item.InventoryProjectVersionId == ProjectVersionId.Value))
-            : CurrentUnitCatalogueVersion;
-        Units = await _dbContext.Units.AsNoTracking()
-            .Where(item => item.CatalogueVersion == selectedUnitCatalogueVersion)
-            .OrderBy(item => item.Code)
-            .ToArrayAsync(cancellationToken);
-        EvidenceFiles = await _dbContext.EvidenceFiles.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
-        Runs = await _dbContext.CalculationRuns.AsNoTracking().OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
-        PendingFormulaRunProjectIds = Runs
-            .Where(item => string.Equals(item.RuleSetVersion, InventoryReadinessService.PendingStageFormulaRuleSetVersion, StringComparison.Ordinal))
-            .Select(item => item.ProjectVersionId)
-            .ToHashSet();
-        if (Section == "calculation")
-        {
-            var currentRunProjectIds = new HashSet<Guid>();
-            if (InventoryProjects.FirstOrDefault(item => item.Id == ProjectVersionId) is { } readinessProject)
-            {
-                var assessment = await _readiness.AssessAsync(readinessProject.Id, [], cancellationToken);
-                Readiness = assessment.Report;
-                if (assessment.CurrentRunError is null)
-                {
-                    currentRunProjectIds.Add(readinessProject.Id);
-                }
-            }
 
-            CurrentRunProjectIds = currentRunProjectIds;
-        }
-        var selectedRuns = ProjectVersionId.HasValue
-            ? Runs.Where(item => item.ProjectVersionId == ProjectVersionId.Value).ToArray()
-            : Array.Empty<CalculationRunRecord>();
-        if (selectedRuns.Length > 0)
+        if (showsProductForms)
         {
-            LatestReportingRules = RunExportValidation.TryReadRules(selectedRuns[0], out var reportingRules)
-                ? reportingRules : null;
-            LatestManifestHashValid = CanonicalManifest.HasValidSha256(
-                selectedRuns[0].CanonicalInputManifest,
-                selectedRuns[0].InputSha256);
-            LatestLines = await _dbContext.CalculationLineItems.AsNoTracking()
-                .Where(item => item.CalculationRunId == selectedRuns[0].Id)
-                .OrderBy(item => item.LifecycleStage)
-                .ThenBy(item => item.ActivityId)
-                .ToArrayAsync(cancellationToken);
-            LatestWarnings = await _dbContext.CalculationWarnings.AsNoTracking()
-                .Where(item => item.CalculationRunId == selectedRuns[0].Id)
+            ProductVersions = await _dbContext.ProductVersions.AsNoTracking().OrderBy(item => item.NameZhTw).ToArrayAsync(cancellationToken);
+        }
+        else
+        {
+            var listedProductIds = InventoryProjects.Select(item => item.ProductVersionId).Distinct().ToArray();
+            ProductVersions = await _dbContext.ProductVersions.AsNoTracking()
+                .Where(item => listedProductIds.Contains(item.Id)).OrderBy(item => item.NameZhTw).ToArrayAsync(cancellationToken);
+        }
+
+        if (showsPcrRules)
+        {
+            PcrVersions = await _dbContext.PcrVersions.AsNoTracking().OrderBy(item => item.RegistrationNumber).ThenByDescending(item => item.VersionNumber).ToArrayAsync(cancellationToken);
+            PcrStageRules = await _dbContext.PcrStageRules.AsNoTracking().OrderBy(item => item.LifecycleStage).ToArrayAsync(cancellationToken);
+            SelectablePcrVersions = PcrVersions
+                .Where(item => PcrRuleSetMapper.ToRuleSet(
+                        item,
+                        PcrStageRules.Where(rule => rule.PcrVersionId == item.Id))
+                    .IsPublishedAndApproved)
+                .ToArray();
+        }
+        else if (selectedProject?.PcrVersionId is { } selectedPcrId)
+        {
+            PcrVersions = await _dbContext.PcrVersions.AsNoTracking().Where(item => item.Id == selectedPcrId).ToArrayAsync(cancellationToken);
+        }
+        if (section is "setup" or "pcr")
+        {
+            PcrAffectedProjectCounts = await _dbContext.InventoryProjectVersions.AsNoTracking()
+                .Where(item => item.PcrVersionId != null)
+                .GroupBy(item => item.PcrVersionId!.Value)
+                .Select(group => new { group.Key, Count = group.Count() })
+                .ToDictionaryAsync(group => group.Key, group => group.Count, cancellationToken);
+            PcrAffectedProjects = (await _dbContext.InventoryProjectVersions.AsNoTracking()
+                    .Where(item => item.PcrVersionId != null)
+                    .OrderBy(item => item.PeriodEnd).ThenBy(item => item.Id)
+                    .Take(MaxAffectedProjects)
+                    .ToArrayAsync(cancellationToken))
+                .GroupBy(item => item.PcrVersionId!.Value)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<InventoryProjectVersionRecord>)group.ToArray());
+        }
+
+        if (showsPcrRules && ProjectVersionId.HasValue)
+        {
+            StageDeclarations = await _dbContext.LifecycleStageDeclarations.AsNoTracking()
+                .Where(item => item.InventoryProjectVersionId == ProjectVersionId.Value)
+                .OrderBy(item => item.LifecycleStage).ToArrayAsync(cancellationToken);
+        }
+
+        if (section == "factors")
+        {
+            var page = await new WorkspaceQueries(_dbContext).ListFactorsAsync(FactorQuery, FactorPage, cancellationToken);
+            (Factors, FactorTotal, FactorPageCount, FactorPage) = (page.Items, page.Total, page.PageCount, page.Page);
+        }
+
+        if (section == "lifecycle" && ProjectVersionId.HasValue)
+        {
+            var stage = new WorkspaceQueries(_dbContext).LoadStageAsync(
+                ProjectVersionId.Value, Stage is null ? null : StageFromSlug(Stage), CanEditInventory ? ActivityId : null, cancellationToken);
+            var data = await stage;
+            Activities = data.Activities;
+            EditingActivity = data.EditingActivity;
+            EvidenceFiles = data.Evidence;
+            ReferencedFactors = data.ReferencedFactors;
+            SelectableFactors = data.SelectableFactors;
+            SelectableFactorTotal = data.SelectableFactorTotal;
+        }
+
+        if (needsUnits)
+        {
+            var selectedUnitCatalogueVersion = ProjectVersionId.HasValue
+                ? GetActivityUnitCatalogueVersion(await _dbContext.ActivityData.AsNoTracking()
+                    .Where(item => item.InventoryProjectVersionId == ProjectVersionId.Value && item.RetiredAt == null)
+                    .Select(item => item.ConversionRuleVersion).Distinct().ToArrayAsync(cancellationToken))
+                : CurrentUnitCatalogueVersion;
+            Units = await _dbContext.Units.AsNoTracking()
+                .Where(item => item.CatalogueVersion == selectedUnitCatalogueVersion)
                 .OrderBy(item => item.Code)
                 .ToArrayAsync(cancellationToken);
         }
 
-        if (selectedRuns.Length > 1)
+        if (section == "settings" || !ProjectVersionId.HasValue)
         {
-            var comparedRunIds = new[] { selectedRuns[0].Id, selectedRuns[1].Id };
-            var summaries = await _dbContext.CalculationStageSummaries.AsNoTracking()
-                .Where(item => comparedRunIds.Contains(item.CalculationRunId))
-                .ToArrayAsync(cancellationToken);
-            var baseline = new CalculationRunTotals(
-                selectedRuns[1].Id,
-                selectedRuns[1].ProductTotal,
-                summaries.Where(item => item.CalculationRunId == selectedRuns[1].Id)
-                    .ToDictionary(item => (LifecycleStage)item.LifecycleStage, item => item.Emissions));
-            var candidate = new CalculationRunTotals(
-                selectedRuns[0].Id,
-                selectedRuns[0].ProductTotal,
-                summaries.Where(item => item.CalculationRunId == selectedRuns[0].Id)
-                    .ToDictionary(item => (LifecycleStage)item.LifecycleStage, item => item.Emissions));
-            LatestDifference = CalculationRunDiff.Compare(baseline, candidate);
+            return;
         }
+
+        // Final-submit panel (every non-settings section) needs only counts and flags for the selected project.
+        var projectId = ProjectVersionId.Value;
+        SavedStageCount = await _dbContext.ActivityData.AsNoTracking()
+            .Where(item => item.InventoryProjectVersionId == projectId && item.RetiredAt == null)
+            .Select(item => item.LifecycleStage).Distinct().CountAsync(cancellationToken);
+        var projectRuns = _dbContext.CalculationRuns.AsNoTracking().Where(item => item.ProjectVersionId == projectId);
+        HasRun = await projectRuns.AnyAsync(cancellationToken);
+        if (HasRun && await projectRuns.AnyAsync(
+                item => item.RuleSetVersion == InventoryReadinessService.PendingStageFormulaRuleSetVersion, cancellationToken))
+        {
+            PendingFormulaRunProjectIds = new HashSet<Guid> { projectId };
+        }
+
+        if (section != "calculation")
+        {
+            return;
+        }
+
+        var currentRunProjectIds = new HashSet<Guid>();
+        var assessment = await _readiness.AssessAsync(projectId, [], cancellationToken);
+        Readiness = assessment.Report;
+        if (assessment.CurrentRunError is null)
+        {
+            currentRunProjectIds.Add(projectId);
+        }
+        CurrentRunProjectIds = currentRunProjectIds;
+
+        var results = await new WorkspaceQueries(_dbContext).LoadCalculationResultsAsync(projectId, cancellationToken);
+        Runs = results.Runs;
+        LatestReportingRules = results.ReportingRules;
+        LatestManifestHashValid = results.ManifestHashValid;
+        LatestLines = results.Lines;
+        LatestLineTotal = results.LineTotal;
+        LatestWarnings = results.Warnings;
+        LatestDifference = results.Difference;
     }
 
     public async Task<IActionResult> OnGetReadinessAsync(Guid projectVersionId, CancellationToken cancellationToken)
@@ -2065,6 +2127,15 @@ public sealed class WorkspaceModel : PageModel
 
     private Guid RequireOrganization() => OrganizationId
         ?? throw new InvalidOperationException("請先建立組織。");
+
+    private static LifecycleStage StageFromSlug(string slug) => slug switch
+    {
+        "manufacturing" => LifecycleStage.Manufacturing,
+        "distribution" => LifecycleStage.Distribution,
+        "use" => LifecycleStage.Use,
+        "end-of-life" => LifecycleStage.EndOfLife,
+        _ => LifecycleStage.RawMaterial
+    };
 
     private static string NormalizeStageSlug(string? stage) => stage?.Trim().ToLowerInvariant() switch
     {

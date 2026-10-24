@@ -16,7 +16,7 @@
     string FormatReportingDecimal(decimal value) =>
         value.ToString(Model.LatestReportingRules is { } rules ? $"F{rules.RoundingDecimalPlaces}" : "G29");
     string DisplayAmount(decimal value) => value.ToString("0.############################");
-    var factorsById = Model.Factors.ToDictionary(item => item.Id);
+    var factorsById = Model.ReferencedFactors;
     var hasFacilities = Model.Facilities.Count > 0;
     var hasProductVersions = Model.ProductVersions.Count > 0;
     var hasSelectablePcrVersions = Model.SelectablePcrVersions.Count > 0;
@@ -962,6 +962,10 @@ else
                                                     </option>
                                                 }
                                             </select>
+                                            @if (Model.SelectableFactorTotal > Model.SelectableFactors.Count)
+                                            {
+                                                <p class="workspace-select-help">已發布係數共 @Model.SelectableFactorTotal 筆，僅列出前 @Model.SelectableFactors.Count 筆；其餘請至係數資料庫查詢。</p>
+                                            }
                                             <p class="workspace-select-help" id="factor-@stageSection.Slug-help">
                                                 @if (!hasSelectableFactors)
                                                 {
@@ -1123,7 +1127,7 @@ else
         </div>
     </section>
 
-    @if (latestSelectedRun is not null)
+    @if (Model.Section == "calculation" && latestSelectedRun is not null)
     {
         var run = latestSelectedRun;
         <section class="card my-4 workspace-card" id="latest-result">
@@ -1185,6 +1189,10 @@ else
                         </tbody>
                     </table>
                 </div>
+                @if (Model.LatestLineTotal > Model.LatestLines.Count)
+                {
+                    <p class="workspace-select-help">僅顯示前 @Model.LatestLines.Count 筆，共 @Model.LatestLineTotal 筆；完整明細請匯出 Excel。</p>
+                }
                 <p class="alert alert-warning">此結果為系統內部盤查計算，不代表已查驗、ISO 認證或取得碳標籤。</p>
             </div>
         </section>
@@ -1210,12 +1218,8 @@ else
                     @foreach (var inventory in Model.InventoryProjects.Where(item => item.Id == Model.ProjectVersionId))
                     {
                         var workflowStatus = Enum.Parse<InventoryWorkflowStatus>(inventory.WorkflowStatus);
-                        var savedStageCount = Model.Activities
-                            .Where(item => item.InventoryProjectVersionId == inventory.Id)
-                            .Select(item => item.LifecycleStage)
-                            .Distinct()
-                            .Count();
-                        var hasRun = Model.Runs.Any(item => item.ProjectVersionId == inventory.Id);
+                        var savedStageCount = Model.SavedStageCount;
+                        var hasRun = Model.HasRun;
                         var hasCurrentRun = Model.CurrentRunProjectIds.Contains(inventory.Id);
                         var hasPendingFormulaRun = Model.PendingFormulaRunProjectIds.Contains(inventory.Id);
                         <li class="workspace-submit-item">

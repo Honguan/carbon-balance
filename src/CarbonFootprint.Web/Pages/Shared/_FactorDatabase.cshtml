@@ -123,8 +123,14 @@
 
         <section class="mt-4">
             <h3 class="h5">係數版本</h3>
-            <label class="form-label" for="factorDatabaseSearch">查詢係數</label>
-            <input class="form-control mb-3" id="factorDatabaseSearch" type="search" placeholder="輸入名稱、單位、來源或版本" data-factor-list-filter />
+            <form method="get" asp-page="/Workspace" asp-route-section="factors" asp-route-projectVersionId="@Model.ProjectVersionId" class="mb-3">
+                <label class="form-label" for="factorDatabaseSearch">查詢係數</label>
+                <div class="input-group">
+                    <input class="form-control" id="factorDatabaseSearch" name="factorQuery" value="@Model.FactorQuery" type="search" maxlength="100" placeholder="輸入名稱、單位、來源或版本" />
+                    <button class="btn btn-outline-primary" type="submit">查詢</button>
+                </div>
+            </form>
+            <p class="workspace-select-help">共 @Model.FactorTotal 筆，第 @Model.FactorPage／@Model.FactorPageCount 頁（每頁 @WorkspaceModel.FactorPageSize 筆）。</p>
             <ul class="workspace-records" data-factor-list>
                 @foreach (var factor in Model.Factors)
                 {
@@ -206,6 +212,19 @@
                     </li>
                 }
             </ul>
+            @if (Model.FactorPageCount > 1)
+            {
+                <nav aria-label="係數分頁" class="d-flex gap-2">
+                    @if (Model.FactorPage > 1)
+                    {
+                        <a class="btn btn-outline-secondary" asp-page="/Workspace" asp-route-section="factors" asp-route-projectVersionId="@Model.ProjectVersionId" asp-route-factorQuery="@Model.FactorQuery" asp-route-factorPage="@(Model.FactorPage - 1)">上一頁</a>
+                    }
+                    @if (Model.FactorPage < Model.FactorPageCount)
+                    {
+                        <a class="btn btn-outline-secondary" asp-page="/Workspace" asp-route-section="factors" asp-route-projectVersionId="@Model.ProjectVersionId" asp-route-factorQuery="@Model.FactorQuery" asp-route-factorPage="@(Model.FactorPage + 1)">下一頁</a>
+                    }
+                </nav>
+            }
         </section>
     </div>
 </section>
