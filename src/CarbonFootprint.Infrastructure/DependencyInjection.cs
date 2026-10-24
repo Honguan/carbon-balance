@@ -1,5 +1,6 @@
 using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Application.Governance;
+using CarbonFootprint.Application.Readiness;
 using CarbonFootprint.Infrastructure.Governance;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Evidence;
@@ -31,6 +32,8 @@ public static class DependencyInjection
         services.AddScoped<IInventorySnapshotReader, InventorySnapshotReader>();
         services.AddScoped<IPcrGovernance, PcrGovernanceService>();
         services.AddScoped<IFactorGovernance, FactorGovernanceService>();
+        services.AddScoped<IInventoryReadiness, InventoryReadinessService>();
+        services.AddScoped<IInventoryWorkflow, InventoryWorkflowService>();
         services.AddScoped<OrganizationOnboardingService>();
         services.AddScoped<OrganizationInvitationService>();
         services.Configure<AdministratorBootstrapOptions>(

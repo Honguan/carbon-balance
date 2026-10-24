@@ -19,7 +19,8 @@ public enum OperationStatus
     Conflict
 }
 
-public sealed record OperationResult(OperationStatus Status, string Key = "", string Message = "")
+public sealed record OperationResult(
+    OperationStatus Status, string Key = "", string Message = "", IReadOnlyList<string>? Details = null)
 {
     public bool Succeeded => Status == OperationStatus.Succeeded;
 
@@ -29,6 +30,7 @@ public sealed record OperationResult(OperationStatus Status, string Key = "", st
     public static readonly OperationResult BadRequest = new(OperationStatus.BadRequest);
     public static readonly OperationResult Conflict = new(OperationStatus.Conflict);
     public static OperationResult Invalid(string key, string message) => new(OperationStatus.Invalid, key, message);
+    public static OperationResult Invalid(string key, IReadOnlyList<string> details) => new(OperationStatus.Invalid, key, Details: details);
 }
 
 /// <summary>Authorization decision owned by the application boundary, so every caller (page, API, job) is checked the same way.</summary>

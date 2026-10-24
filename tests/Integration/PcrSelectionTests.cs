@@ -117,7 +117,7 @@ public sealed class PcrSelectionTests
         var page = new WorkspaceModel(db, new Scope(organizationId), null!, null!, null!,
             services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new InventorySnapshotReader(db),
             new AllowedAuthorization(), null!, null!, new EphemeralDataProtectionProvider(),
-            CalculationBuildProvenance.Create("pcr-selection-fixture", new string('a', 40)), null!, null!)
+            CalculationBuildProvenance.Create("pcr-selection-fixture", new string('a', 40)), null!, null!, InventoryServices.Workflow(db, new AllowedAuthorization(), new Scope(organizationId)), InventoryServices.Readiness(db))
         {
             PageContext = new PageContext { HttpContext = http },
             TempData = new TempDataDictionary(http, new FixtureTempData())

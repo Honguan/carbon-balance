@@ -24,8 +24,13 @@ public sealed class CriticalAuditPathTests
             Assert.True(body.IndexOf("AddAudit(", StringComparison.Ordinal) < saveIndexes.Min(), methods[index].Groups[1].Value);
         }
         foreach (var critical in new[] { "OnPostSaveMailSettingsAsync", "OnPostCreateFacilityAsync", "OnPostRevokeInvitationAsync",
-                     "OnPostRevokeMemberAsync", "OnPostCreateProductAsync", "OnPostCreateInventoryAsync", "OnPostSubmitInventoryAsync", "OnPostReviewInventoryAsync" })
+                     "OnPostRevokeMemberAsync", "OnPostCreateProductAsync", "OnPostCreateInventoryAsync" })
             Assert.Contains(critical, mutations);
+
+        // Submit/review moved behind IInventoryWorkflow; the service must keep audit routing before persistence.
+        var workflow = File.ReadAllText(Path.Combine(root, "src/CarbonFootprint.Infrastructure/Governance/InventoryWorkflowService.cs"));
+        Assert.Contains("OperationAudit.AppendTracked(", workflow);
+        Assert.True(workflow.IndexOf("OperationAudit.AppendTracked(", StringComparison.Ordinal) < workflow.IndexOf("SaveChangesAsync", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -8,11 +8,11 @@ namespace CarbonFootprint.Architecture.Tests;
 /// </summary>
 public sealed class RazorHandlerBoundaryTests
 {
-    // Inventory submit/review transitions are not extracted yet. Lower this as they move; never raise it.
-    private const int RemainingWorkflowStatusAssignments = 2;
+    // Inventory submit/review transitions are extracted; keep this at zero.
+    private const int RemainingWorkflowStatusAssignments = 0;
 
     // Lower as handlers are extracted; never raise it.
-    private const int MaxWorkspacePageModelLines = 2710;
+    private const int MaxWorkspacePageModelLines = 2342;
 
     [Fact]
     public void ExtractedGovernanceTransitions_DoNotReappearInRazorPageModels()
