@@ -482,7 +482,7 @@ else
                             <li class="mb-2">
                                 @pcr.RegistrationNumber 第 @(pcr.VersionNumber) 版：@pcr.Title（@PublicationStatusName(pcr.PublicationStatus)）
                                 <span>｜有效期：@pcr.ValidFrom～@pcr.ValidTo</span>
-                                <span>｜受影響盤查：@(Model.PcrAffectedProjectCounts.GetValueOrDefault(pcr.Id))</span>
+                                <span>｜綁定盤查：@(Model.PcrAffectedProjectCounts.GetValueOrDefault(pcr.Id))</span>
                                 @if (pcr.DeprecatedAt.HasValue)
                                 {
                                     <span class="text-danger">｜已被取代：@pcr.DeprecationReason</span>
@@ -498,6 +498,18 @@ else
                                                 <li>
                                                     @project.FunctionalUnit（@project.PeriodStart～@project.PeriodEnd）
                                                     <code>@project.Id</code>
+                                                    @switch (Model.PcrImpact(pcr, project))
+                                                    {
+                                                        case PcrImpactReason.Withdrawn:
+                                                            <strong class="text-danger">｜受影響：PCR 已撤回</strong>
+                                                            break;
+                                                        case PcrImpactReason.Superseded:
+                                                            <strong class="text-danger">｜受影響：PCR 已被新版取代</strong>
+                                                            break;
+                                                        case PcrImpactReason.Expired:
+                                                            <strong class="text-danger">｜受影響：PCR 已早於盤查期間結束前到期</strong>
+                                                            break;
+                                                    }
                                                 </li>
                                             }
                                         </ul>

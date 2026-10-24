@@ -127,6 +127,13 @@ public sealed class WorkspaceModel : PageModel
 
     public IReadOnlyList<PcrVersionRecord> SelectablePcrVersions { get; private set; } = [];
 
+    public PcrImpactReason PcrImpact(PcrVersionRecord pcr, InventoryProjectVersionRecord project) =>
+        PcrImpactAnalysis.Classify(
+            // Raw status: a withdrawn version stays withdrawn even when its source file is no longer verified.
+            ToPcrRuleSet(pcr, PcrStageRules.Where(rule => rule.PcrVersionId == pcr.Id))
+                with { PublicationStatus = Enum.Parse<PcrPublicationStatus>(pcr.PublicationStatus) },
+            project.PeriodEnd);
+
     public IReadOnlyDictionary<Guid, int> PcrAffectedProjectCounts { get; private set; } =
         new Dictionary<Guid, int>();
 
