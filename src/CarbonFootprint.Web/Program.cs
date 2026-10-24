@@ -114,6 +114,7 @@ builder.Services.AddHttpClient<IMoenvFactorSource, MoenvFactorClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(60));
 builder.Services.AddScoped<MoenvFactorSynchronizationService>();
 builder.Services.AddScoped<IAuthorizationHandler, OrganizationPermissionHandler>();
+builder.Services.AddScoped<CarbonFootprint.Application.Operations.IOperationAuthorizer, OperationAuthorizer>();
 builder.Services.AddScoped<IAuthorizationHandler, MfaEnabledHandler>();
 builder.Services.AddScoped<RefreshAuthenticatorSessionFilter>();
 builder.Services.AddRazorPages(options => options.Conventions.AddAreaPageApplicationModelConvention(

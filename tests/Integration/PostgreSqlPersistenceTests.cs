@@ -153,7 +153,7 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
             };
             var page = new WorkspaceModel(requestContext, new TestOrganizationScope(organizationId), null!, null!, null!,
                 services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new InventorySnapshotReader(requestContext),
-                new AllowAuthorization(), null!, null!, new EphemeralDataProtectionProvider(), provenance)
+                new AllowAuthorization(), null!, null!, new EphemeralDataProtectionProvider(), provenance, null!, null!)
             {
                 PageContext = new PageContext { HttpContext = http },
                 TempData = new TempDataDictionary(http, new MemoryTempDataProvider()),
@@ -569,7 +569,7 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
         var workspace = new WorkspaceModel(context, new TestOrganizationScope(organizationId), null!, null!, null!,
             identityServices.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, reader,
             permissions, null!, null!, new EphemeralDataProtectionProvider(),
-            CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)))
+            CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)), null!, null!)
         {
             PageContext = new PageContext { HttpContext = http },
             TempData = new TempDataDictionary(http, new MemoryTempDataProvider()),
@@ -606,7 +606,7 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
             var foreignWorkspace = new WorkspaceModel(foreignContext, new TestOrganizationScope(foreignOrganizationId),
                 null!, null!, null!, identityServices.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!,
                 new InventorySnapshotReader(foreignContext), new AllowAuthorization(), null!, null!,
-                new EphemeralDataProtectionProvider(), CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)))
+                new EphemeralDataProtectionProvider(), CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)), null!, null!)
             {
                 PageContext = new PageContext { HttpContext = new DefaultHttpContext() }
             };

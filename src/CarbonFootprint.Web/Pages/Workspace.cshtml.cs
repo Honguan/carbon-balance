@@ -1,5 +1,7 @@
 using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Application.Exports;
+using CarbonFootprint.Application.Governance;
+using CarbonFootprint.Application.Operations;
 using CarbonFootprint.Application.Readiness;
 using CarbonFootprint.Domain.Modules.Calculations;
 using CarbonFootprint.Domain.Modules.Factors;
@@ -7,6 +9,7 @@ using CarbonFootprint.Domain.Modules.Inventories;
 using CarbonFootprint.Domain.Modules.Organizations;
 using CarbonFootprint.Domain.Modules.Standards;
 using CarbonFootprint.Domain.Modules.Units;
+using CarbonFootprint.Infrastructure.Governance;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Evidence;
 using CarbonFootprint.Infrastructure.Organizations;
@@ -27,6 +30,8 @@ namespace CarbonFootprint.Web.Pages;
 [Authorize]
 public sealed class WorkspaceModel : PageModel
 {
+    private readonly IPcrGovernance _pcrGovernance;
+    private readonly IFactorGovernance _factorGovernance;
     private const string CurrentUnitCatalogueVersion = "units-p0-v2";
     private const string PendingStageFormulaRuleSetVersion = "legacy-stage-formulas-pending-review-v1";
 
@@ -59,8 +64,12 @@ public sealed class WorkspaceModel : PageModel
         EvidenceStorageService evidenceStorageService,
         MoenvFactorSynchronizationService moenvFactorSynchronizationService,
         IDataProtectionProvider dataProtectionProvider,
-        CalculationBuildProvenance buildProvenance)
+        CalculationBuildProvenance buildProvenance,
+        IPcrGovernance pcrGovernance,
+        IFactorGovernance factorGovernance)
     {
+        _pcrGovernance = pcrGovernance;
+        _factorGovernance = factorGovernance;
         _dbContext = dbContext;
         _organizationScope = organizationScope;
         _onboardingService = onboardingService;
@@ -1088,224 +1097,20 @@ public sealed class WorkspaceModel : PageModel
     }
 
     public async Task<IActionResult> OnPostReviewPcrAsync(Guid pcrVersionId, uint rowVersion,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(item => item.Id == pcrVersionId, cancellationToken);
-        if (pcr is null)
-        {
-            return NotFound();
-        }
-        if (rowVersion != pcr.RowVersion)
-        {
-            return await RejectStaleAsync("ReviewPcr", "PcrVersion", pcr.Id, cancellationToken);
-        }
-        if (pcr.PublicationStatus != PcrPublicationStatus.Draft.ToString())
-        {
-            return BadRequest();
-        }
-        if (pcr.ReviewStatus != PcrReviewStatus.Pending.ToString())
-        {
-            return BadRequest();
-        }
-
-        var reviewerId = Guid.TryParse(_userManager.GetUserId(User), out var currentUserId)
-            ? currentUserId
-            : (Guid?)null;
-        if (pcr.CreatedBy.HasValue && pcr.CreatedBy == reviewerId)
-        {
-            ModelState.AddModelError("pcr", "PCR 建立者不可核准自己的規則版本，請由另一位具權限且已啟用 MFA 的人員審查。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        pcr.ReviewStatus = PcrReviewStatus.Approved.ToString();
-        if (pcr.IsCustomRule)
-        {
-            pcr.CustomApprovalStatus = PcrCustomApprovalStatus.Approved.ToString();
-        }
-        pcr.ReviewedAt = DateTimeOffset.UtcNow;
-        pcr.ReviewedBy = reviewerId;
-        AddAudit("pcr.version.reviewed", "PcrVersion", pcr.Id);
-        if (await SaveOrRejectStaleAsync("ReviewPcr", "PcrVersion", pcr.Id, cancellationToken) is { } conflict)
-        {
-            return conflict;
-        }
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-    }
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _pcrGovernance.ReviewAsync(Operation(), pcrVersionId, rowVersion, cancellationToken), cancellationToken);
 
     public async Task<IActionResult> OnPostRejectPcrAsync(Guid pcrVersionId, uint rowVersion,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-
-        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(
-            item => item.Id == pcrVersionId,
-            cancellationToken);
-        if (pcr is null)
-        {
-            return NotFound();
-        }
-        if (rowVersion != pcr.RowVersion)
-        {
-            return await RejectStaleAsync("RejectPcr", "PcrVersion", pcr.Id, cancellationToken);
-        }
-        if (pcr.PublicationStatus != PcrPublicationStatus.Draft.ToString()
-            || pcr.ReviewStatus != PcrReviewStatus.Pending.ToString())
-        {
-            return BadRequest();
-        }
-
-        var reviewerId = Guid.TryParse(_userManager.GetUserId(User), out var currentUserId)
-            ? currentUserId
-            : (Guid?)null;
-        if (pcr.CreatedBy.HasValue && pcr.CreatedBy == reviewerId)
-        {
-            ModelState.AddModelError("pcr", "PCR 建立者不可審查自己建立的版本。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        pcr.ReviewStatus = PcrReviewStatus.Rejected.ToString();
-        if (pcr.IsCustomRule)
-        {
-            pcr.CustomApprovalStatus = PcrCustomApprovalStatus.Rejected.ToString();
-        }
-        pcr.ReviewedAt = DateTimeOffset.UtcNow;
-        pcr.ReviewedBy = reviewerId;
-        AddAudit("pcr.version.rejected", "PcrVersion", pcr.Id);
-        if (await SaveOrRejectStaleAsync("RejectPcr", "PcrVersion", pcr.Id, cancellationToken) is { } conflict)
-        {
-            return conflict;
-        }
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-    }
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _pcrGovernance.RejectAsync(Operation(), pcrVersionId, rowVersion, cancellationToken), cancellationToken);
 
     public async Task<IActionResult> OnPostPublishPcrAsync(Guid pcrVersionId, uint rowVersion,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
-        {
-            return Forbid();
-        }
-        if (!await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-
-        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(item => item.Id == pcrVersionId, cancellationToken);
-        if (pcr is null)
-        {
-            return NotFound();
-        }
-        if (rowVersion != pcr.RowVersion)
-        {
-            return await RejectStaleAsync("PublishPcr", "PcrVersion", pcr.Id, cancellationToken);
-        }
-
-        var hasControlledDeclaredUnit = await _dbContext.Units.AnyAsync(
-            item => item.CatalogueVersion == CurrentUnitCatalogueVersion
-                && item.Code == pcr.DeclaredUnitCode,
-            cancellationToken);
-        var hasLaterReleasedVersion = await _dbContext.PcrVersions.AnyAsync(
-            item => item.RuleSetId == pcr.RuleSetId
-                && item.VersionNumber > pcr.VersionNumber
-                && item.PublicationStatus != PcrPublicationStatus.Draft.ToString(),
-            cancellationToken);
-        if (!string.Equals(pcr.PublicationStatus, PcrPublicationStatus.Draft.ToString(), StringComparison.Ordinal)
-            || pcr.ReviewStatus != PcrReviewStatus.Approved.ToString()
-            || hasLaterReleasedVersion
-            || (pcr.IsCustomRule
-                && pcr.CustomApprovalStatus != PcrCustomApprovalStatus.Approved.ToString())
-            || !SourceDocumentIntegrity.TryNormalizeSha256(pcr.OriginalDocumentSha256, out _)
-            || string.IsNullOrWhiteSpace(pcr.OriginalDocumentObjectKey)
-            || !string.Equals(pcr.OriginalDocumentScanStatus, "Clean", StringComparison.Ordinal)
-            || string.IsNullOrWhiteSpace(pcr.ProductCategoryPatterns)
-            || string.IsNullOrWhiteSpace(pcr.FunctionalUnitPattern)
-            || string.IsNullOrWhiteSpace(pcr.DeclaredUnitCode)
-            || !hasControlledDeclaredUnit
-            || string.IsNullOrWhiteSpace(pcr.SystemBoundaryCode)
-            || !string.Equals(
-                pcr.FormulaRuleSetVersion,
-                ActivityEmissionFormula.PcrFormulaRuleSetV1,
-                StringComparison.Ordinal)
-            || await _dbContext.PcrStageRules.CountAsync(
-                item => item.PcrVersionId == pcr.Id,
-                cancellationToken) != Enum.GetValues<LifecycleStage>().Length)
-        {
-            ModelState.AddModelError("pcr", "只有已核准、原始文件驗證成功且規則完整的 PCR 草稿可發布。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        pcr.PublicationStatus = PcrPublicationStatus.Published.ToString();
-        pcr.PublishedAt = DateTimeOffset.UtcNow;
-        var publishedPredecessors = await _dbContext.PcrVersions
-            .Where(item => item.RuleSetId == pcr.RuleSetId
-                && item.Id != pcr.Id
-                && item.VersionNumber < pcr.VersionNumber
-                && item.PublicationStatus == PcrPublicationStatus.Published.ToString())
-            .ToArrayAsync(cancellationToken);
-        foreach (var predecessor in publishedPredecessors)
-        {
-            predecessor.DeprecatedAt = DateTimeOffset.UtcNow;
-            predecessor.DeprecationReason = $"由 {pcr.RegistrationNumber} 第 {pcr.VersionNumber} 版取代。";
-            AddAudit("pcr.version.superseded", "PcrVersion", predecessor.Id);
-        }
-        AddAudit("pcr.version.published", "PcrVersion", pcr.Id);
-        if (await SaveOrRejectStaleAsync("PublishPcr", "PcrVersion", pcr.Id, cancellationToken) is { } conflict)
-        {
-            return conflict;
-        }
-        StatusMessage = "PCR 版本已發布。";
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-    }
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _pcrGovernance.PublishAsync(Operation(), pcrVersionId, rowVersion, cancellationToken), cancellationToken);
 
     public async Task<IActionResult> OnPostWithdrawPcrAsync(Guid pcrVersionId, uint rowVersion,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
-        {
-            return Forbid();
-        }
-        if (!await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-
-        var pcr = await _dbContext.PcrVersions.SingleOrDefaultAsync(item => item.Id == pcrVersionId, cancellationToken);
-        if (pcr is null)
-        {
-            return NotFound();
-        }
-        if (rowVersion != pcr.RowVersion)
-        {
-            return await RejectStaleAsync("WithdrawPcr", "PcrVersion", pcr.Id, cancellationToken);
-        }
-
-        if (!string.Equals(pcr.PublicationStatus, PcrPublicationStatus.Published.ToString(), StringComparison.Ordinal))
-        {
-            ModelState.AddModelError("pcr", "只有已發布 PCR 版本可撤回。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        pcr.PublicationStatus = PcrPublicationStatus.Withdrawn.ToString();
-        pcr.WithdrawnAt = DateTimeOffset.UtcNow;
-        AddAudit("pcr.version.withdrawn", "PcrVersion", pcr.Id);
-        if (await SaveOrRejectStaleAsync("WithdrawPcr", "PcrVersion", pcr.Id, cancellationToken) is { } conflict)
-        {
-            return conflict;
-        }
-        StatusMessage = "PCR 版本已撤回；歷史計算不受影響。";
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-    }
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _pcrGovernance.WithdrawAsync(Operation(), pcrVersionId, rowVersion, cancellationToken), cancellationToken);
 
     public async Task<IActionResult> OnPostCreateFactorAsync(
         string factorName,
@@ -1422,134 +1227,16 @@ public sealed class WorkspaceModel : PageModel
     }
 
     public async Task<IActionResult> OnPostReviewFactorAsync(Guid factorVersionId, uint rowVersion,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-        var factor = await _dbContext.EmissionFactorVersions.SingleOrDefaultAsync(item => item.Id == factorVersionId, cancellationToken);
-        if (factor is null)
-        {
-            return NotFound();
-        }
-        if (rowVersion != factor.RowVersion)
-        {
-            return await RejectStaleAsync("ReviewFactor", "EmissionFactorVersion", factor.Id, cancellationToken);
-        }
-        if (factor.PublicationStatus != FactorPublicationStatus.Draft.ToString())
-        {
-            return BadRequest();
-        }
-
-        factor.ReviewStatus = FactorReviewStatus.Approved.ToString();
-        factor.ReviewedAt = DateTimeOffset.UtcNow;
-        factor.ReviewedBy = Guid.TryParse(_userManager.GetUserId(User), out var reviewerId) ? reviewerId : null;
-        AddAudit("factor.version.reviewed", "EmissionFactorVersion", factor.Id);
-        if (await SaveOrRejectStaleAsync("ReviewFactor", "EmissionFactorVersion", factor.Id, cancellationToken) is { } conflict)
-        {
-            return conflict;
-        }
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-    }
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _factorGovernance.ReviewAsync(Operation(), factorVersionId, rowVersion, cancellationToken), cancellationToken);
 
     public async Task<IActionResult> OnPostPublishFactorAsync(Guid factorVersionId, uint rowVersion,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
-        {
-            return Forbid();
-        }
-        if (!await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-
-        var factor = await _dbContext.EmissionFactorVersions.SingleOrDefaultAsync(
-            item => item.Id == factorVersionId,
-            cancellationToken);
-        if (factor is null)
-        {
-            return NotFound();
-        }
-        if (rowVersion != factor.RowVersion)
-        {
-            return await RejectStaleAsync("PublishFactor", "EmissionFactorVersion", factor.Id, cancellationToken);
-        }
-
-        if (!string.Equals(factor.PublicationStatus, FactorPublicationStatus.Draft.ToString(), StringComparison.Ordinal)
-            || factor.ReviewStatus != FactorReviewStatus.Approved.ToString())
-        {
-            ModelState.AddModelError("factor", "只有草稿係數版本可發布。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var publishedPredecessors = await _dbContext.EmissionFactorVersions
-            .Where(item =>
-                item.FactorId == factor.FactorId
-                && item.Id != factor.Id
-                && item.PublicationStatus == FactorPublicationStatus.Published.ToString())
-            .ToArrayAsync(cancellationToken);
-        foreach (var predecessor in publishedPredecessors)
-        {
-            predecessor.PublicationStatus = FactorPublicationStatus.Withdrawn.ToString();
-            predecessor.WithdrawnAt = DateTimeOffset.UtcNow;
-            AddAudit("factor.version.withdrawn", "EmissionFactorVersion", predecessor.Id);
-        }
-
-        factor.PublicationStatus = FactorPublicationStatus.Published.ToString();
-        factor.PublishedAt = DateTimeOffset.UtcNow;
-        AddAudit("factor.version.published", "EmissionFactorVersion", factor.Id);
-        if (await SaveOrRejectStaleAsync("PublishFactor", "EmissionFactorVersion", factor.Id, cancellationToken) is { } conflict)
-        {
-            return conflict;
-        }
-        StatusMessage = "係數版本已發布。";
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-    }
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _factorGovernance.PublishAsync(Operation(), factorVersionId, rowVersion, cancellationToken), cancellationToken);
 
     public async Task<IActionResult> OnPostWithdrawFactorAsync(Guid factorVersionId, uint rowVersion,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
-        {
-            return Forbid();
-        }
-        if (!await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-
-        var factor = await _dbContext.EmissionFactorVersions.SingleOrDefaultAsync(
-            item => item.Id == factorVersionId,
-            cancellationToken);
-        if (factor is null)
-        {
-            return NotFound();
-        }
-        if (rowVersion != factor.RowVersion)
-        {
-            return await RejectStaleAsync("WithdrawFactor", "EmissionFactorVersion", factor.Id, cancellationToken);
-        }
-
-        if (!string.Equals(factor.PublicationStatus, FactorPublicationStatus.Published.ToString(), StringComparison.Ordinal))
-        {
-            ModelState.AddModelError("factor", "只有已發布係數版本可撤回。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        factor.PublicationStatus = FactorPublicationStatus.Withdrawn.ToString();
-        factor.WithdrawnAt = DateTimeOffset.UtcNow;
-        AddAudit("factor.version.withdrawn", "EmissionFactorVersion", factor.Id);
-        if (await SaveOrRejectStaleAsync("WithdrawFactor", "EmissionFactorVersion", factor.Id, cancellationToken) is { } conflict)
-        {
-            return conflict;
-        }
-        StatusMessage = "係數版本已撤回；歷史計算不受影響。";
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-    }
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _factorGovernance.WithdrawAsync(Operation(), factorVersionId, rowVersion, cancellationToken), cancellationToken);
 
     public async Task<IActionResult> OnPostSupersedeFactorAsync(
         Guid factorVersionId,
@@ -2943,20 +2630,51 @@ public sealed class WorkspaceModel : PageModel
         && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
             || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
 
+    private OperationContext Operation() => new(
+        User,
+        Guid.TryParse(_userManager.GetUserId(User), out var actorId) ? actorId : null,
+        HttpContext.TraceIdentifier,
+        AuditWriter.RequestSessionReference(HttpContext));
+
     private async Task<IActionResult> RejectStaleAsync(string operation, string resourceType, Guid resourceId, CancellationToken cancellationToken)
     {
-        _dbContext.ChangeTracker.Clear();
-        var actorId = _userManager.GetUserId(User) is { } value && Guid.TryParse(value, out var id) ? id : (Guid?)null;
-        new AuditWriter(_dbContext).Append("concurrency.rejected", resourceType, resourceId, RequireOrganization(), actorId, null, null,
-            "Stale request rejected; no resource state mutation", HttpContext.TraceIdentifier,
-            AuditWriter.RequestSessionReference(HttpContext), "attempt",
-            new Dictionary<string, object?> { ["attemptedOperation"] = operation });
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await OperationAudit.RecordStaleRejectionAsync(
+            _dbContext, Operation(), RequireOrganization(), operation, resourceType, resourceId, cancellationToken);
+        return await ShowConflictAsync(cancellationToken);
+    }
+
+    private async Task<IActionResult> ShowConflictAsync(CancellationToken cancellationToken)
+    {
         _dbContext.ChangeTracker.Clear();
         ModelState.AddModelError("concurrency", "此資料已被其他人變更，您的操作未套用。請重新載入並核對最新內容後再試。");
         Response.StatusCode = StatusCodes.Status409Conflict;
         await LoadAsync(cancellationToken);
         return Page();
+    }
+
+    private async Task<IActionResult> CompleteAsync(OperationResult result, CancellationToken cancellationToken)
+    {
+        switch (result.Status)
+        {
+            case OperationStatus.Succeeded:
+                if (!string.IsNullOrEmpty(result.Message))
+                {
+                    StatusMessage = result.Message;
+                }
+                return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
+            case OperationStatus.Forbidden:
+                return Forbid();
+            case OperationStatus.NotFound:
+                return NotFound();
+            case OperationStatus.Invalid:
+                ModelState.AddModelError(result.Key, result.Message);
+                await LoadAsync(cancellationToken);
+                return Page();
+            case OperationStatus.Conflict:
+                return await ShowConflictAsync(cancellationToken);
+            default:
+                return BadRequest();
+        }
     }
 
     private async Task<IActionResult?> SaveOrRejectStaleAsync(string operation, string resourceType, Guid resourceId, CancellationToken cancellationToken)
@@ -2986,19 +2704,6 @@ public sealed class WorkspaceModel : PageModel
                 "SMTP test; no resource state mutation", correlation, session, "attempt");
             return;
         }
-        _dbContext.ChangeTracker.DetectChanges();
-        var entries = _dbContext.ChangeTracker.Entries().Where(entry => AuditProjection.Supports(entry.Metadata.ClrType)).ToArray();
-        var primary = entries.Single(entry => AuditProjection.ResourceType(entry.Metadata.ClrType) == resourceType
-            && (Guid)entry.Property("Id").CurrentValue! == resourceId);
-        writer.AppendTracked(action, primary, actorId, string.IsNullOrWhiteSpace(reason) ? $"Authorized workspace operation: {action}" : reason,
-            correlation, session, metadata);
-        // Related resources (e.g. product+version, PCR+rules, evidence+activity) share this request's transaction/correlation.
-        foreach (var related in entries.Where(entry => entry.Metadata.ClrType != primary.Metadata.ClrType
-                     && entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
-        {
-            var relatedId = (Guid)related.Property("Id").CurrentValue!;
-            if (_dbContext.AuditEvents.Local.Any(audit => audit.ResourceId == relatedId && audit.CorrelationId == correlation)) continue;
-            writer.AppendTracked($"{action}.related", related, actorId, $"Related resource changed by {action}", correlation, session);
-        }
+        OperationAudit.AppendTracked(_dbContext, Operation(), organizationId, action, resourceType, resourceId, reason, metadata);
     }
 }

@@ -1,4 +1,6 @@
 using CarbonFootprint.Application.Calculations;
+using CarbonFootprint.Application.Governance;
+using CarbonFootprint.Infrastructure.Governance;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Evidence;
 using CarbonFootprint.Infrastructure.Organizations;
@@ -27,6 +29,8 @@ public static class DependencyInjection
         services.TryAddScoped<IOrganizationScope, UnscopedOrganizationScope>();
         services.AddScoped<ICalculationRunStore, CalculationRunStore>();
         services.AddScoped<IInventorySnapshotReader, InventorySnapshotReader>();
+        services.AddScoped<IPcrGovernance, PcrGovernanceService>();
+        services.AddScoped<IFactorGovernance, FactorGovernanceService>();
         services.AddScoped<OrganizationOnboardingService>();
         services.AddScoped<OrganizationInvitationService>();
         services.Configure<AdministratorBootstrapOptions>(

@@ -53,7 +53,7 @@ public sealed class AuditMutationPathTests
             var page = new WorkspaceModel(db, new Scope(organizationId), null!, null!, emailSender,
                 services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new InventorySnapshotReader(db),
                 new AllowedAuthorization(), null!, null!, new EphemeralDataProtectionProvider(),
-                CalculationBuildProvenance.Create("audit-fixture", new string('a', 40)))
+                CalculationBuildProvenance.Create("audit-fixture", new string('a', 40)), null!, null!)
             {
                 PageContext = new PageContext { HttpContext = http },
                 TempData = new TempDataDictionary(http, new FixtureTempData())
