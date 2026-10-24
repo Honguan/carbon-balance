@@ -6,7 +6,7 @@
 
 2026-10-03（Asia/Taipei）：**開發中，工程預發布準備中**。使用者確認尚無 PCR／公式／GWP／獨立 Golden Cases 的領域簽核及人工 UAT，要求先完成工程修正與預發布。不得標示正式發布、production-ready、verifier-ready 或認證就緒。
 
-本次盤點基準為主線 `fadf3b88031c1bbcec5c3483ba242e3f72714626`；預發布目標 SHA／tag／image digest 尚未選定。下表是有日期的盤點，不是動態 GitHub 狀態；候選版本變更後必須重新核對。
+本次盤點基準為主線 `d7f7908`（含 #54、#56、#58 與相依更新）；預發布目標 SHA 為合併此文件後的主線，tag／image digest 於建立 prerelease 時記錄。下表是有日期的盤點，不是動態 GitHub 狀態；候選版本變更後必須重新核對。
 
 | 成熟度 | 必須具備的證據 | 可用聲明 |
 |---|---|---|
@@ -46,11 +46,11 @@ OPEN 表示尚未以主線驗收證據證明完成；CLOSED 表示 GitHub 已關
 | [#51](https://github.com/Honguan/carbon-balance/issues/51) | migration／同步分離 | CLOSED；[PR #72](https://github.com/Honguan/carbon-balance/pull/72) 已合併 `fadf3b8`，[主線 CI](https://github.com/Honguan/carbon-balance/actions/runs/37119150558) 5/5 |
 | [#52](https://github.com/Honguan/carbon-balance/issues/52) | immutable build provenance | CLOSED；候選 binary／image／manifest SHA 必須等於 checkout SHA |
 | [#53](https://github.com/Honguan/carbon-balance/issues/53) | CSV formula injection | CLOSED；[實測](../IMPLEMENTATION_STATUS.md)與候選匯出回歸 |
-| [#54](https://github.com/Honguan/carbon-balance/issues/54) | transactional audit | OPEN；須 before/after／metadata 與 rollback 一致性 |
+| [#54](https://github.com/Honguan/carbon-balance/issues/54) | transactional audit | 程式已合併（[PR #77](https://github.com/Honguan/carbon-balance/pull/77)，`fbde4f3`，PR CI 5/5）；尚缺 migration 升級／回復演練，Issue 仍 OPEN |
 | [#55](https://github.com/Honguan/carbon-balance/issues/55) | optimistic concurrency | OPEN；須過期 draft 拒絕、修正流程與 audit 原子性 |
-| [#56](https://github.com/Honguan/carbon-balance/issues/56) | critical dependency readiness | OPEN；須 S3／scanner／keyring／DB 故障演練 |
+| [#56](https://github.com/Honguan/carbon-balance/issues/56) | critical dependency readiness | 程式已合併（[PR #75](https://github.com/Honguan/carbon-balance/pull/75)）；尚缺正式等效環境 S3／scanner／keyring／DB 故障演練，Issue 仍 OPEN |
 | [#57](https://github.com/Honguan/carbon-balance/issues/57) | 獨立 Golden reference suite | OPEN；目前四項合成案例不可作完整領域正確性證明 |
-| [#58](https://github.com/Honguan/carbon-balance/issues/58) | 最小 S3 權限／串流上傳 | OPEN；須 bucket 權限、容量／stream bounds、scan／hash／故障測試 |
+| [#58](https://github.com/Honguan/carbon-balance/issues/58) | 最小 S3 權限／串流上傳 | 程式已合併（[PR #78](https://github.com/Honguan/carbon-balance/pull/78)，`d7f7908`，PR CI 5/5）；權限矩陣在 SeaweedFS `dev` 快照以本機驗證。尚缺多並行最大檔案的 HTTP 負載測試、完整 compose 實跑與孤立物件清理，Issue 仍 OPEN |
 | [#59](https://github.com/Honguan/carbon-balance/issues/59) | 本發布治理修正 | 進行中；本文件與交叉引用須主線／CI 驗收 |
 | [#60](https://github.com/Honguan/carbon-balance/issues/60) | 版本化 inventory bulk import | OPEN；須 dry-run、逐列錯誤、防重、版本與全部成功／明確失敗 |
 | [#61](https://github.com/Honguan/carbon-balance/issues/61) | 可續接引導工作流程 | OPEN；須 blocker 導覽、resume 與既有完整工作流程回歸 |
