@@ -1,5 +1,6 @@
 @page "{section?}/{stage?}"
 @model CarbonFootprint.Web.Pages.WorkspaceModel
+@using CarbonFootprint.Application.Readiness
 @using CarbonFootprint.Domain.Modules.Calculations
 @using CarbonFootprint.Domain.Modules.Factors
 @using CarbonFootprint.Domain.Modules.Inventories
@@ -35,6 +36,13 @@
         InventoryWorkflowStatus.ChangesRequested => "退回補正",
         InventoryWorkflowStatus.Approved => "已核准",
         _ => "其他狀態"
+    };
+    static string ReadinessSeverityName(ReadinessSeverity severity) => severity switch
+    {
+        ReadinessSeverity.BlockingError => "阻擋",
+        ReadinessSeverity.RequiredExplanation => "須說明",
+        ReadinessSeverity.Warning => "警告",
+        _ => "建議"
     };
     string FormalStageName(LifecycleStage stage) => stage switch
     {
@@ -1220,7 +1228,40 @@ else
                                 <form method="post" asp-page-handler="SubmitInventory" asp-route-section="calculation" preserve-input-for="SubmitInventory-@inventory.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
                                     <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
                                     <input type="hidden" name="rowVersion" value="@inventory.RowVersion" />
-                                    <button class="btn btn-warning" type="submit" disabled="@(!hasCurrentRun || !Model.HasVerifiedMfa)">統一提交盤查</button>
+                                    @if (Model.Readiness is { } readiness)
+                                    {
+                                        <section class="readiness-report" aria-labelledby="readiness-heading">
+                                            <h3 class="workspace-subheading" id="readiness-heading">提交前檢查（@(readiness.CanSubmit ? "可提交" : "尚不可提交")）</h3>
+                                            <p class="workspace-help">阻擋 @readiness.BlockingCount 項｜需說明 @readiness.Findings.Count(item => item.Severity == ReadinessSeverity.RequiredExplanation) 項｜基準日 @readiness.AsOf.ToString("yyyy-MM-dd")</p>
+                                            @foreach (var group in readiness.Findings.GroupBy(item => item.Stage))
+                                            {
+                                                <h4 class="h6 mt-2">@(group.Key is { } groupStage ? FormalStageName(groupStage) : "整體盤查")</h4>
+                                                <ul class="workspace-records">
+                                                    @foreach (var finding in group)
+                                                    {
+                                                        <li data-readiness-code="@finding.Code">
+                                                            <strong>[@ReadinessSeverityName(finding.Severity)] @finding.Code</strong>
+                                                            @finding.Message
+                                                            <span class="workspace-help">處理方式：@finding.Remediation@(string.IsNullOrWhiteSpace(finding.Owner) ? "" : $"｜資料負責：{finding.Owner}")</span>
+                                                            @if (finding.Stage is { } findingStage && finding.EntityType is "ActivityData" or "LifecycleStage")
+                                                            {
+                                                                <a asp-page="/Workspace" asp-route-section="lifecycle" asp-route-stage="@WorkspaceModel.StageSlug(findingStage)" asp-route-projectVersionId="@Model.ProjectVersionId">前往該階段</a>
+                                                            }
+                                                            @if (finding.Severity == ReadinessSeverity.RequiredExplanation)
+                                                            {
+                                                                var ackKey = $"{finding.Code}|{finding.EntityKey}";
+                                                                <div>
+                                                                    <label><input type="checkbox" name="acknowledge" value="@ackKey" /> 我已確認並說明</label>
+                                                                    <input class="form-control" name="justification_@ackKey" maxlength="2000" aria-label="說明 @finding.Code" />
+                                                                </div>
+                                                            }
+                                                        </li>
+                                                    }
+                                                </ul>
+                                            }
+                                        </section>
+                                    }
+                                    <button class="btn btn-warning" type="submit" disabled="@(!hasCurrentRun || !Model.HasVerifiedMfa || Model.Readiness is { BlockingCount: > 0 })">統一提交盤查</button>
                                 </form>
                             }
                             else

@@ -83,9 +83,23 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
                 };
                 projects.Add(project);
                 context.InventoryProjectVersions.Add(project);
-                context.ActivityData.Add(new ActivityDataRecord
+                var seededActivityId = Guid.NewGuid();
+                context.EvidenceFiles.Add(new EvidenceFileRecord
                 {
                     Id = Guid.NewGuid(),
+                    OrganizationId = organizationId,
+                    ActivityDataId = seededActivityId,
+                    ObjectKey = $"test/{seededActivityId:N}",
+                    OriginalFileName = "evidence.pdf",
+                    ContentType = "application/pdf",
+                    SizeBytes = 1,
+                    Sha256 = new string('b', 64),
+                    ScanStatus = "Clean",
+                    CreatedAt = DateTimeOffset.UtcNow
+                });
+                context.ActivityData.Add(new ActivityDataRecord
+                {
+                    Id = seededActivityId,
                     OrganizationId = organizationId,
                     InventoryProjectVersionId = project.Id,
                     LifecycleStage = (int)LifecycleStage.RawMaterial,
@@ -241,6 +255,14 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
         var workflowAudits = await context.AuditEvents.AsNoTracking().Where(item => item.ResourceId == selected.Id
             && (item.Action == "inventory.submitted" || item.Action == "inventory.approved" || item.Action == "inventory.changes-requested")).ToArrayAsync();
         Assert.Contains(workflowAudits, item => item.Action == "inventory.submitted");
+        foreach (var submitted in workflowAudits.Where(item => item.Action == "inventory.submitted"))
+        {
+            using var submittedMetadata = JsonDocument.Parse(submitted.MetadataJson);
+            Assert.Equal(64, submittedMetadata.RootElement.GetProperty("readinessReportSha256").GetString()!.Length);
+            Assert.True(submittedMetadata.RootElement.TryGetProperty("readinessFindingCounts", out _));
+        }
+        var readinessApi = Assert.IsType<JsonResult>((await Request(page => page.OnGetReadinessAsync(selected.Id, CancellationToken.None))).Result);
+        Assert.NotNull(readinessApi.Value);
         Assert.Contains(workflowAudits, item => item.Action == "inventory.approved");
         foreach (var workflowAudit in workflowAudits)
         {

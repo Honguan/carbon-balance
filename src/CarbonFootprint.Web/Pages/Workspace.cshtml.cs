@@ -1,5 +1,6 @@
 using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Application.Exports;
+using CarbonFootprint.Application.Readiness;
 using CarbonFootprint.Domain.Modules.Calculations;
 using CarbonFootprint.Domain.Modules.Factors;
 using CarbonFootprint.Domain.Modules.Inventories;
@@ -126,6 +127,17 @@ public sealed class WorkspaceModel : PageModel
     public IReadOnlyList<PcrStageRuleRecord> PcrStageRules { get; private set; } = [];
 
     public IReadOnlyList<PcrVersionRecord> SelectablePcrVersions { get; private set; } = [];
+
+    public ReadinessReport? Readiness { get; private set; }
+
+    public static string StageSlug(LifecycleStage stage) => stage switch
+    {
+        LifecycleStage.Manufacturing => "manufacturing",
+        LifecycleStage.Distribution => "distribution",
+        LifecycleStage.Use => "use",
+        LifecycleStage.EndOfLife => "end-of-life",
+        _ => "raw-material"
+    };
 
     public PcrImpactReason PcrImpact(PcrVersionRecord pcr, InventoryProjectVersionRecord project) =>
         PcrImpactAnalysis.Classify(
@@ -1978,14 +1990,18 @@ public sealed class WorkspaceModel : PageModel
             return await RejectStaleAsync("SubmitInventory", "InventoryProjectVersion", project.Id, cancellationToken);
         }
 
-        var latestRun = await _dbContext.CalculationRuns
-            .Where(item => item.ProjectVersionId == project.Id)
-            .OrderByDescending(item => item.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-        var currentRunError = await GetCurrentRunErrorAsync(project, latestRun, cancellationToken);
-        if (currentRunError is not null)
+        var acknowledgements = ReadAcknowledgements();
+        var readiness = await BuildReadinessAsync(project, acknowledgements, cancellationToken);
+        if (!readiness.CanSubmit)
         {
-            ModelState.AddModelError("review", currentRunError);
+            foreach (var finding in readiness.Findings.Where(item => item.Severity == ReadinessSeverity.BlockingError))
+            {
+                ModelState.AddModelError("review", $"{finding.Code}：{finding.Message}");
+            }
+            foreach (var finding in readiness.UnacknowledgedExplanations)
+            {
+                ModelState.AddModelError("review", $"{finding.Code}：{finding.Message}（須填寫說明並確認）");
+            }
             await LoadAsync(cancellationToken);
             return Page();
         }
@@ -2004,7 +2020,18 @@ public sealed class WorkspaceModel : PageModel
 
         project.WorkflowStatus = InventoryWorkflowStatus.Submitted.ToString();
         project.SubmittedAt = DateTimeOffset.UtcNow;
-        AddAudit("inventory.submitted", "InventoryProjectVersion", project.Id);
+        AddAudit("inventory.submitted", "InventoryProjectVersion", project.Id, metadata: new Dictionary<string, object?>
+        {
+            ["readinessReportSha256"] = readiness.Sha256(),
+            ["readinessAsOf"] = readiness.AsOf.ToString("yyyy-MM-dd"),
+            ["readinessFindingCounts"] = readiness.Findings.GroupBy(item => item.Severity.ToString())
+                .OrderBy(group => group.Key, StringComparer.Ordinal).ToDictionary(group => group.Key, group => (object?)group.Count()),
+            ["readinessAcknowledgements"] = acknowledgements
+                .Where(ack => readiness.Findings.Any(item => item.Code == ack.Code && item.EntityKey == ack.EntityKey))
+                .OrderBy(ack => ack.Code, StringComparer.Ordinal).ThenBy(ack => ack.EntityKey, StringComparer.Ordinal)
+                .Select(ack => new Dictionary<string, object?> { ["code"] = ack.Code, ["entityKey"] = ack.EntityKey, ["justification"] = ack.Justification })
+                .ToArray()
+        });
         if (await SaveOrRejectStaleAsync("SubmitInventory", "InventoryProjectVersion", project.Id, cancellationToken) is { } conflict)
         {
             return conflict;
@@ -2389,6 +2416,10 @@ public sealed class WorkspaceModel : PageModel
         if (Section == "calculation")
         {
             var currentRunProjectIds = new HashSet<Guid>();
+            if (InventoryProjects.FirstOrDefault(item => item.Id == ProjectVersionId) is { } readinessProject)
+            {
+                Readiness = await BuildReadinessAsync(readinessProject, [], cancellationToken);
+            }
             foreach (var project in InventoryProjects.Where(item => item.Id == ProjectVersionId))
             {
                 var latestRun = Runs.FirstOrDefault(item => item.ProjectVersionId == project.Id);
@@ -2439,6 +2470,88 @@ public sealed class WorkspaceModel : PageModel
                     .ToDictionary(item => (LifecycleStage)item.LifecycleStage, item => item.Emissions));
             LatestDifference = CalculationRunDiff.Compare(baseline, candidate);
         }
+    }
+
+    public async Task<IActionResult> OnGetReadinessAsync(Guid projectVersionId, CancellationToken cancellationToken)
+    {
+        if (!await IsAllowedAsync(OrganizationPermission.ViewInventory) || !await IsMfaEnabledAsync())
+        {
+            return Forbid();
+        }
+        var project = await _dbContext.InventoryProjectVersions.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == projectVersionId, cancellationToken);
+        if (project is null)
+        {
+            return NotFound();
+        }
+        var report = await BuildReadinessAsync(project, [], cancellationToken);
+        return new JsonResult(new
+        {
+            canSubmit = report.CanSubmit,
+            blockingCount = report.BlockingCount,
+            asOf = report.AsOf,
+            sha256 = report.Sha256(),
+            findings = report.Findings
+        });
+    }
+
+    private IReadOnlyList<ReadinessAcknowledgement> ReadAcknowledgements()
+    {
+        const int maxJustificationLength = 2000;
+        if (!Request.HasFormContentType)
+        {
+            return [];
+        }
+        return Request.Form["acknowledge"]
+            .Select(value => value?.Split('|', 2))
+            .Where(parts => parts is { Length: 2 })
+            .Select(parts =>
+            {
+                var justification = Request.Form[$"justification_{parts![0]}|{parts[1]}"].ToString().Trim();
+                return new ReadinessAcknowledgement(
+                    parts[0],
+                    parts[1],
+                    justification.Length > maxJustificationLength ? justification[..maxJustificationLength] : justification);
+            })
+            .ToArray();
+    }
+
+    private async Task<ReadinessReport> BuildReadinessAsync(
+        InventoryProjectVersionRecord project,
+        IReadOnlyList<ReadinessAcknowledgement> acknowledgements,
+        CancellationToken cancellationToken)
+    {
+        var asOf = DateOnly.FromDateTime(DateTime.UtcNow);
+        var violations = await ValidatePcrProjectAsync(project, requireCompleteInventory: true, cancellationToken);
+        if (!project.PcrVersionId.HasValue)
+        {
+            var missing = violations
+                .Select(violation => new ReadinessFinding(violation.Code, ReadinessSeverity.BlockingError, violation.EntityType,
+                    violation.EntityKey, null, string.Empty, violation.Message, "選擇適用且有效的 PCR 版本。"))
+                .ToArray();
+            return new ReadinessReport(missing, [], asOf);
+        }
+        var snapshot = await _snapshotReader.ReadAsync(project.Id, cancellationToken);
+        var activityIds = snapshot.Activities.Select(item => item.Id).ToArray();
+        var evidence = await _dbContext.EvidenceFiles.AsNoTracking()
+            .Where(item => activityIds.Contains(item.ActivityDataId))
+            .Select(item => new ReadinessEvidence(item.ActivityDataId, item.Sha256, item.ScanStatus))
+            .ToArrayAsync(cancellationToken);
+        var run = await _dbContext.CalculationRuns.AsNoTracking()
+            .Where(item => item.ProjectVersionId == project.Id)
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        var issue = run is null
+            ? new ReadinessCalculationIssue("RDY-CALC-MISSING", "盤查至少需要一個不可變計算版本才能提交。")
+            : string.Equals(run.RuleSetVersion, PendingStageFormulaRuleSetVersion, StringComparison.Ordinal)
+                ? new ReadinessCalculationIssue("RDY-CALC-PENDING-RULES", "階段計算公式尚待領域審查，目前不可提交。")
+                : !CanonicalManifest.TryReadBuildProvenance(run.CanonicalInputManifest, out var provenance) || !provenance.IsVerifiable
+                    ? new ReadinessCalculationIssue("RDY-CALC-PROVENANCE", "計算版本缺少可追溯的 build provenance。")
+                    : CanonicalManifest.Matches(snapshot, run.CanonicalInputManifest, run.InputSha256)
+                        ? null
+                        : new ReadinessCalculationIssue("RDY-CALC-STALE", "盤查資料已在最近一次計算後變更或快照雜湊不符，請重新計算。");
+        return InventoryReadinessValidator.Validate(new InventoryReadinessInput(
+            snapshot, violations, evidence, issue, asOf, acknowledgements));
     }
 
     private async Task<string?> GetCurrentRunErrorAsync(
