@@ -15,6 +15,8 @@ public sealed class OrganizationRecord : IOrganizationOwned
 
 public sealed class OrganizationMailSettingsRecord : IOrganizationOwned
 {
+    /// <summary>PostgreSQL xmin; optimistic concurrency token for mutable drafts and workflow state.</summary>
+    public uint RowVersion { get; set; }
     public Guid Id { get; set; }
     public Guid OrganizationId { get; set; }
     public required string Host { get; set; }
@@ -30,6 +32,8 @@ public sealed class OrganizationMailSettingsRecord : IOrganizationOwned
 
 public sealed class OrganizationMembershipRecord : IOrganizationOwned
 {
+    /// <summary>PostgreSQL xmin; optimistic concurrency token for mutable drafts and workflow state.</summary>
+    public uint RowVersion { get; set; }
     public Guid Id { get; set; }
     public Guid OrganizationId { get; set; }
     public Guid UserId { get; set; }
@@ -40,6 +44,8 @@ public sealed class OrganizationMembershipRecord : IOrganizationOwned
 
 public sealed class OrganizationInvitationRecord : IOrganizationOwned
 {
+    /// <summary>PostgreSQL xmin; optimistic concurrency token for mutable drafts and workflow state.</summary>
+    public uint RowVersion { get; set; }
     public Guid Id { get; set; }
     public Guid OrganizationId { get; set; }
     public required string Email { get; set; }
@@ -83,6 +89,8 @@ public sealed class ProductVersionRecord : IOrganizationOwned
 
 public sealed class InventoryProjectVersionRecord : IOrganizationOwned
 {
+    /// <summary>PostgreSQL xmin; optimistic concurrency token for mutable drafts and workflow state.</summary>
+    public uint RowVersion { get; set; }
     public Guid Id { get; set; }
     public Guid OrganizationId { get; set; }
     public Guid ProductVersionId { get; set; }
@@ -109,6 +117,8 @@ public sealed class InventoryProjectVersionRecord : IOrganizationOwned
 
 public sealed class PcrVersionRecord : IOrganizationOwned
 {
+    /// <summary>PostgreSQL xmin; optimistic concurrency token for mutable drafts and workflow state.</summary>
+    public uint RowVersion { get; set; }
     public Guid Id { get; set; }
     public Guid OrganizationId { get; set; }
     public Guid RuleSetId { get; set; }
@@ -167,6 +177,8 @@ public sealed class PcrStageRuleRecord : IOrganizationOwned
 
 public sealed class LifecycleStageDeclarationRecord : IOrganizationOwned
 {
+    /// <summary>PostgreSQL xmin; optimistic concurrency token for mutable drafts and workflow state.</summary>
+    public uint RowVersion { get; set; }
     public Guid Id { get; set; }
     public Guid OrganizationId { get; set; }
     public Guid InventoryProjectVersionId { get; set; }
@@ -191,6 +203,8 @@ public sealed class UnitRecord
 
 public sealed class EmissionFactorVersionRecord : IOrganizationOwned
 {
+    /// <summary>PostgreSQL xmin; optimistic concurrency token for mutable drafts and workflow state.</summary>
+    public uint RowVersion { get; set; }
     public Guid Id { get; set; }
     public Guid OrganizationId { get; set; }
     public Guid FactorId { get; set; }

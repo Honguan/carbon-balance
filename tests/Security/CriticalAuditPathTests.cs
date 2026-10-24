@@ -16,10 +16,12 @@ public sealed class CriticalAuditPathTests
             var end = index + 1 < methods.Count ? methods[index + 1].Index : source.IndexOf("private async", methods[index].Index, StringComparison.Ordinal);
             if (end < 0) end = source.Length;
             var body = source[methods[index].Index..end];
-            if (!body.Contains("_dbContext.SaveChangesAsync", StringComparison.Ordinal)) continue;
+            var saveIndexes = new[] { "_dbContext.SaveChangesAsync", "SaveOrRejectStaleAsync(" }
+                .Select(marker => body.IndexOf(marker, StringComparison.Ordinal)).Where(position => position >= 0).ToArray();
+            if (saveIndexes.Length == 0) continue;
             mutations.Add(methods[index].Groups[1].Value);
             Assert.Contains("AddAudit(", body);
-            Assert.True(body.IndexOf("AddAudit(", StringComparison.Ordinal) < body.IndexOf("_dbContext.SaveChangesAsync", StringComparison.Ordinal), methods[index].Groups[1].Value);
+            Assert.True(body.IndexOf("AddAudit(", StringComparison.Ordinal) < saveIndexes.Min(), methods[index].Groups[1].Value);
         }
         foreach (var critical in new[] { "OnPostSaveMailSettingsAsync", "OnPostCreateFacilityAsync", "OnPostRevokeInvitationAsync",
                      "OnPostRevokeMemberAsync", "OnPostCreateProductAsync", "OnPostCreateInventoryAsync", "OnPostSubmitInventoryAsync", "OnPostReviewInventoryAsync" })

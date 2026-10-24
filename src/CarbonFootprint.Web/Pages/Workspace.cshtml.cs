@@ -287,6 +287,7 @@ public sealed class WorkspaceModel : PageModel
         string? password,
         string fromAddress,
         string fromName,
+        uint rowVersion,
         CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
@@ -360,6 +361,10 @@ public sealed class WorkspaceModel : PageModel
         }
         else
         {
+            if (rowVersion != settings.RowVersion)
+            {
+                return await RejectStaleAsync("SaveMailSettings", "OrganizationMailSettings", settings.Id, cancellationToken);
+            }
             settings.Host = normalizedHost;
             settings.Port = port;
             settings.EnableSsl = enableSsl;
@@ -376,7 +381,10 @@ public sealed class WorkspaceModel : PageModel
 
         AddAudit("organization.mail_settings.updated", "OrganizationMailSettings", settings.Id,
             metadata: new Dictionary<string, object?> { ["credentialsChanged"] = !string.IsNullOrWhiteSpace(normalizedPassword) });
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("SaveMailSettings", "OrganizationMailSettings", settings.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         StatusMessage = "SMTP 設定已儲存。密碼以資料保護機制加密保存。";
         return RedirectToPage(new { section = "settings", stage = "mail", projectVersionId = ProjectVersionId });
     }
@@ -511,7 +519,8 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
-    public async Task<IActionResult> OnPostRevokeInvitationAsync(Guid invitationId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostRevokeInvitationAsync(Guid invitationId, uint rowVersion,
+        CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
         {
@@ -522,16 +531,24 @@ public sealed class WorkspaceModel : PageModel
         {
             return NotFound();
         }
+        if (rowVersion != invitation.RowVersion)
+        {
+            return await RejectStaleAsync("RevokeInvitation", "OrganizationInvitation", invitation.Id, cancellationToken);
+        }
         if (!invitation.AcceptedAt.HasValue)
         {
             invitation.RevokedAt = DateTimeOffset.UtcNow;
             AddAudit("organization.invitation.revoked", "OrganizationInvitation", invitation.Id);
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            if (await SaveOrRejectStaleAsync("RevokeInvitation", "OrganizationInvitation", invitation.Id, cancellationToken) is { } conflict)
+            {
+                return conflict;
+            }
         }
         return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
-    public async Task<IActionResult> OnPostRevokeMemberAsync(Guid membershipId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostRevokeMemberAsync(Guid membershipId, uint rowVersion,
+        CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
         {
@@ -541,6 +558,10 @@ public sealed class WorkspaceModel : PageModel
         if (membership is null)
         {
             return NotFound();
+        }
+        if (rowVersion != membership.RowVersion)
+        {
+            return await RejectStaleAsync("RevokeMember", "OrganizationMembership", membership.Id, cancellationToken);
         }
         if (membership.Role == OrganizationRole.Owner.ToString())
         {
@@ -564,7 +585,10 @@ public sealed class WorkspaceModel : PageModel
 
         membership.RevokedAt = DateTimeOffset.UtcNow;
         AddAudit("organization.membership.revoked", "OrganizationMembership", membership.Id);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("RevokeMember", "OrganizationMembership", membership.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
@@ -783,6 +807,7 @@ public sealed class WorkspaceModel : PageModel
         Guid stageDeclarationId,
         bool isApplicable,
         string reason,
+        uint rowVersion,
         CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
@@ -795,6 +820,10 @@ public sealed class WorkspaceModel : PageModel
         if (declaration is null)
         {
             return NotFound();
+        }
+        if (rowVersion != declaration.RowVersion)
+        {
+            return await RejectStaleAsync("SetStageApplicability", "LifecycleStageDeclaration", declaration.Id, cancellationToken);
         }
         var project = await _dbContext.InventoryProjectVersions.SingleAsync(
             item => item.Id == declaration.InventoryProjectVersionId,
@@ -836,7 +865,10 @@ public sealed class WorkspaceModel : PageModel
         declaration.IsApplicable = isApplicable;
         declaration.Reason = isApplicable ? string.Empty : reason.Trim();
         AddAudit("inventory.stage.applicability.changed", "LifecycleStageDeclaration", declaration.Id);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("SetStageApplicability", "LifecycleStageDeclaration", declaration.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         return RedirectToPage(new { section = Section, projectVersionId = project.Id });
     }
 
@@ -1036,7 +1068,8 @@ public sealed class WorkspaceModel : PageModel
         return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
-    public async Task<IActionResult> OnPostReviewPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostReviewPcrAsync(Guid pcrVersionId, uint rowVersion,
+        CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
         {
@@ -1046,6 +1079,10 @@ public sealed class WorkspaceModel : PageModel
         if (pcr is null)
         {
             return NotFound();
+        }
+        if (rowVersion != pcr.RowVersion)
+        {
+            return await RejectStaleAsync("ReviewPcr", "PcrVersion", pcr.Id, cancellationToken);
         }
         if (pcr.PublicationStatus != PcrPublicationStatus.Draft.ToString())
         {
@@ -1074,11 +1111,15 @@ public sealed class WorkspaceModel : PageModel
         pcr.ReviewedAt = DateTimeOffset.UtcNow;
         pcr.ReviewedBy = reviewerId;
         AddAudit("pcr.version.reviewed", "PcrVersion", pcr.Id);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("ReviewPcr", "PcrVersion", pcr.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
-    public async Task<IActionResult> OnPostRejectPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostRejectPcrAsync(Guid pcrVersionId, uint rowVersion,
+        CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
         {
@@ -1091,6 +1132,10 @@ public sealed class WorkspaceModel : PageModel
         if (pcr is null)
         {
             return NotFound();
+        }
+        if (rowVersion != pcr.RowVersion)
+        {
+            return await RejectStaleAsync("RejectPcr", "PcrVersion", pcr.Id, cancellationToken);
         }
         if (pcr.PublicationStatus != PcrPublicationStatus.Draft.ToString()
             || pcr.ReviewStatus != PcrReviewStatus.Pending.ToString())
@@ -1116,11 +1161,15 @@ public sealed class WorkspaceModel : PageModel
         pcr.ReviewedAt = DateTimeOffset.UtcNow;
         pcr.ReviewedBy = reviewerId;
         AddAudit("pcr.version.rejected", "PcrVersion", pcr.Id);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("RejectPcr", "PcrVersion", pcr.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
-    public async Task<IActionResult> OnPostPublishPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostPublishPcrAsync(Guid pcrVersionId, uint rowVersion,
+        CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
         {
@@ -1135,6 +1184,10 @@ public sealed class WorkspaceModel : PageModel
         if (pcr is null)
         {
             return NotFound();
+        }
+        if (rowVersion != pcr.RowVersion)
+        {
+            return await RejectStaleAsync("PublishPcr", "PcrVersion", pcr.Id, cancellationToken);
         }
 
         var hasControlledDeclaredUnit = await _dbContext.Units.AnyAsync(
@@ -1187,12 +1240,16 @@ public sealed class WorkspaceModel : PageModel
             AddAudit("pcr.version.superseded", "PcrVersion", predecessor.Id);
         }
         AddAudit("pcr.version.published", "PcrVersion", pcr.Id);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("PublishPcr", "PcrVersion", pcr.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         StatusMessage = "PCR 版本已發布。";
         return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
-    public async Task<IActionResult> OnPostWithdrawPcrAsync(Guid pcrVersionId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostWithdrawPcrAsync(Guid pcrVersionId, uint rowVersion,
+        CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
         {
@@ -1208,6 +1265,10 @@ public sealed class WorkspaceModel : PageModel
         {
             return NotFound();
         }
+        if (rowVersion != pcr.RowVersion)
+        {
+            return await RejectStaleAsync("WithdrawPcr", "PcrVersion", pcr.Id, cancellationToken);
+        }
 
         if (!string.Equals(pcr.PublicationStatus, PcrPublicationStatus.Published.ToString(), StringComparison.Ordinal))
         {
@@ -1219,7 +1280,10 @@ public sealed class WorkspaceModel : PageModel
         pcr.PublicationStatus = PcrPublicationStatus.Withdrawn.ToString();
         pcr.WithdrawnAt = DateTimeOffset.UtcNow;
         AddAudit("pcr.version.withdrawn", "PcrVersion", pcr.Id);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("WithdrawPcr", "PcrVersion", pcr.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         StatusMessage = "PCR 版本已撤回；歷史計算不受影響。";
         return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
@@ -1338,7 +1402,8 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
-    public async Task<IActionResult> OnPostReviewFactorAsync(Guid factorVersionId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostReviewFactorAsync(Guid factorVersionId, uint rowVersion,
+        CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
         {
@@ -1349,6 +1414,10 @@ public sealed class WorkspaceModel : PageModel
         {
             return NotFound();
         }
+        if (rowVersion != factor.RowVersion)
+        {
+            return await RejectStaleAsync("ReviewFactor", "EmissionFactorVersion", factor.Id, cancellationToken);
+        }
         if (factor.PublicationStatus != FactorPublicationStatus.Draft.ToString())
         {
             return BadRequest();
@@ -1358,11 +1427,15 @@ public sealed class WorkspaceModel : PageModel
         factor.ReviewedAt = DateTimeOffset.UtcNow;
         factor.ReviewedBy = Guid.TryParse(_userManager.GetUserId(User), out var reviewerId) ? reviewerId : null;
         AddAudit("factor.version.reviewed", "EmissionFactorVersion", factor.Id);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("ReviewFactor", "EmissionFactorVersion", factor.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
-    public async Task<IActionResult> OnPostPublishFactorAsync(Guid factorVersionId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostPublishFactorAsync(Guid factorVersionId, uint rowVersion,
+        CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
         {
@@ -1379,6 +1452,10 @@ public sealed class WorkspaceModel : PageModel
         if (factor is null)
         {
             return NotFound();
+        }
+        if (rowVersion != factor.RowVersion)
+        {
+            return await RejectStaleAsync("PublishFactor", "EmissionFactorVersion", factor.Id, cancellationToken);
         }
 
         if (!string.Equals(factor.PublicationStatus, FactorPublicationStatus.Draft.ToString(), StringComparison.Ordinal)
@@ -1405,12 +1482,16 @@ public sealed class WorkspaceModel : PageModel
         factor.PublicationStatus = FactorPublicationStatus.Published.ToString();
         factor.PublishedAt = DateTimeOffset.UtcNow;
         AddAudit("factor.version.published", "EmissionFactorVersion", factor.Id);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("PublishFactor", "EmissionFactorVersion", factor.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         StatusMessage = "係數版本已發布。";
         return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
 
-    public async Task<IActionResult> OnPostWithdrawFactorAsync(Guid factorVersionId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostWithdrawFactorAsync(Guid factorVersionId, uint rowVersion,
+        CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
         {
@@ -1428,6 +1509,10 @@ public sealed class WorkspaceModel : PageModel
         {
             return NotFound();
         }
+        if (rowVersion != factor.RowVersion)
+        {
+            return await RejectStaleAsync("WithdrawFactor", "EmissionFactorVersion", factor.Id, cancellationToken);
+        }
 
         if (!string.Equals(factor.PublicationStatus, FactorPublicationStatus.Published.ToString(), StringComparison.Ordinal))
         {
@@ -1439,7 +1524,10 @@ public sealed class WorkspaceModel : PageModel
         factor.PublicationStatus = FactorPublicationStatus.Withdrawn.ToString();
         factor.WithdrawnAt = DateTimeOffset.UtcNow;
         AddAudit("factor.version.withdrawn", "EmissionFactorVersion", factor.Id);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("WithdrawFactor", "EmissionFactorVersion", factor.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         StatusMessage = "係數版本已撤回；歷史計算不受影響。";
         return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
@@ -1451,6 +1539,7 @@ public sealed class WorkspaceModel : PageModel
         string newFactorSourceReference,
         string newOriginalDocumentName,
         string newApplicability,
+        uint rowVersion,
         CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
@@ -1463,6 +1552,10 @@ public sealed class WorkspaceModel : PageModel
         if (current is null)
         {
             return NotFound();
+        }
+        if (rowVersion != current.RowVersion)
+        {
+            return await RejectStaleAsync("SupersedeFactor", "EmissionFactorVersion", current.Id, cancellationToken);
         }
         if (current.PublicationStatus != FactorPublicationStatus.Published.ToString()
             || newFactorValue is null or < 0m
@@ -1504,7 +1597,10 @@ public sealed class WorkspaceModel : PageModel
             SupersedesVersionId = current.Id
         });
         AddAudit("factor.version.superseded", "EmissionFactorVersion", newVersionId);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("SupersedeFactor", "EmissionFactorVersion", current.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         StatusMessage = "更新草稿已建立；現行係數會保留至新版本審查發布，歷史計算不受影響。";
         return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
     }
@@ -1855,7 +1951,8 @@ public sealed class WorkspaceModel : PageModel
         }
     }
 
-    public async Task<IActionResult> OnPostSubmitInventoryAsync(Guid inventoryProjectVersionId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostSubmitInventoryAsync(Guid inventoryProjectVersionId, uint rowVersion,
+        CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.EditInventory) || !await IsMfaEnabledAsync())
         {
@@ -1868,6 +1965,10 @@ public sealed class WorkspaceModel : PageModel
         if (project is null)
         {
             return NotFound();
+        }
+        if (rowVersion != project.RowVersion)
+        {
+            return await RejectStaleAsync("SubmitInventory", "InventoryProjectVersion", project.Id, cancellationToken);
         }
 
         var latestRun = await _dbContext.CalculationRuns
@@ -1897,7 +1998,10 @@ public sealed class WorkspaceModel : PageModel
         project.WorkflowStatus = InventoryWorkflowStatus.Submitted.ToString();
         project.SubmittedAt = DateTimeOffset.UtcNow;
         AddAudit("inventory.submitted", "InventoryProjectVersion", project.Id);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("SubmitInventory", "InventoryProjectVersion", project.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         StatusMessage = "盤查版本已送審。";
         return RedirectToPage(new { section = Section, projectVersionId = project.Id });
     }
@@ -1906,6 +2010,7 @@ public sealed class WorkspaceModel : PageModel
         Guid inventoryProjectVersionId,
         InventoryWorkflowStatus decision,
         string? reviewComment,
+        uint rowVersion,
         CancellationToken cancellationToken)
     {
         if (!await IsAllowedAsync(OrganizationPermission.ReviewInventory))
@@ -1940,6 +2045,10 @@ public sealed class WorkspaceModel : PageModel
         if (project is null)
         {
             return NotFound();
+        }
+        if (rowVersion != project.RowVersion)
+        {
+            return await RejectStaleAsync("ReviewInventory", "InventoryProjectVersion", project.Id, cancellationToken);
         }
 
         var current = Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus);
@@ -1977,7 +2086,10 @@ public sealed class WorkspaceModel : PageModel
             decision == InventoryWorkflowStatus.Approved ? "inventory.approved" : "inventory.changes-requested",
             "InventoryProjectVersion",
             project.Id, reason: project.ReviewComment);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (await SaveOrRejectStaleAsync("ReviewInventory", "InventoryProjectVersion", project.Id, cancellationToken) is { } conflict)
+        {
+            return conflict;
+        }
         StatusMessage = decision == InventoryWorkflowStatus.Approved ? "盤查版本已核准。" : "盤查版本已退回補正。";
         return RedirectToPage(new { section = Section, projectVersionId = project.Id });
     }
@@ -2710,6 +2822,35 @@ public sealed class WorkspaceModel : PageModel
         Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri)
         && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
             || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
+
+    private async Task<IActionResult> RejectStaleAsync(string operation, string resourceType, Guid resourceId, CancellationToken cancellationToken)
+    {
+        _dbContext.ChangeTracker.Clear();
+        var actorId = _userManager.GetUserId(User) is { } value && Guid.TryParse(value, out var id) ? id : (Guid?)null;
+        new AuditWriter(_dbContext).Append("concurrency.rejected", resourceType, resourceId, RequireOrganization(), actorId, null, null,
+            "Stale request rejected; no resource state mutation", HttpContext.TraceIdentifier,
+            AuditWriter.RequestSessionReference(HttpContext), "attempt",
+            new Dictionary<string, object?> { ["attemptedOperation"] = operation });
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _dbContext.ChangeTracker.Clear();
+        ModelState.AddModelError("concurrency", "此資料已被其他人變更，您的操作未套用。請重新載入並核對最新內容後再試。");
+        Response.StatusCode = StatusCodes.Status409Conflict;
+        await LoadAsync(cancellationToken);
+        return Page();
+    }
+
+    private async Task<IActionResult?> SaveOrRejectStaleAsync(string operation, string resourceType, Guid resourceId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return null;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return await RejectStaleAsync(operation, resourceType, resourceId, cancellationToken);
+        }
+    }
 
     private void AddAudit(string action, string resourceType, Guid resourceId,
         string? reason = null, IReadOnlyDictionary<string, object?>? metadata = null)

@@ -159,6 +159,7 @@
                             <form class="d-inline" method="post" asp-page="/Workspace" asp-page-handler="ReviewFactor" preserve-input-for="ReviewFactor-@factor.Id" asp-route-section="factors" asp-route-projectVersionId="@Model.ProjectVersionId">
                                 <fieldset disabled="@(!Model.CanManageFactors || !Model.HasVerifiedMfa)">
                                     <input type="hidden" name="factorVersionId" value="@factor.Id" />
+                                    <input type="hidden" name="rowVersion" value="@factor.RowVersion" />
                                     <button class="btn btn-sm btn-outline-primary" type="submit">完成審查</button>
                                 </fieldset>
                                 @if (!Model.CanManageFactors || !Model.HasVerifiedMfa)
@@ -169,6 +170,7 @@
                             <form class="d-inline" method="post" asp-page="/Workspace" asp-page-handler="PublishFactor" preserve-input-for="PublishFactor-@factor.Id" asp-route-section="factors" asp-route-projectVersionId="@Model.ProjectVersionId">
                                 <fieldset disabled="@(!Model.CanManageFactors)">
                                     <input type="hidden" name="factorVersionId" value="@factor.Id" />
+                                    <input type="hidden" name="rowVersion" value="@factor.RowVersion" />
                                     <button class="btn btn-sm btn-success" type="submit">發布</button>
                                 </fieldset>
                                 @if (!Model.CanManageFactors)
@@ -182,6 +184,7 @@
                             <form class="factor-update-form mt-2" method="post" asp-page="/Workspace" asp-page-handler="SupersedeFactor" preserve-input-for="SupersedeFactor-@factor.Id" asp-route-section="factors" asp-route-projectVersionId="@Model.ProjectVersionId">
                                 <fieldset disabled="@(!Model.CanManageFactors || !Model.HasVerifiedMfa)">
                                     <input type="hidden" name="factorVersionId" value="@factor.Id" />
+                                    <input type="hidden" name="rowVersion" value="@factor.RowVersion" />
                                     <label class="form-label" for="new-value-@factor.Id">更新係數值</label>
                                     <input class="form-control" id="new-value-@factor.Id" name="newFactorValue" type="number" min="0" step="any" value="@factor.Value" required />
                                     <label class="form-label mt-2" for="new-version-@factor.Id">新來源版本</label>

@@ -233,6 +233,7 @@ else
                                     <form class="d-inline" method="post" asp-page-handler="RevokeMember" preserve-input-for="RevokeMember-@membership.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
 <fieldset disabled="@(!(Model.CanManageOrganization && Model.HasVerifiedMfa))">
                                         <input type="hidden" name="membershipId" value="@membership.Id" />
+                                        <input type="hidden" name="rowVersion" value="@membership.RowVersion" />
                                         <button class="btn btn-sm btn-outline-danger" type="submit">撤銷</button>
 
 </fieldset></form>
@@ -251,6 +252,7 @@ else
                         <form class="d-inline" method="post" asp-page-handler="RevokeInvitation" preserve-input-for="RevokeInvitation-@invitation.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
 <fieldset disabled="@(!(Model.CanManageOrganization && Model.HasVerifiedMfa))">
                             <input type="hidden" name="invitationId" value="@invitation.Id" />
+                            <input type="hidden" name="rowVersion" value="@invitation.RowVersion" />
                             <button class="btn btn-sm btn-outline-danger" type="submit">撤銷邀請</button>
 
 </fieldset></form>
@@ -506,18 +508,21 @@ else
                                     <form class="d-inline" method="post" asp-page-handler="ReviewPcr" preserve-input-for="ReviewPcr-@pcr.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
 <fieldset disabled="@(!(Model.CanManageFactors && Model.HasVerifiedMfa))">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
+                                        <input type="hidden" name="rowVersion" value="@pcr.RowVersion" />
                                         <button class="btn btn-sm btn-outline-primary" type="submit">核准審查</button>
 
 </fieldset></form>
                                     <form class="d-inline" method="post" asp-page-handler="RejectPcr" preserve-input-for="RejectPcr-@pcr.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
 <fieldset disabled="@(!(Model.CanManageFactors && Model.HasVerifiedMfa))">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
+                                        <input type="hidden" name="rowVersion" value="@pcr.RowVersion" />
                                         <button class="btn btn-sm btn-outline-danger" type="submit">拒絕審查</button>
 
 </fieldset></form>
                                     <form class="d-inline" method="post" asp-page-handler="PublishPcr" preserve-input-for="PublishPcr-@pcr.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
 <fieldset disabled="@(!(Model.CanManageFactors))">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
+                                        <input type="hidden" name="rowVersion" value="@pcr.RowVersion" />
                                         <button class="btn btn-sm btn-success" type="submit">發布</button>
 
 </fieldset></form>
@@ -527,6 +532,7 @@ else
                                     <form class="d-inline" method="post" asp-page-handler="WithdrawPcr" preserve-input-for="WithdrawPcr-@pcr.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
 <fieldset disabled="@(!(Model.CanManageFactors))">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
+                                        <input type="hidden" name="rowVersion" value="@pcr.RowVersion" />
                                         <button class="btn btn-sm btn-outline-danger" type="submit">撤回</button>
 
 </fieldset></form>
@@ -644,6 +650,7 @@ else
                                     {
                                         <form class="mt-1 border rounded p-2" method="post" asp-page-handler="SetStageApplicability" preserve-input-for="SetStageApplicability-@declaration.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
                                             <input type="hidden" name="stageDeclarationId" value="@declaration.Id" />
+                                            <input type="hidden" name="rowVersion" value="@declaration.RowVersion" />
                                             <label class="form-check-label" for="stage-applicable-@declaration.Id">@FormalStageName((LifecycleStage)declaration.LifecycleStage)適用</label>
                                             <input class="form-check-input" id="stage-applicable-@declaration.Id" name="isApplicable" type="checkbox" value="true" checked="@declaration.IsApplicable" />
                                             <label class="form-label" for="stage-reason-@declaration.Id">不適用原因</label>
@@ -656,6 +663,7 @@ else
                                 {
                                     <form class="mt-1" method="post" asp-page-handler="ReviewInventory" preserve-input-for="ReviewInventory-@inventory.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
                                         <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
+                                        <input type="hidden" name="rowVersion" value="@inventory.RowVersion" />
                                         <label class="form-label" for="review-comment-@inventory.Id">審查意見</label>
                                         <input class="form-control" id="review-comment-@inventory.Id" name="reviewComment" maxlength="2000" />
                                         <button class="btn btn-sm btn-success mt-1" name="decision" value="Approved" type="submit">核准</button>
@@ -1199,6 +1207,7 @@ else
                             {
                                 <form method="post" asp-page-handler="SubmitInventory" asp-route-section="calculation" preserve-input-for="SubmitInventory-@inventory.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
                                     <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
+                                    <input type="hidden" name="rowVersion" value="@inventory.RowVersion" />
                                     <button class="btn btn-warning" type="submit" disabled="@(!hasCurrentRun || !Model.HasVerifiedMfa)">統一提交盤查</button>
                                 </form>
                             }

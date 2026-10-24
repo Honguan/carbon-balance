@@ -61,7 +61,7 @@ public sealed class AuditMutationPathTests
             Task<IActionResult> Invoke() => operation == "product"
                 ? page.OnPostCreateProductAsync("Audited product", "fixture", facilityId, default)
                 : page.OnPostSaveMailSettingsAsync("smtp.example.test", 587, true, "login-secret@example.test",
-                    "password-secret-sentinel", "sender-secret@example.test", "sender-secret-name", default);
+                    "password-secret-sentinel", "sender-secret@example.test", "sender-secret-name", 0, default);
             if (rejectAudit) await Assert.ThrowsAsync<DbUpdateException>(Invoke);
             else Assert.IsType<RedirectToPageResult>(await Invoke());
         }
