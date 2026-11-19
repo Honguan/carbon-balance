@@ -1,5 +1,10 @@
 using CarbonFootprint.Application.Governance;
 using CarbonFootprint.Application.Inventories;
+using CarbonFootprint.Application.Organizations;
+using CarbonFootprint.Application.Products;
+using CarbonFootprint.Infrastructure.Identity;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Identity;
 using CarbonFootprint.Application.Readiness;
 using CarbonFootprint.Infrastructure.Governance;
 using CarbonFootprint.Infrastructure.Persistence;
@@ -20,4 +25,13 @@ internal static class InventoryServices
     // Evidence storage is left out: page-level tests that upload evidence build their own service.
     public static IActivityData Activities(CarbonFootprintDbContext db, IAuthorizationService authorization, IOrganizationScope scope) =>
         new ActivityDataService(db, new OperationAuthorizer(authorization), scope, null!);
+
+    // Invitations are not exercised through page-level tests; pass a real sender only where SMTP handlers run.
+    public static IOrganizationAdministration Organization(CarbonFootprintDbContext db, IAuthorizationService authorization,
+        IOrganizationScope scope, SmtpEmailSender emailSender, UserManager<ApplicationUser> userManager) =>
+        new OrganizationAdministrationService(db, new OperationAuthorizer(authorization), scope, null!, emailSender, userManager,
+            new EphemeralDataProtectionProvider());
+
+    public static IProductCatalogue Products(CarbonFootprintDbContext db, IAuthorizationService authorization, IOrganizationScope scope) =>
+        new ProductCatalogueService(db, new OperationAuthorizer(authorization), scope);
 }

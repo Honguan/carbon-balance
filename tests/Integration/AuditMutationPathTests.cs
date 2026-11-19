@@ -50,10 +50,10 @@ public sealed class AuditMutationPathTests
             var mailPolicy = new SmtpEgressPolicy(new MailOptions(), false, (_, _) => Task.FromResult(new[] { System.Net.IPAddress.Parse("8.8.8.8") }));
             var emailSender = new SmtpEmailSender(Microsoft.Extensions.Options.Options.Create(new MailOptions()), db, new Scope(organizationId),
                 new EphemeralDataProtectionProvider(), mailPolicy, new HttpContextAccessor());
-            var page = new WorkspaceModel(db, new Scope(organizationId), null!, null!, emailSender,
+            var page = new WorkspaceModel(db, new Scope(organizationId), null!,
                 services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new InventorySnapshotReader(db),
-                new AllowedAuthorization(), null!, null!, new EphemeralDataProtectionProvider(),
-                CalculationBuildProvenance.Create("audit-fixture", new string('a', 40)), null!, null!, InventoryServices.Workflow(db, new AllowedAuthorization(), new Scope(organizationId)), InventoryServices.Readiness(db), InventoryServices.Activities(db, new AllowedAuthorization(), new Scope(organizationId)))
+                new AllowedAuthorization(), null!, null!,
+                CalculationBuildProvenance.Create("audit-fixture", new string('a', 40)), null!, null!, InventoryServices.Workflow(db, new AllowedAuthorization(), new Scope(organizationId)), InventoryServices.Readiness(db), InventoryServices.Activities(db, new AllowedAuthorization(), new Scope(organizationId)), InventoryServices.Organization(db, new AllowedAuthorization(), new Scope(organizationId), emailSender, services.GetRequiredService<UserManager<ApplicationUser>>()), InventoryServices.Products(db, new AllowedAuthorization(), new Scope(organizationId)))
             {
                 PageContext = new PageContext { HttpContext = http },
                 TempData = new TempDataDictionary(http, new FixtureTempData())

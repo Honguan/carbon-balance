@@ -2,6 +2,8 @@ using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Application.Exports;
 using CarbonFootprint.Application.Governance;
 using CarbonFootprint.Application.Inventories;
+using CarbonFootprint.Application.Organizations;
+using CarbonFootprint.Application.Products;
 using CarbonFootprint.Application.Operations;
 using CarbonFootprint.Application.Readiness;
 using CarbonFootprint.Domain.Modules.Calculations;
@@ -41,8 +43,6 @@ public sealed class WorkspaceModel : PageModel
     private readonly CarbonFootprintDbContext _dbContext;
     private readonly IOrganizationScope _organizationScope;
     private readonly OrganizationOnboardingService _onboardingService;
-    private readonly OrganizationInvitationService _invitationService;
-    private readonly SmtpEmailSender _emailSender;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly IInventoryCalculation _calculation;
@@ -50,15 +50,14 @@ public sealed class WorkspaceModel : PageModel
     private readonly IAuthorizationService _authorizationService;
     private readonly EvidenceStorageService _evidenceStorageService;
     private readonly MoenvFactorSynchronizationService _moenvFactorSynchronizationService;
-    private readonly IDataProtector _mailPasswordProtector;
+    private readonly IOrganizationAdministration _organization;
+    private readonly IProductCatalogue _products;
     private readonly CalculationBuildProvenance _buildProvenance;
 
     public WorkspaceModel(
         CarbonFootprintDbContext dbContext,
         IOrganizationScope organizationScope,
         OrganizationOnboardingService onboardingService,
-        OrganizationInvitationService invitationService,
-        SmtpEmailSender emailSender,
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
         IInventoryCalculation calculation,
@@ -66,14 +65,17 @@ public sealed class WorkspaceModel : PageModel
         IAuthorizationService authorizationService,
         EvidenceStorageService evidenceStorageService,
         MoenvFactorSynchronizationService moenvFactorSynchronizationService,
-        IDataProtectionProvider dataProtectionProvider,
         CalculationBuildProvenance buildProvenance,
         IPcrGovernance pcrGovernance,
         IFactorGovernance factorGovernance,
         IInventoryWorkflow inventoryWorkflow,
         IInventoryReadiness readiness,
-        IActivityData activities)
+        IActivityData activities,
+        IOrganizationAdministration organization,
+        IProductCatalogue products)
     {
+        _organization = organization;
+        _products = products;
         _activities = activities;
         _inventoryWorkflow = inventoryWorkflow;
         _readiness = readiness;
@@ -82,8 +84,6 @@ public sealed class WorkspaceModel : PageModel
         _dbContext = dbContext;
         _organizationScope = organizationScope;
         _onboardingService = onboardingService;
-        _invitationService = invitationService;
-        _emailSender = emailSender;
         _userManager = userManager;
         _signInManager = signInManager;
         _calculation = calculation;
@@ -91,7 +91,6 @@ public sealed class WorkspaceModel : PageModel
         _authorizationService = authorizationService;
         _evidenceStorageService = evidenceStorageService;
         _moenvFactorSynchronizationService = moenvFactorSynchronizationService;
-        _mailPasswordProtector = dataProtectionProvider.CreateProtector("CarbonFootprint.OrganizationMailSettings.v1");
         _buildProvenance = buildProvenance;
     }
 
@@ -345,365 +344,54 @@ public sealed class WorkspaceModel : PageModel
         uint rowVersion,
         CancellationToken cancellationToken)
     {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-        var normalizedHost = host?.Trim() ?? string.Empty;
-        var normalizedUsername = username?.Trim() ?? string.Empty;
-        var normalizedFromAddress = fromAddress?.Trim() ?? string.Empty;
-        var normalizedFromName = fromName?.Trim() ?? string.Empty;
-        var normalizedPassword = password ?? string.Empty;
-        bool validFromAddress;
-        try
-        {
-            validFromAddress = new System.Net.Mail.MailAddress(normalizedFromAddress).Address.Equals(normalizedFromAddress, StringComparison.OrdinalIgnoreCase);
-        }
-        catch (FormatException)
-        {
-            validFromAddress = false;
-        }
-        if (string.IsNullOrWhiteSpace(normalizedHost)
-            || normalizedHost.Length > 300
-            || port is < 1 or > 65535
-            || !validFromAddress
-            || normalizedFromAddress.Length > 320
-            || string.IsNullOrWhiteSpace(normalizedFromName)
-            || normalizedFromName.Length > 200
-            || normalizedUsername.Length > 320
-            || normalizedPassword.Length > 1000)
-        {
-            ModelState.AddModelError("mail", "請填寫有效的 SMTP 主機、連接埠、寄件地址與寄件人名稱。");
-            Section = "settings";
-            Stage = "mail";
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        try
-        {
-            await _emailSender.ValidateSettingsAsync(normalizedHost, port, enableSsl, cancellationToken);
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
-        {
-            ModelState.AddModelError("mail", exception.Message);
-            Section = "settings";
-            Stage = "mail";
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var organizationId = RequireOrganization();
-        var settings = await _dbContext.OrganizationMailSettings.SingleOrDefaultAsync(cancellationToken);
-        var userId = Guid.TryParse(_userManager.GetUserId(User), out var parsedUserId) ? parsedUserId : (Guid?)null;
-        if (settings is null)
-        {
-            settings = new OrganizationMailSettingsRecord
-            {
-                Id = Guid.NewGuid(),
-                OrganizationId = organizationId,
-                Host = normalizedHost,
-                Port = port,
-                EnableSsl = enableSsl,
-                Username = normalizedUsername,
-                EncryptedPassword = string.IsNullOrWhiteSpace(normalizedPassword) ? string.Empty : _mailPasswordProtector.Protect(normalizedPassword),
-                FromAddress = normalizedFromAddress,
-                FromName = normalizedFromName,
-                UpdatedAt = DateTimeOffset.UtcNow,
-                UpdatedBy = userId
-            };
-            _dbContext.OrganizationMailSettings.Add(settings);
-        }
-        else
-        {
-            if (rowVersion != settings.RowVersion)
-            {
-                return await RejectStaleAsync("SaveMailSettings", "OrganizationMailSettings", settings.Id, cancellationToken);
-            }
-            settings.Host = normalizedHost;
-            settings.Port = port;
-            settings.EnableSsl = enableSsl;
-            settings.Username = normalizedUsername;
-            if (!string.IsNullOrWhiteSpace(normalizedPassword))
-            {
-                settings.EncryptedPassword = _mailPasswordProtector.Protect(normalizedPassword);
-            }
-            settings.FromAddress = normalizedFromAddress;
-            settings.FromName = normalizedFromName;
-            settings.UpdatedAt = DateTimeOffset.UtcNow;
-            settings.UpdatedBy = userId;
-        }
-
-        AddAudit("organization.mail_settings.updated", "OrganizationMailSettings", settings.Id,
-            metadata: new Dictionary<string, object?> { ["credentialsChanged"] = !string.IsNullOrWhiteSpace(normalizedPassword) });
-        if (await SaveOrRejectStaleAsync("SaveMailSettings", "OrganizationMailSettings", settings.Id, cancellationToken) is { } conflict)
-        {
-            return conflict;
-        }
-        StatusMessage = "SMTP 設定已儲存。密碼以資料保護機制加密保存。";
-        return RedirectToPage(new { section = "settings", stage = "mail", projectVersionId = ProjectVersionId });
+        var result = await _organization.SaveMailSettingsAsync(Operation(),
+            new MailSettingsInput(host, port, enableSsl, username, password, fromAddress, fromName), rowVersion, cancellationToken);
+        return await CompleteMailAsync(result, cancellationToken);
     }
 
-    public async Task<IActionResult> OnPostTestMailAsync(string recipient, CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-        var normalizedRecipient = recipient?.Trim() ?? string.Empty;
-        var validRecipient = false;
-        try
-        {
-            validRecipient = new System.Net.Mail.MailAddress(normalizedRecipient).Address.Equals(
-                normalizedRecipient,
-                StringComparison.OrdinalIgnoreCase);
-        }
-        catch (FormatException)
-        {
-            validRecipient = false;
-        }
-        if (!validRecipient || normalizedRecipient.Length > 320)
-        {
-            ModelState.AddModelError("recipient", "請輸入測試收件地址。");
-            Section = "settings";
-            Stage = "mail";
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        try
-        {
-            await _emailSender.SendTestMessageAsync(normalizedRecipient, cancellationToken);
-            var organizationId = RequireOrganization();
-            var mailSettingsId = await _dbContext.OrganizationMailSettings
-                .AsNoTracking()
-                .Select(item => (Guid?)item.Id)
-                .SingleOrDefaultAsync(cancellationToken);
-            AddAudit(
-                "organization.mail_settings.tested",
-                mailSettingsId.HasValue ? "OrganizationMailSettings" : "Organization",
-                mailSettingsId ?? organizationId);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            StatusMessage = "測試信已送出，請確認收件匣或 SMTP 服務紀錄。";
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or System.Net.Mail.SmtpException or ArgumentException or System.Security.Cryptography.CryptographicException)
-        {
-            ModelState.AddModelError("mail", $"SMTP 測試失敗：{exception.Message}");
-            Section = "settings";
-            Stage = "mail";
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        return RedirectToPage(new { section = "settings", stage = "mail", projectVersionId = ProjectVersionId });
-    }
+    public async Task<IActionResult> OnPostTestMailAsync(string recipient, CancellationToken cancellationToken) =>
+        await CompleteMailAsync(await _organization.SendTestMailAsync(Operation(), recipient, cancellationToken), cancellationToken);
 
     public async Task<IActionResult> OnPostCreateFacilityAsync(
         string facilityCode,
         string facilityName,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization))
-        {
-            return Forbid();
-        }
-        if (string.IsNullOrWhiteSpace(facilityCode) || string.IsNullOrWhiteSpace(facilityName))
-        {
-            ModelState.AddModelError("facility", "廠場代碼與名稱皆為必填。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var organizationId = RequireOrganization();
-        var normalizedCode = facilityCode.Trim().ToUpperInvariant();
-        if (await _dbContext.Facilities.AnyAsync(item => item.Code == normalizedCode, cancellationToken))
-        {
-            ModelState.AddModelError("facilityCode", "廠場代碼不可重複。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var facilityId = Guid.NewGuid();
-        _dbContext.Facilities.Add(new FacilityRecord
-        {
-            Id = facilityId,
-            OrganizationId = organizationId,
-            Code = normalizedCode,
-            Name = facilityName.Trim(),
-            CreatedAt = DateTimeOffset.UtcNow
-        });
-        AddAudit("facility.created", "Facility", facilityId);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        StatusMessage = "廠場已建立。";
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-    }
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _products.CreateFacilityAsync(Operation(), facilityCode, facilityName, cancellationToken), cancellationToken);
 
     public async Task<IActionResult> OnPostInviteMemberAsync(
         string invitationEmail,
         OrganizationRole invitationRole,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-        if (!Guid.TryParse(_userManager.GetUserId(User), out var invitedBy))
-        {
-            return Forbid();
-        }
-
-        try
-        {
-            var token = await _invitationService.CreateAsync(
-                RequireOrganization(),
-                invitedBy,
-                invitationEmail,
-                invitationRole,
-                cancellationToken, HttpContext.TraceIdentifier, AuditWriter.RequestSessionReference(HttpContext));
-            var link = Url.Page("/AcceptInvitation", pageHandler: null, values: new { token }, protocol: Request.Scheme)
-                ?? throw new InvalidOperationException("無法建立邀請連結。");
-            await _emailSender.SendOrganizationInvitationAsync(invitationEmail.Trim(), link, cancellationToken);
-            StatusMessage = "組織邀請已寄出。";
-            return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-        }
-        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
-        {
-            ModelState.AddModelError("invitation", exception.Message);
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-    }
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _organization.InviteMemberAsync(Operation(), invitationEmail, invitationRole,
+                token => Url.Page("/AcceptInvitation", pageHandler: null, values: new { token }, protocol: Request.Scheme)
+                    ?? throw new InvalidOperationException("無法建立邀請連結。"),
+                cancellationToken),
+            cancellationToken);
 
     public async Task<IActionResult> OnPostRevokeInvitationAsync(Guid invitationId, uint rowVersion,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-        var invitation = await _dbContext.OrganizationInvitations.SingleOrDefaultAsync(item => item.Id == invitationId, cancellationToken);
-        if (invitation is null)
-        {
-            return NotFound();
-        }
-        if (rowVersion != invitation.RowVersion)
-        {
-            return await RejectStaleAsync("RevokeInvitation", "OrganizationInvitation", invitation.Id, cancellationToken);
-        }
-        if (!invitation.AcceptedAt.HasValue)
-        {
-            invitation.RevokedAt = DateTimeOffset.UtcNow;
-            AddAudit("organization.invitation.revoked", "OrganizationInvitation", invitation.Id);
-            if (await SaveOrRejectStaleAsync("RevokeInvitation", "OrganizationInvitation", invitation.Id, cancellationToken) is { } conflict)
-            {
-                return conflict;
-            }
-        }
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-    }
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _organization.RevokeInvitationAsync(Operation(), invitationId, rowVersion, cancellationToken), cancellationToken);
 
     public async Task<IActionResult> OnPostRevokeMemberAsync(Guid membershipId, uint rowVersion,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageOrganization) || !await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-        var membership = await _dbContext.OrganizationMemberships.SingleOrDefaultAsync(item => item.Id == membershipId, cancellationToken);
-        if (membership is null)
-        {
-            return NotFound();
-        }
-        if (rowVersion != membership.RowVersion)
-        {
-            return await RejectStaleAsync("RevokeMember", "OrganizationMembership", membership.Id, cancellationToken);
-        }
-        if (membership.Role == OrganizationRole.Owner.ToString())
-        {
-            ModelState.AddModelError("membership", "不可撤銷組織擁有者。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var revokedUser = await _userManager.FindByIdAsync(membership.UserId.ToString());
-        if (revokedUser is null)
-        {
-            return NotFound();
-        }
-        var stampResult = await _userManager.UpdateSecurityStampAsync(revokedUser);
-        if (!stampResult.Succeeded)
-        {
-            ModelState.AddModelError("membership", "無法更新成員登入安全狀態，請稍後再試。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        membership.RevokedAt = DateTimeOffset.UtcNow;
-        AddAudit("organization.membership.revoked", "OrganizationMembership", membership.Id);
-        if (await SaveOrRejectStaleAsync("RevokeMember", "OrganizationMembership", membership.Id, cancellationToken) is { } conflict)
-        {
-            return conflict;
-        }
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-    }
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _organization.RevokeMemberAsync(Operation(), membershipId, rowVersion, cancellationToken), cancellationToken);
 
     public async Task<IActionResult> OnPostCreateProductAsync(
         string productName,
         string categoryCode,
         Guid facilityId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _products.CreateProductAsync(Operation(), productName, categoryCode, facilityId, cancellationToken), cancellationToken);
+
+    // SMTP forms live on the settings/mail tab; success and validation errors return there.
+    private async Task<IActionResult> CompleteMailAsync(OperationResult result, CancellationToken cancellationToken)
     {
-        if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
+        if (result.Status is OperationStatus.Succeeded or OperationStatus.Invalid)
         {
-            return Forbid();
+            Section = "settings";
+            Stage = "mail";
         }
-
-        var organizationId = RequireOrganization();
-        if (string.IsNullOrWhiteSpace(productName) || string.IsNullOrWhiteSpace(categoryCode))
-        {
-            ModelState.AddModelError("productName", "產品名稱不可為空。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-        if (facilityId == Guid.Empty)
-        {
-            ModelState.AddModelError("facilityId", "請先建立並選擇所屬廠場。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-        if (!await _dbContext.Facilities.AnyAsync(
-                item => item.Id == facilityId && item.OrganizationId == organizationId,
-                cancellationToken))
-        {
-            ModelState.AddModelError("facilityId", "所選廠場不存在或不屬於目前組織。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var productId = Guid.NewGuid();
-        var versionId = Guid.NewGuid();
-        _dbContext.Products.Add(new ProductRecord
-        {
-            Id = productId,
-            OrganizationId = organizationId,
-            Name = productName.Trim(),
-            CategoryCode = categoryCode.Trim().ToUpperInvariant(),
-            FacilityId = facilityId,
-            CreatedAt = DateTimeOffset.UtcNow
-        });
-        _dbContext.ProductVersions.Add(new ProductVersionRecord
-        {
-            Id = versionId,
-            OrganizationId = organizationId,
-            ProductId = productId,
-            VersionNumber = 1,
-            NameZhTw = productName.Trim(),
-            CreatedAt = DateTimeOffset.UtcNow
-        });
-        AddAudit("product.version.created", "ProductVersion", versionId);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        StatusMessage = "產品與第 1 版已建立。";
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
+        return await CompleteAsync(result, cancellationToken, stage: Stage);
     }
 
     public async Task<IActionResult> OnPostCreateInventoryAsync(
@@ -2034,17 +1722,6 @@ public sealed class WorkspaceModel : PageModel
     private void AddAudit(string action, string resourceType, Guid resourceId,
         string? reason = null, IReadOnlyDictionary<string, object?>? metadata = null)
     {
-        var organizationId = RequireOrganization();
-        var actorId = _userManager.GetUserId(User) is { } value && Guid.TryParse(value, out var id) ? id : (Guid?)null;
-        var correlation = HttpContext.TraceIdentifier;
-        var session = AuditWriter.RequestSessionReference(HttpContext);
-        var writer = new AuditWriter(_dbContext);
-        if (action == "organization.mail_settings.tested")
-        {
-            writer.Append(action, resourceType, resourceId, organizationId, actorId, null, null,
-                "SMTP test; no resource state mutation", correlation, session, "attempt");
-            return;
-        }
-        OperationAudit.AppendTracked(_dbContext, Operation(), organizationId, action, resourceType, resourceId, reason, metadata);
+        OperationAudit.AppendTracked(_dbContext, Operation(), RequireOrganization(), action, resourceType, resourceId, reason, metadata);
     }
 }

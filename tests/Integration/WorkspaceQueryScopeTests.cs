@@ -179,11 +179,11 @@ public sealed class WorkspaceQueryScopeTests(ITestOutputHelper output)
             User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorId.ToString())], "test"))
         };
         var authorization = new AllowAll();
-        var page = new WorkspaceModel(db, new Scope(organizationId), null!, null!, null!,
+        var page = new WorkspaceModel(db, new Scope(organizationId), null!,
             services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new InventorySnapshotReader(db),
-            authorization, null!, null!, new EphemeralDataProtectionProvider(),
+            authorization, null!, null!,
             CalculationBuildProvenance.Create("scope-test", new string('c', 40)), null!, null!,
-            InventoryServices.Workflow(db, authorization, new Scope(organizationId)), InventoryServices.Readiness(db), InventoryServices.Activities(db, authorization, new Scope(organizationId)))
+            InventoryServices.Workflow(db, authorization, new Scope(organizationId)), InventoryServices.Readiness(db), InventoryServices.Activities(db, authorization, new Scope(organizationId)), InventoryServices.Organization(db, authorization, new Scope(organizationId), null!, services.GetRequiredService<UserManager<ApplicationUser>>()), InventoryServices.Products(db, authorization, new Scope(organizationId)))
         {
             PageContext = new PageContext { HttpContext = http },
             TempData = new TempDataDictionary(http, new NoTempData()),

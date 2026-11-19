@@ -23,24 +23,33 @@ public sealed class CriticalAuditPathTests
             Assert.Contains("AddAudit(", body);
             Assert.True(body.IndexOf("AddAudit(", StringComparison.Ordinal) < saveIndexes.Min(), methods[index].Groups[1].Value);
         }
-        foreach (var critical in new[] { "OnPostSaveMailSettingsAsync", "OnPostCreateFacilityAsync", "OnPostRevokeInvitationAsync",
-                     "OnPostRevokeMemberAsync", "OnPostCreateProductAsync", "OnPostCreateInventoryAsync" })
-            Assert.Contains(critical, mutations);
+        Assert.Contains("OnPostCreateInventoryAsync", mutations);
 
         // Submit/review moved behind IInventoryWorkflow; the service must keep audit routing before persistence.
         var workflow = File.ReadAllText(Path.Combine(root, "src/CarbonFootprint.Infrastructure/Governance/InventoryWorkflowService.cs"));
         Assert.Contains("OperationAudit.AppendTracked(", workflow);
         Assert.True(workflow.IndexOf("OperationAudit.AppendTracked(", StringComparison.Ordinal) < workflow.IndexOf("SaveChangesAsync", StringComparison.Ordinal));
 
-        // Activity save/retire and evidence upload moved behind IActivityData; each operation audits before it saves.
-        var activities = File.ReadAllText(Path.Combine(root, "src/CarbonFootprint.Infrastructure/Governance/ActivityDataService.cs"));
-        var operations = activities.Split("public async Task<OperationResult> ")[1..];
-        Assert.Equal(3, operations.Length);
-        foreach (var operation in operations)
+        // Extracted operations: every one that persists must append its audit before the first save.
+        var persisting = new List<string>();
+        foreach (var service in new[] { "ActivityDataService", "OrganizationAdministrationService", "ProductCatalogueService" })
         {
-            var audit = operation.IndexOf("OperationAudit.AppendTracked(", StringComparison.Ordinal);
-            Assert.True(audit >= 0 && audit < operation.IndexOf("db.SaveChangesAsync", StringComparison.Ordinal), operation[..operation.IndexOf('(')]);
+            var serviceSource = File.ReadAllText(Path.Combine(root, $"src/CarbonFootprint.Infrastructure/Governance/{service}.cs"));
+            foreach (var operation in serviceSource.Split("public async Task<OperationResult> ")[1..])
+            {
+                var name = operation[..operation.IndexOf('(')];
+                var saves = new[] { "db.SaveChangesAsync", "await SaveAsync(" }
+                    .Select(marker => operation.IndexOf(marker, StringComparison.Ordinal)).Where(position => position >= 0).ToArray();
+                if (saves.Length == 0) continue;
+                persisting.Add(name);
+                var audit = new[] { "OperationAudit.AppendTracked(", "new AuditWriter(db).Append(" }
+                    .Select(marker => operation.IndexOf(marker, StringComparison.Ordinal)).Where(position => position >= 0).DefaultIfEmpty(-1).Min();
+                Assert.True(audit >= 0 && audit < saves.Min(), $"{service}.{name}");
+            }
         }
+        foreach (var critical in new[] { "SaveAsync", "RetireAsync", "AttachEvidenceAsync", "SaveMailSettingsAsync", "SendTestMailAsync",
+                     "RevokeInvitationAsync", "RevokeMemberAsync", "CreateFacilityAsync", "CreateProductAsync" })
+            Assert.Contains(critical, persisting);
     }
 
     [Fact]
