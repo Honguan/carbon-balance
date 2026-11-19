@@ -14,7 +14,6 @@ using CarbonFootprint.Domain.Modules.Standards;
 using CarbonFootprint.Domain.Modules.Units;
 using CarbonFootprint.Infrastructure.Governance;
 using CarbonFootprint.Infrastructure.Identity;
-using CarbonFootprint.Infrastructure.Evidence;
 using CarbonFootprint.Infrastructure.Organizations;
 using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Web.Security;
@@ -37,7 +36,6 @@ public sealed class WorkspaceModel : PageModel
     private readonly IInventoryWorkflow _inventoryWorkflow;
     private readonly IInventoryReadiness _readiness;
     private readonly IActivityData _activities;
-    private const string CurrentUnitCatalogueVersion = "units-p0-v2";
 
     private readonly CarbonFootprintDbContext _dbContext;
     private readonly IOrganizationScope _organizationScope;
@@ -46,7 +44,6 @@ public sealed class WorkspaceModel : PageModel
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly IInventoryCalculation _calculation;
     private readonly IAuthorizationService _authorizationService;
-    private readonly EvidenceStorageService _evidenceStorageService;
     private readonly MoenvFactorSynchronizationService _moenvFactorSynchronizationService;
     private readonly IOrganizationAdministration _organization;
     private readonly IProductCatalogue _products;
@@ -61,7 +58,6 @@ public sealed class WorkspaceModel : PageModel
         SignInManager<ApplicationUser> signInManager,
         IInventoryCalculation calculation,
         IAuthorizationService authorizationService,
-        EvidenceStorageService evidenceStorageService,
         MoenvFactorSynchronizationService moenvFactorSynchronizationService,
         IPcrGovernance pcrGovernance,
         IFactorGovernance factorGovernance,
@@ -89,7 +85,6 @@ public sealed class WorkspaceModel : PageModel
         _signInManager = signInManager;
         _calculation = calculation;
         _authorizationService = authorizationService;
-        _evidenceStorageService = evidenceStorageService;
         _moenvFactorSynchronizationService = moenvFactorSynchronizationService;
     }
 
@@ -462,159 +457,21 @@ public sealed class WorkspaceModel : PageModel
         string endOfLifeRequiredFields,
         CancellationToken cancellationToken)
     {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
-        {
-            return Forbid();
-        }
-
-        if (string.IsNullOrWhiteSpace(registrationNumber)
-            || versionNumber < 1
-            || string.IsNullOrWhiteSpace(title)
-            || !IsHttpSourceUrl(sourceReference)
-            || string.IsNullOrWhiteSpace(standardCode)
-            || string.IsNullOrWhiteSpace(cccClassification)
-            || string.IsNullOrWhiteSpace(pcrApplicability)
-            || string.IsNullOrWhiteSpace(ruleRequirements)
-            || string.IsNullOrWhiteSpace(productCategoryPatterns)
-            || string.IsNullOrWhiteSpace(functionalUnitPattern)
-            || string.IsNullOrWhiteSpace(declaredUnitCode)
-            || string.IsNullOrWhiteSpace(systemBoundaryCode)
-            || string.IsNullOrWhiteSpace(permittedAllocationMethods)
-            || string.IsNullOrWhiteSpace(formulaRuleSetVersion)
-            || string.IsNullOrWhiteSpace(reportingRequirements)
-            || cutoffThresholdPercent is < 0 or > 100
-            || roundingDecimalPlaces is < 0 or > 12
-            || (isCustomRule && string.IsNullOrWhiteSpace(customRuleJustification))
-            || originalDocument is null
-            || originalDocument.Length <= 0
-            || approvalDate is null
-            || validFrom is null
-            || validTo is null
-            || validFrom > validTo)
-        {
-            ModelState.AddModelError("pcr", "PCR 識別、適用條件、計算規則、原始文件與有效期間必須完整且有效。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var organizationId = RequireOrganization();
-        if (!await _dbContext.Units.AnyAsync(
-                item => item.CatalogueVersion == CurrentUnitCatalogueVersion
-                    && item.Code == declaredUnitCode.Trim(),
-                cancellationToken))
-        {
-            ModelState.AddModelError("pcr", "PCR 標示單位必須使用目前受控單位目錄中的代碼。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        if (!string.Equals(
-                formulaRuleSetVersion.Trim(),
-                ActivityEmissionFormula.PcrFormulaRuleSetV1,
-                StringComparison.Ordinal))
-        {
-            ModelState.AddModelError("pcr", "PCR 公式規則版本目前僅支援 pcr-formulas-v1。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var pcrVersionId = Guid.NewGuid();
-        if (!TryBuildPcrStageRules(
-                organizationId,
-                pcrVersionId,
-                [
-                    (LifecycleStage.RawMaterial, rawMaterialRequirement, rawMaterialKinds, rawMaterialRequiredFields),
-                    (LifecycleStage.Manufacturing, manufacturingRequirement, manufacturingKinds, manufacturingRequiredFields),
-                    (LifecycleStage.Distribution, distributionRequirement, distributionKinds, distributionRequiredFields),
-                    (LifecycleStage.Use, useRequirement, useKinds, useRequiredFields),
-                    (LifecycleStage.EndOfLife, endOfLifeRequirement, endOfLifeKinds, endOfLifeRequiredFields)
-                ],
-                out var stageRules,
-                out var stageRuleError))
-        {
-            ModelState.AddModelError("pcr", stageRuleError);
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var existingVersions = await _dbContext.PcrVersions
-            .AsNoTracking()
-            .Where(item => item.RegistrationNumber == registrationNumber.Trim())
-            .OrderByDescending(item => item.VersionNumber)
-            .ToArrayAsync(cancellationToken);
-        if (existingVersions.Any(item => item.VersionNumber == versionNumber))
-        {
-            ModelState.AddModelError("pcr", "同一 PCR 登錄編號不可重複建立相同版本號。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        StoredEvidence storedDocument;
-        try
-        {
-            await using var content = originalDocument.OpenReadStream();
-            storedDocument = await _evidenceStorageService.StoreAsync(
-                organizationId,
-                content,
-                originalDocument.FileName,
-                originalDocument.ContentType,
-                cancellationToken);
-        }
-        catch (EvidenceUploadException exception)
-        {
-            ModelState.AddModelError("pcr", exception.Message);
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var previousVersion = existingVersions.FirstOrDefault(item => item.VersionNumber < versionNumber);
-        _dbContext.PcrVersions.Add(new PcrVersionRecord
-        {
-            Id = pcrVersionId,
-            OrganizationId = organizationId,
-            RuleSetId = existingVersions.FirstOrDefault()?.RuleSetId ?? Guid.NewGuid(),
-            RegistrationNumber = registrationNumber.Trim(),
-            VersionNumber = versionNumber,
-            Title = title.Trim(),
-            ApprovalDate = approvalDate,
-            ValidFrom = validFrom,
-            ValidTo = validTo,
-            PublicationStatus = PcrPublicationStatus.Draft.ToString(),
-            SourceReference = sourceReference.Trim(),
-            StandardCode = standardCode.Trim(),
-            CccClassification = cccClassification.Trim(),
-            Applicability = pcrApplicability.Trim(),
-            RuleRequirements = ruleRequirements.Trim(),
-            OriginalDocumentName = storedDocument.OriginalFileName,
-            OriginalDocumentObjectKey = storedDocument.ObjectKey,
-            OriginalDocumentContentType = storedDocument.ContentType,
-            OriginalDocumentSizeBytes = storedDocument.SizeBytes,
-            OriginalDocumentSha256 = storedDocument.Sha256,
-            OriginalDocumentScanStatus = storedDocument.ScanStatus.ToString(),
-            ProductCategoryPatterns = productCategoryPatterns.Trim(),
-            FunctionalUnitPattern = functionalUnitPattern.Trim(),
-            DeclaredUnitCode = declaredUnitCode.Trim(),
-            SystemBoundaryCode = systemBoundaryCode.Trim(),
-            PermittedAllocationMethodsCsv = NormalizeCsv(permittedAllocationMethods),
-            CutoffThresholdPercent = cutoffThresholdPercent,
-            FormulaRuleSetVersion = formulaRuleSetVersion.Trim(),
-            RoundingDecimalPlaces = roundingDecimalPlaces,
-            ReportingRequirements = reportingRequirements.Trim(),
-            IsCustomRule = isCustomRule,
-            CustomRuleJustification = customRuleJustification?.Trim() ?? string.Empty,
-            CustomApprovalStatus = isCustomRule
-                ? PcrCustomApprovalStatus.Pending.ToString()
-                : PcrCustomApprovalStatus.NotRequired.ToString(),
-            SupersedesVersionId = previousVersion?.Id,
-            ReviewStatus = PcrReviewStatus.Pending.ToString(),
-            CreatedBy = Guid.TryParse(_userManager.GetUserId(User), out var creatorId) ? creatorId : null,
-            CreatedAt = DateTimeOffset.UtcNow
-        });
-        _dbContext.PcrStageRules.AddRange(stageRules);
-        AddAudit("pcr.version.created", "PcrVersion", pcrVersionId);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        StatusMessage = $"PCR 草稿已建立；原始文件 SHA-256：{storedDocument.Sha256}。";
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
+        await using var content = originalDocument is { Length: > 0 } ? originalDocument.OpenReadStream() : null;
+        var input = new PcrInput(registrationNumber, versionNumber, title, approvalDate, validFrom, validTo, sourceReference, standardCode,
+            cccClassification, pcrApplicability, ruleRequirements, productCategoryPatterns, functionalUnitPattern, declaredUnitCode,
+            systemBoundaryCode, permittedAllocationMethods, cutoffThresholdPercent, formulaRuleSetVersion, roundingDecimalPlaces,
+            reportingRequirements, isCustomRule, customRuleJustification,
+            [
+                new PcrStageInput(LifecycleStage.RawMaterial, rawMaterialRequirement, rawMaterialKinds, rawMaterialRequiredFields),
+                new PcrStageInput(LifecycleStage.Manufacturing, manufacturingRequirement, manufacturingKinds, manufacturingRequiredFields),
+                new PcrStageInput(LifecycleStage.Distribution, distributionRequirement, distributionKinds, distributionRequiredFields),
+                new PcrStageInput(LifecycleStage.Use, useRequirement, useKinds, useRequiredFields),
+                new PcrStageInput(LifecycleStage.EndOfLife, endOfLifeRequirement, endOfLifeKinds, endOfLifeRequiredFields)
+            ]);
+        var document = new EvidenceUpload(content, originalDocument?.Length ?? 0, originalDocument?.FileName ?? string.Empty,
+            originalDocument?.ContentType ?? string.Empty);
+        return await CompleteAsync(await _pcrGovernance.CreateAsync(Operation(), input, document, cancellationToken), cancellationToken);
     }
 
     public async Task<IActionResult> OnPostReviewPcrAsync(Guid pcrVersionId, uint rowVersion,
@@ -650,74 +507,12 @@ public sealed class WorkspaceModel : PageModel
         string datasetName,
         string factorOriginalDocumentName,
         string factorApplicability,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors))
-        {
-            return Forbid();
-        }
-
-        var organizationId = RequireOrganization();
-        var hasSourceType = TryResolveControlledValue(factorSourceType, factorSourceTypeOther, out var sourceType);
-        var hasGeography = TryResolveControlledValue(factorGeography, factorGeographyOther, out var geography);
-        if (string.IsNullOrWhiteSpace(factorName)
-            || factorValue is null or < 0m
-            || !hasSourceType
-            || !hasGeography
-            || factorValidFrom > factorValidTo
-            || string.IsNullOrWhiteSpace(sourceDatasetVersion)
-            || string.IsNullOrWhiteSpace(licenseCode)
-            || string.IsNullOrWhiteSpace(factorSourceName)
-            || string.IsNullOrWhiteSpace(factorSourceReference)
-            || string.IsNullOrWhiteSpace(datasetName)
-            || string.IsNullOrWhiteSpace(factorOriginalDocumentName)
-            || string.IsNullOrWhiteSpace(factorApplicability))
-        {
-            ModelState.AddModelError("factor", "來源類型、地域、有效期間與原始文件皆為必填。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        if (!await _dbContext.Units.AnyAsync(
-                item => item.CatalogueVersion == CurrentUnitCatalogueVersion && item.Code == denominatorUnitCode,
-                cancellationToken))
-        {
-            ModelState.AddModelError("factor", "係數分母必須使用受控單位。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var factorVersionId = Guid.NewGuid();
-        _dbContext.EmissionFactorVersions.Add(new EmissionFactorVersionRecord
-        {
-            Id = factorVersionId,
-            OrganizationId = organizationId,
-            FactorId = Guid.NewGuid(),
-            VersionNumber = 1,
-            Name = factorName.Trim(),
-            Value = factorValue.Value,
-            NumeratorUnitCode = "kgCO2e",
-            DenominatorUnitCode = denominatorUnitCode,
-            Geography = geography,
-            ValidFrom = factorValidFrom,
-            ValidTo = factorValidTo,
-            PublicationStatus = FactorPublicationStatus.Draft.ToString(),
-            SourceDatasetVersion = sourceDatasetVersion.Trim(),
-            LicenseCode = licenseCode.Trim(),
-            SourceType = sourceType,
-            SourceName = factorSourceName.Trim(),
-            SourceReference = factorSourceReference.Trim(),
-            DatasetName = datasetName.Trim(),
-            OriginalDocumentName = factorOriginalDocumentName.Trim(),
-            OriginalDocumentSha256 = string.Empty,
-            Applicability = factorApplicability.Trim(),
-            ReviewStatus = FactorReviewStatus.Pending.ToString()
-        });
-        AddAudit("factor.version.created", "EmissionFactorVersion", factorVersionId);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        StatusMessage = "係數草稿已建立；發布後才可用於新計算。";
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-    }
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _factorGovernance.CreateAsync(Operation(), new FactorInput(
+                factorName, factorValue, denominatorUnitCode, factorSourceType, factorSourceTypeOther, factorGeography, factorGeographyOther,
+                factorValidFrom, factorValidTo, sourceDatasetVersion, licenseCode, factorSourceName, factorSourceReference, datasetName,
+                factorOriginalDocumentName, factorApplicability), cancellationToken),
+            cancellationToken);
 
     public async Task<IActionResult> OnPostSyncMoenvFactorsAsync(CancellationToken cancellationToken)
     {
@@ -767,70 +562,11 @@ public sealed class WorkspaceModel : PageModel
         string newOriginalDocumentName,
         string newApplicability,
         uint rowVersion,
-        CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-        var current = await _dbContext.EmissionFactorVersions.SingleOrDefaultAsync(
-            item => item.Id == factorVersionId,
+        CancellationToken cancellationToken) =>
+        await CompleteAsync(await _factorGovernance.SupersedeAsync(Operation(), factorVersionId, new FactorSupersedeInput(
+                newFactorValue, newSourceDatasetVersion, newFactorSourceReference, newOriginalDocumentName, newApplicability),
+                rowVersion, cancellationToken),
             cancellationToken);
-        if (current is null)
-        {
-            return NotFound();
-        }
-        if (rowVersion != current.RowVersion)
-        {
-            return await RejectStaleAsync("SupersedeFactor", "EmissionFactorVersion", current.Id, cancellationToken);
-        }
-        if (current.PublicationStatus != FactorPublicationStatus.Published.ToString()
-            || newFactorValue is null or < 0m
-            || string.IsNullOrWhiteSpace(newSourceDatasetVersion)
-            || string.IsNullOrWhiteSpace(newFactorSourceReference)
-            || string.IsNullOrWhiteSpace(newOriginalDocumentName)
-            || string.IsNullOrWhiteSpace(newApplicability))
-        {
-            ModelState.AddModelError("factor", "更新已發布係數時，數值、來源版本、來源網址、原始文件與適用性皆須有效。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var newVersionId = Guid.NewGuid();
-        _dbContext.EmissionFactorVersions.Add(new EmissionFactorVersionRecord
-        {
-            Id = newVersionId,
-            OrganizationId = current.OrganizationId,
-            FactorId = current.FactorId,
-            VersionNumber = current.VersionNumber + 1,
-            Name = current.Name,
-            Value = newFactorValue.Value,
-            NumeratorUnitCode = current.NumeratorUnitCode,
-            DenominatorUnitCode = current.DenominatorUnitCode,
-            Geography = current.Geography,
-            ValidFrom = current.ValidFrom,
-            ValidTo = current.ValidTo,
-            PublicationStatus = FactorPublicationStatus.Draft.ToString(),
-            SourceDatasetVersion = newSourceDatasetVersion.Trim(),
-            LicenseCode = current.LicenseCode,
-            SourceType = current.SourceType,
-            SourceName = current.SourceName,
-            SourceReference = newFactorSourceReference.Trim(),
-            DatasetName = current.DatasetName,
-            OriginalDocumentName = newOriginalDocumentName.Trim(),
-            OriginalDocumentSha256 = string.Empty,
-            Applicability = newApplicability.Trim(),
-            ReviewStatus = FactorReviewStatus.Pending.ToString(),
-            SupersedesVersionId = current.Id
-        });
-        AddAudit("factor.version.superseded", "EmissionFactorVersion", newVersionId);
-        if (await SaveOrRejectStaleAsync("SupersedeFactor", "EmissionFactorVersion", current.Id, cancellationToken) is { } conflict)
-        {
-            return conflict;
-        }
-        StatusMessage = "更新草稿已建立；現行係數會保留至新版本審查發布，歷史計算不受影響。";
-        return RedirectToPage(new { section = Section, projectVersionId = ProjectVersionId });
-    }
 
     public async Task<IActionResult> OnPostAddActivityAsync(
         Guid inventoryProjectVersionId,
@@ -1065,7 +801,7 @@ public sealed class WorkspaceModel : PageModel
                 ? GetActivityUnitCatalogueVersion(await _dbContext.ActivityData.AsNoTracking()
                     .Where(item => item.InventoryProjectVersionId == ProjectVersionId.Value && item.RetiredAt == null)
                     .Select(item => item.ConversionRuleVersion).Distinct().ToArrayAsync(cancellationToken))
-                : CurrentUnitCatalogueVersion;
+                : UnitCatalogue.CurrentVersion;
             Units = await _dbContext.Units.AsNoTracking()
                 .Where(item => item.CatalogueVersion == selectedUnitCatalogueVersion)
                 .OrderBy(item => item.Code)
@@ -1186,21 +922,6 @@ public sealed class WorkspaceModel : PageModel
     private static string GetActivityUnitCatalogueVersion(IEnumerable<string> versions) =>
         UnitCatalogue.ResolveVersion(versions);
 
-    private static bool TryResolveControlledValue(string? selected, string? other, out string value)
-    {
-        value = selected?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
-        if (!string.Equals(value, "__other__", StringComparison.Ordinal))
-        {
-            return true;
-        }
-        value = other?.Trim() ?? string.Empty;
-        return !string.IsNullOrWhiteSpace(value);
-    }
-
     private static string NormalizeSection(string? section) => section?.Trim().ToLowerInvariant() switch
     {
         "governance" => "governance",
@@ -1233,96 +954,11 @@ public sealed class WorkspaceModel : PageModel
         return result.Succeeded;
     }
 
-    private static bool TryBuildPcrStageRules(
-        Guid organizationId,
-        Guid pcrVersionId,
-        IReadOnlyList<(LifecycleStage Stage, string Requirement, string Kinds, string RequiredFields)> inputs,
-        out PcrStageRuleRecord[] rules,
-        out string error)
-    {
-        var allowedFields = new HashSet<string>(StringComparer.Ordinal)
-        {
-            nameof(ActivityDataRecord.Name),
-            nameof(ActivityDataRecord.SupplierOrScenario),
-            nameof(ActivityDataRecord.EquipmentCategory),
-            nameof(ActivityDataRecord.DataSourceType),
-            nameof(ActivityDataRecord.DataProvider),
-            nameof(ActivityDataRecord.CollectionMethod),
-            nameof(ActivityDataRecord.SourceReference),
-            nameof(ActivityDataRecord.RawValue),
-            nameof(ActivityDataRecord.RawUnitCode),
-            nameof(ActivityDataRecord.PeriodStart),
-            nameof(ActivityDataRecord.PeriodEnd),
-            nameof(ActivityDataRecord.FactorVersionId),
-            nameof(ActivityDataRecord.AllocationFactor),
-            nameof(ActivityDataRecord.DataQuality),
-            nameof(ActivityDataRecord.EvidenceSha256)
-        };
-        var result = new List<PcrStageRuleRecord>();
-        foreach (var input in inputs)
-        {
-            if (!Enum.TryParse<PcrStageRequirement>(input.Requirement, true, out var requirement))
-            {
-                rules = [];
-                error = $"{InventoryDisplayNames.Stage(input.Stage)}的必要性設定無效。";
-                return false;
-            }
-
-            var kindValues = PcrRuleSetMapper.SplitCsv(input.Kinds);
-            if (kindValues.Count == 0
-                || kindValues.Any(value => !Enum.TryParse<ActivityDataKind>(value, true, out _)))
-            {
-                rules = [];
-                error = $"{InventoryDisplayNames.Stage(input.Stage)}的活動類型清單無效。";
-                return false;
-            }
-
-            var requiredFields = PcrRuleSetMapper.SplitCsv(input.RequiredFields);
-            if (requiredFields.Any(field => !allowedFields.Contains(field)))
-            {
-                rules = [];
-                error = $"{InventoryDisplayNames.Stage(input.Stage)}含有未受控的必填欄位。";
-                return false;
-            }
-
-            result.Add(new PcrStageRuleRecord
-            {
-                Id = Guid.NewGuid(),
-                OrganizationId = organizationId,
-                PcrVersionId = pcrVersionId,
-                LifecycleStage = (int)input.Stage,
-                Requirement = requirement.ToString(),
-                PermittedActivityKindsCsv = string.Join(
-                    ",",
-                    kindValues.Select(value => Enum.Parse<ActivityDataKind>(value, true).ToString())),
-                RequiredFieldsCsv = string.Join(",", requiredFields)
-            });
-        }
-
-        rules = result.ToArray();
-        error = string.Empty;
-        return true;
-    }
-
-    private static string NormalizeCsv(string? value) => string.Join(",", PcrRuleSetMapper.SplitCsv(value));
-
-    private static bool IsHttpSourceUrl(string? value) =>
-        Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri)
-        && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
-
     private OperationContext Operation() => new(
         User,
         Guid.TryParse(_userManager.GetUserId(User), out var actorId) ? actorId : null,
         HttpContext.TraceIdentifier,
         AuditWriter.RequestSessionReference(HttpContext));
-
-    private async Task<IActionResult> RejectStaleAsync(string operation, string resourceType, Guid resourceId, CancellationToken cancellationToken)
-    {
-        await OperationAudit.RecordStaleRejectionAsync(
-            _dbContext, Operation(), RequireOrganization(), operation, resourceType, resourceId, cancellationToken);
-        return await ShowConflictAsync(cancellationToken);
-    }
 
     private async Task<IActionResult> ShowConflictAsync(CancellationToken cancellationToken)
     {
@@ -1360,24 +996,5 @@ public sealed class WorkspaceModel : PageModel
             default:
                 return BadRequest();
         }
-    }
-
-    private async Task<IActionResult?> SaveOrRejectStaleAsync(string operation, string resourceType, Guid resourceId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            return null;
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return await RejectStaleAsync(operation, resourceType, resourceId, cancellationToken);
-        }
-    }
-
-    private void AddAudit(string action, string resourceType, Guid resourceId,
-        string? reason = null, IReadOnlyDictionary<string, object?>? metadata = null)
-    {
-        OperationAudit.AppendTracked(_dbContext, Operation(), RequireOrganization(), action, resourceType, resourceId, reason, metadata);
     }
 }

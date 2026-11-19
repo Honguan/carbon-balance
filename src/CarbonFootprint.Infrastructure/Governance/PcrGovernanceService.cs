@@ -1,19 +1,146 @@
 using CarbonFootprint.Application.Governance;
+using CarbonFootprint.Application.Inventories;
+using CarbonFootprint.Application.Exports;
 using CarbonFootprint.Application.Operations;
 using CarbonFootprint.Domain.Modules.Calculations;
 using CarbonFootprint.Domain.Modules.Inventories;
 using CarbonFootprint.Domain.Modules.Organizations;
 using CarbonFootprint.Domain.Modules.Standards;
 using CarbonFootprint.Domain.Modules.Units;
+using CarbonFootprint.Infrastructure.Evidence;
 using CarbonFootprint.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace CarbonFootprint.Infrastructure.Governance;
 
 public sealed class PcrGovernanceService(
-    CarbonFootprintDbContext db, IOperationAuthorizer authorizer, IOrganizationScope scope) : IPcrGovernance
+    CarbonFootprintDbContext db, IOperationAuthorizer authorizer, IOrganizationScope scope, EvidenceStorageService documentStorage) : IPcrGovernance
 {
     private const string ResourceType = "PcrVersion";
+
+    public async Task<OperationResult> CreateAsync(
+        OperationContext context, PcrInput input, EvidenceUpload originalDocument, CancellationToken cancellationToken)
+    {
+        if (!await authorizer.IsAllowedAsync(context, OrganizationPermission.ManageFactors, requireMfa: false)) return OperationResult.Forbidden;
+        if (string.IsNullOrWhiteSpace(input.RegistrationNumber)
+            || input.VersionNumber < 1
+            || string.IsNullOrWhiteSpace(input.Title)
+            || !IsHttpSourceUrl(input.SourceReference)
+            || string.IsNullOrWhiteSpace(input.StandardCode)
+            || string.IsNullOrWhiteSpace(input.CccClassification)
+            || string.IsNullOrWhiteSpace(input.Applicability)
+            || string.IsNullOrWhiteSpace(input.RuleRequirements)
+            || string.IsNullOrWhiteSpace(input.ProductCategoryPatterns)
+            || string.IsNullOrWhiteSpace(input.FunctionalUnitPattern)
+            || string.IsNullOrWhiteSpace(input.DeclaredUnitCode)
+            || string.IsNullOrWhiteSpace(input.SystemBoundaryCode)
+            || string.IsNullOrWhiteSpace(input.PermittedAllocationMethods)
+            || string.IsNullOrWhiteSpace(input.FormulaRuleSetVersion)
+            || string.IsNullOrWhiteSpace(input.ReportingRequirements)
+            || input.CutoffThresholdPercent is < 0 or > 100
+            || input.RoundingDecimalPlaces is < 0 or > 12
+            || (input.IsCustomRule && string.IsNullOrWhiteSpace(input.CustomRuleJustification))
+            || originalDocument.Content is null
+            || originalDocument.Length <= 0
+            || input.ApprovalDate is null
+            || input.ValidFrom is null
+            || input.ValidTo is null
+            || input.ValidFrom > input.ValidTo)
+        {
+            return Invalid("PCR 識別、適用條件、計算規則、原始文件與有效期間必須完整且有效。");
+        }
+
+        var organizationId = OrganizationId;
+        var declaredUnitCode = input.DeclaredUnitCode.Trim();
+        if (!await db.Units.AnyAsync(item => item.CatalogueVersion == UnitCatalogue.CurrentVersion && item.Code == declaredUnitCode, cancellationToken))
+        {
+            return Invalid("PCR 標示單位必須使用目前受控單位目錄中的代碼。");
+        }
+        if (!string.Equals(input.FormulaRuleSetVersion.Trim(), ActivityEmissionFormula.PcrFormulaRuleSetV1, StringComparison.Ordinal))
+        {
+            return Invalid("PCR 公式規則版本目前僅支援 pcr-formulas-v1。");
+        }
+
+        var pcrVersionId = Guid.NewGuid();
+        if (!TryBuildStageRules(organizationId, pcrVersionId, input.Stages, out var stageRules, out var stageRuleError))
+        {
+            return Invalid(stageRuleError);
+        }
+
+        var registrationNumber = input.RegistrationNumber.Trim();
+        var existingVersions = await db.PcrVersions.AsNoTracking()
+            .Where(item => item.RegistrationNumber == registrationNumber)
+            .OrderByDescending(item => item.VersionNumber)
+            .ToArrayAsync(cancellationToken);
+        if (existingVersions.Any(item => item.VersionNumber == input.VersionNumber))
+        {
+            return Invalid("同一 PCR 登錄編號不可重複建立相同版本號。");
+        }
+
+        StoredEvidence storedDocument;
+        try
+        {
+            storedDocument = await documentStorage.StoreAsync(
+                organizationId, originalDocument.Content, originalDocument.FileName, originalDocument.ContentType, cancellationToken);
+        }
+        catch (EvidenceUploadException exception)
+        {
+            return Invalid(exception.Message);
+        }
+
+        var previousVersion = existingVersions.FirstOrDefault(item => item.VersionNumber < input.VersionNumber);
+        db.PcrVersions.Add(new PcrVersionRecord
+        {
+            Id = pcrVersionId,
+            OrganizationId = organizationId,
+            RuleSetId = existingVersions.FirstOrDefault()?.RuleSetId ?? Guid.NewGuid(),
+            RegistrationNumber = registrationNumber,
+            VersionNumber = input.VersionNumber,
+            Title = input.Title.Trim(),
+            ApprovalDate = input.ApprovalDate,
+            ValidFrom = input.ValidFrom,
+            ValidTo = input.ValidTo,
+            PublicationStatus = PcrPublicationStatus.Draft.ToString(),
+            SourceReference = input.SourceReference!.Trim(),
+            StandardCode = input.StandardCode.Trim(),
+            CccClassification = input.CccClassification.Trim(),
+            Applicability = input.Applicability.Trim(),
+            RuleRequirements = input.RuleRequirements.Trim(),
+            OriginalDocumentName = storedDocument.OriginalFileName,
+            OriginalDocumentObjectKey = storedDocument.ObjectKey,
+            OriginalDocumentContentType = storedDocument.ContentType,
+            OriginalDocumentSizeBytes = storedDocument.SizeBytes,
+            OriginalDocumentSha256 = storedDocument.Sha256,
+            OriginalDocumentScanStatus = storedDocument.ScanStatus.ToString(),
+            ProductCategoryPatterns = input.ProductCategoryPatterns.Trim(),
+            FunctionalUnitPattern = input.FunctionalUnitPattern.Trim(),
+            DeclaredUnitCode = declaredUnitCode,
+            SystemBoundaryCode = input.SystemBoundaryCode.Trim(),
+            PermittedAllocationMethodsCsv = string.Join(",", PcrRuleSetMapper.SplitCsv(input.PermittedAllocationMethods)),
+            CutoffThresholdPercent = input.CutoffThresholdPercent,
+            FormulaRuleSetVersion = input.FormulaRuleSetVersion.Trim(),
+            RoundingDecimalPlaces = input.RoundingDecimalPlaces,
+            ReportingRequirements = input.ReportingRequirements.Trim(),
+            IsCustomRule = input.IsCustomRule,
+            CustomRuleJustification = input.CustomRuleJustification?.Trim() ?? string.Empty,
+            CustomApprovalStatus = input.IsCustomRule ? PcrCustomApprovalStatus.Pending.ToString() : PcrCustomApprovalStatus.NotRequired.ToString(),
+            SupersedesVersionId = previousVersion?.Id,
+            ReviewStatus = PcrReviewStatus.Pending.ToString(),
+            CreatedBy = context.ActorId,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        db.PcrStageRules.AddRange(stageRules);
+        Audit(context, "pcr.version.created", pcrVersionId);
+        await db.SaveChangesAsync(cancellationToken);
+        return OperationResult.Success($"PCR 草稿已建立；原始文件 SHA-256：{storedDocument.Sha256}。");
+    }
+
+    private static OperationResult Invalid(string message) => OperationResult.Invalid("pcr", message);
+
+    private static bool IsHttpSourceUrl(string? value) =>
+        Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri)
+        && (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase));
 
     public Task<OperationResult> ReviewAsync(OperationContext context, Guid pcrVersionId, uint rowVersion, CancellationToken cancellationToken) =>
         DecideAsync(context, pcrVersionId, rowVersion, approve: true, cancellationToken);
@@ -135,5 +262,76 @@ public sealed class PcrGovernanceService(
         {
             return await StaleAsync(context, operation, id, cancellationToken);
         }
+    }
+
+    private static bool TryBuildStageRules(
+        Guid organizationId,
+        Guid pcrVersionId,
+        IReadOnlyList<PcrStageInput> inputs,
+        out PcrStageRuleRecord[] rules,
+        out string error)
+    {
+        var allowedFields = new HashSet<string>(StringComparer.Ordinal)
+        {
+            nameof(ActivityDataRecord.Name),
+            nameof(ActivityDataRecord.SupplierOrScenario),
+            nameof(ActivityDataRecord.EquipmentCategory),
+            nameof(ActivityDataRecord.DataSourceType),
+            nameof(ActivityDataRecord.DataProvider),
+            nameof(ActivityDataRecord.CollectionMethod),
+            nameof(ActivityDataRecord.SourceReference),
+            nameof(ActivityDataRecord.RawValue),
+            nameof(ActivityDataRecord.RawUnitCode),
+            nameof(ActivityDataRecord.PeriodStart),
+            nameof(ActivityDataRecord.PeriodEnd),
+            nameof(ActivityDataRecord.FactorVersionId),
+            nameof(ActivityDataRecord.AllocationFactor),
+            nameof(ActivityDataRecord.DataQuality),
+            nameof(ActivityDataRecord.EvidenceSha256)
+        };
+        var result = new List<PcrStageRuleRecord>();
+        foreach (var input in inputs)
+        {
+            if (!Enum.TryParse<PcrStageRequirement>(input.Requirement, true, out var requirement))
+            {
+                rules = [];
+                error = $"{InventoryDisplayNames.Stage(input.Stage)}的必要性設定無效。";
+                return false;
+            }
+
+            var kindValues = PcrRuleSetMapper.SplitCsv(input.Kinds);
+            if (kindValues.Count == 0
+                || kindValues.Any(value => !Enum.TryParse<ActivityDataKind>(value, true, out _)))
+            {
+                rules = [];
+                error = $"{InventoryDisplayNames.Stage(input.Stage)}的活動類型清單無效。";
+                return false;
+            }
+
+            var requiredFields = PcrRuleSetMapper.SplitCsv(input.RequiredFields);
+            if (requiredFields.Any(field => !allowedFields.Contains(field)))
+            {
+                rules = [];
+                error = $"{InventoryDisplayNames.Stage(input.Stage)}含有未受控的必填欄位。";
+                return false;
+            }
+
+            result.Add(new PcrStageRuleRecord
+            {
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationId,
+                PcrVersionId = pcrVersionId,
+                LifecycleStage = (int)input.Stage,
+                Requirement = requirement.ToString(),
+                PermittedActivityKindsCsv = string.Join(
+                    ",",
+                    kindValues.Select(value => Enum.Parse<ActivityDataKind>(value, true).ToString())),
+                RequiredFieldsCsv = string.Join(",", requiredFields)
+            });
+        }
+
+        rules = result.ToArray();
+        error = string.Empty;
+        return true;
     }
 }

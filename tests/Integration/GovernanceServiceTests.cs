@@ -18,7 +18,7 @@ public sealed class GovernanceServiceTests
         var pcr = await SeedPcrAsync(organizationId, creator);
         await using var db = Db(organizationId);
 
-        var result = await new PcrGovernanceService(db, new Authorizer(false), new Scope(organizationId))
+        var result = await new PcrGovernanceService(db, new Authorizer(false), new Scope(organizationId), null!)
             .ReviewAsync(Context(Guid.NewGuid()), pcr.Id, pcr.RowVersion, default);
 
         Assert.Equal(OperationStatus.Forbidden, result.Status);
@@ -35,13 +35,13 @@ public sealed class GovernanceServiceTests
 
         await using (var db = Db(organizationId))
         {
-            var own = await new PcrGovernanceService(db, new Authorizer(true), new Scope(organizationId))
+            var own = await new PcrGovernanceService(db, new Authorizer(true), new Scope(organizationId), null!)
                 .ReviewAsync(Context(creator), pcr.Id, pcr.RowVersion, default);
             Assert.Equal(OperationStatus.Invalid, own.Status);
         }
         await using (var db = Db(organizationId))
         {
-            var other = await new PcrGovernanceService(db, new Authorizer(true), new Scope(organizationId))
+            var other = await new PcrGovernanceService(db, new Authorizer(true), new Scope(organizationId), null!)
                 .ReviewAsync(Context(reviewer), pcr.Id, pcr.RowVersion, default);
             Assert.True(other.Succeeded);
         }
@@ -67,7 +67,7 @@ public sealed class GovernanceServiceTests
         }
 
         await using var db = Db(organizationId);
-        var result = await new PcrGovernanceService(db, new Authorizer(true), new Scope(organizationId))
+        var result = await new PcrGovernanceService(db, new Authorizer(true), new Scope(organizationId), null!)
             .RejectAsync(Context(reviewer), pcr.Id, pcr.RowVersion, default);
 
         Assert.Equal(OperationStatus.Conflict, result.Status);

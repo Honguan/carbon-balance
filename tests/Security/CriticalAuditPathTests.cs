@@ -23,8 +23,8 @@ public sealed class CriticalAuditPathTests
             Assert.Contains("AddAudit(", body);
             Assert.True(body.IndexOf("AddAudit(", StringComparison.Ordinal) < saveIndexes.Min(), methods[index].Groups[1].Value);
         }
-        foreach (var critical in new[] { "OnPostCreatePcrAsync", "OnPostCreateFactorAsync", "OnPostSupersedeFactorAsync" })
-            Assert.Contains(critical, mutations);
+        // Every Workspace mutation is behind an application operation now; the page must not persist directly again.
+        Assert.Empty(mutations);
 
         // Submit/review moved behind IInventoryWorkflow; the service must keep audit routing before persistence.
         var workflow = File.ReadAllText(Path.Combine(root, "src/CarbonFootprint.Infrastructure/Governance/InventoryWorkflowService.cs"));
@@ -33,7 +33,8 @@ public sealed class CriticalAuditPathTests
 
         // Extracted operations: every one that persists must append its audit before the first save.
         var persisting = new List<string>();
-        foreach (var service in new[] { "ActivityDataService", "OrganizationAdministrationService", "ProductCatalogueService", "InventoryProjectService" })
+        foreach (var service in new[] { "ActivityDataService", "OrganizationAdministrationService", "ProductCatalogueService", "InventoryProjectService",
+                     "PcrGovernanceService", "FactorGovernanceService" })
         {
             var serviceSource = File.ReadAllText(Path.Combine(root, $"src/CarbonFootprint.Infrastructure/Governance/{service}.cs"));
             foreach (var operation in serviceSource.Split("public async Task<OperationResult> ")[1..])
@@ -43,14 +44,14 @@ public sealed class CriticalAuditPathTests
                     .Select(marker => operation.IndexOf(marker, StringComparison.Ordinal)).Where(position => position >= 0).ToArray();
                 if (saves.Length == 0) continue;
                 persisting.Add(name);
-                var audit = new[] { "OperationAudit.AppendTracked(", "new AuditWriter(db).Append(" }
+                var audit = new[] { "OperationAudit.AppendTracked(", "new AuditWriter(db).Append(", "Audit(context, " }
                     .Select(marker => operation.IndexOf(marker, StringComparison.Ordinal)).Where(position => position >= 0).DefaultIfEmpty(-1).Min();
                 Assert.True(audit >= 0 && audit < saves.Min(), $"{service}.{name}");
             }
         }
         foreach (var critical in new[] { "SaveAsync", "RetireAsync", "AttachEvidenceAsync", "SaveMailSettingsAsync", "SendTestMailAsync",
                      "RevokeInvitationAsync", "RevokeMemberAsync", "CreateFacilityAsync", "CreateProductAsync",
-                     "CreateAsync", "SetStageApplicabilityAsync" })
+                     "CreateAsync", "SetStageApplicabilityAsync", "SupersedeAsync", "PublishAsync", "WithdrawAsync" })
             Assert.Contains(critical, persisting);
     }
 

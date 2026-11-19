@@ -181,7 +181,7 @@ public sealed class WorkspaceQueryScopeTests(ITestOutputHelper output)
         var authorization = new AllowAll();
         var page = new WorkspaceModel(db, new Scope(organizationId), null!,
             services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!,
-            authorization, null!, null!, null!, null!,
+            authorization, null!, null!, null!,
             InventoryServices.Workflow(db, authorization, new Scope(organizationId)), InventoryServices.Readiness(db), InventoryServices.Activities(db, authorization, new Scope(organizationId)), InventoryServices.Organization(db, authorization, new Scope(organizationId), null!, services.GetRequiredService<UserManager<ApplicationUser>>()), InventoryServices.Products(db, authorization, new Scope(organizationId)), InventoryServices.Inventories(db, authorization, new Scope(organizationId)), InventoryServices.Export(db, authorization, new InventorySnapshotReader(db), CalculationBuildProvenance.Create("scope-test", new string('c', 40))))
         {
             PageContext = new PageContext { HttpContext = http },
