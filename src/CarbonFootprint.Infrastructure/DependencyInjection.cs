@@ -1,4 +1,5 @@
 using CarbonFootprint.Application.Calculations;
+using CarbonFootprint.Application.Exports;
 using CarbonFootprint.Application.Governance;
 using CarbonFootprint.Application.Inventories;
 using CarbonFootprint.Application.Organizations;
@@ -41,6 +42,8 @@ public static class DependencyInjection
         services.AddScoped<IActivityData, ActivityDataService>();
         services.AddScoped<IOrganizationAdministration, OrganizationAdministrationService>();
         services.AddScoped<IProductCatalogue, ProductCatalogueService>();
+        services.AddScoped<IInventoryProjects, InventoryProjectService>();
+        services.AddScoped<IInventoryExport, InventoryExportService>();
         services.AddScoped<OrganizationOnboardingService>();
         services.AddScoped<OrganizationInvitationService>();
         services.Configure<AdministratorBootstrapOptions>(

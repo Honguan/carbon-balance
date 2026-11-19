@@ -100,9 +100,8 @@ public sealed class OptimisticConcurrencyTests
         var emailSender = new SmtpEmailSender(Microsoft.Extensions.Options.Options.Create(new MailOptions()), db, new Scope(organizationId),
             new EphemeralDataProtectionProvider(), mailPolicy, new HttpContextAccessor());
         var page = new WorkspaceModel(db, new Scope(organizationId), null!,
-            services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new InventorySnapshotReader(db),
-            new AllowedAuthorization(), null!, null!,
-            CalculationBuildProvenance.Create("concurrency-fixture", new string('a', 40)), null!, null!, InventoryServices.Workflow(db, new AllowedAuthorization(), new Scope(organizationId)), InventoryServices.Readiness(db), InventoryServices.Activities(db, new AllowedAuthorization(), new Scope(organizationId)), InventoryServices.Organization(db, new AllowedAuthorization(), new Scope(organizationId), emailSender, services.GetRequiredService<UserManager<ApplicationUser>>()), InventoryServices.Products(db, new AllowedAuthorization(), new Scope(organizationId)))
+            services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!,
+            new AllowedAuthorization(), null!, null!, null!, null!, InventoryServices.Workflow(db, new AllowedAuthorization(), new Scope(organizationId)), InventoryServices.Readiness(db), InventoryServices.Activities(db, new AllowedAuthorization(), new Scope(organizationId)), InventoryServices.Organization(db, new AllowedAuthorization(), new Scope(organizationId), emailSender, services.GetRequiredService<UserManager<ApplicationUser>>()), InventoryServices.Products(db, new AllowedAuthorization(), new Scope(organizationId)), InventoryServices.Inventories(db, new AllowedAuthorization(), new Scope(organizationId)), InventoryServices.Export(db, new AllowedAuthorization(), new InventorySnapshotReader(db), CalculationBuildProvenance.Create("concurrency-fixture", new string('a', 40))))
         {
             PageContext = new PageContext { HttpContext = http },
             TempData = new TempDataDictionary(http, new FixtureTempData())

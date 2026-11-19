@@ -1,3 +1,5 @@
+using CarbonFootprint.Application.Calculations;
+using CarbonFootprint.Application.Exports;
 using CarbonFootprint.Application.Governance;
 using CarbonFootprint.Application.Inventories;
 using CarbonFootprint.Application.Organizations;
@@ -6,6 +8,7 @@ using CarbonFootprint.Infrastructure.Identity;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using CarbonFootprint.Application.Readiness;
+using CarbonFootprint.Domain.Modules.Calculations;
 using CarbonFootprint.Infrastructure.Governance;
 using CarbonFootprint.Infrastructure.Persistence;
 using CarbonFootprint.Web.Security;
@@ -34,4 +37,11 @@ internal static class InventoryServices
 
     public static IProductCatalogue Products(CarbonFootprintDbContext db, IAuthorizationService authorization, IOrganizationScope scope) =>
         new ProductCatalogueService(db, new OperationAuthorizer(authorization), scope);
+
+    public static IInventoryProjects Inventories(CarbonFootprintDbContext db, IAuthorizationService authorization, IOrganizationScope scope) =>
+        new InventoryProjectService(db, new OperationAuthorizer(authorization), scope);
+
+    public static IInventoryExport Export(CarbonFootprintDbContext db, IAuthorizationService authorization,
+        IInventorySnapshotReader reader, CalculationBuildProvenance provenance) =>
+        new InventoryExportService(db, new OperationAuthorizer(authorization), reader, provenance);
 }

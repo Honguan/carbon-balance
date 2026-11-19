@@ -23,7 +23,8 @@ public sealed class CriticalAuditPathTests
             Assert.Contains("AddAudit(", body);
             Assert.True(body.IndexOf("AddAudit(", StringComparison.Ordinal) < saveIndexes.Min(), methods[index].Groups[1].Value);
         }
-        Assert.Contains("OnPostCreateInventoryAsync", mutations);
+        foreach (var critical in new[] { "OnPostCreatePcrAsync", "OnPostCreateFactorAsync", "OnPostSupersedeFactorAsync" })
+            Assert.Contains(critical, mutations);
 
         // Submit/review moved behind IInventoryWorkflow; the service must keep audit routing before persistence.
         var workflow = File.ReadAllText(Path.Combine(root, "src/CarbonFootprint.Infrastructure/Governance/InventoryWorkflowService.cs"));
@@ -32,7 +33,7 @@ public sealed class CriticalAuditPathTests
 
         // Extracted operations: every one that persists must append its audit before the first save.
         var persisting = new List<string>();
-        foreach (var service in new[] { "ActivityDataService", "OrganizationAdministrationService", "ProductCatalogueService" })
+        foreach (var service in new[] { "ActivityDataService", "OrganizationAdministrationService", "ProductCatalogueService", "InventoryProjectService" })
         {
             var serviceSource = File.ReadAllText(Path.Combine(root, $"src/CarbonFootprint.Infrastructure/Governance/{service}.cs"));
             foreach (var operation in serviceSource.Split("public async Task<OperationResult> ")[1..])
@@ -48,7 +49,8 @@ public sealed class CriticalAuditPathTests
             }
         }
         foreach (var critical in new[] { "SaveAsync", "RetireAsync", "AttachEvidenceAsync", "SaveMailSettingsAsync", "SendTestMailAsync",
-                     "RevokeInvitationAsync", "RevokeMemberAsync", "CreateFacilityAsync", "CreateProductAsync" })
+                     "RevokeInvitationAsync", "RevokeMemberAsync", "CreateFacilityAsync", "CreateProductAsync",
+                     "CreateAsync", "SetStageApplicabilityAsync" })
             Assert.Contains(critical, persisting);
     }
 
