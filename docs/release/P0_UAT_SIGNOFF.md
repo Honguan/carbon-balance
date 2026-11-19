@@ -60,7 +60,7 @@
 | PCR／rule set | 待填 | 待填 | Pending |
 | 公式／分配／情境 | 待填 | 待填 | Pending |
 | GWP／factor／unit catalogue | 待填 | 待填 | Pending |
-| 獨立 Golden reference suite | 待填 | 待填 | Pending |
+| 獨立 Golden reference suite | `golden-suite-v1`（[案例說明](../../tests/GoldenCases/README.md)）；簽核時填入所接受的案例 ID | `tests/GoldenCases/Cases/*.json`；簽核時記錄 commit 與各檔 SHA-256 | Pending |
 | 指定 run／archive 的外部查驗接受 | 待填 | 待填 | Pending |
 
 Expected outputs 不得從 production engine 回填；審查者必須能依獨立來源或參考計算重核。工程實作者不得代填外部接受或簽名。

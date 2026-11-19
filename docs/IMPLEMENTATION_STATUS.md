@@ -11,7 +11,7 @@
 | 2 | 身分／租戶修補已合併；目標版本仍須重驗，SMTP #47 待完成 | Identity、長密語／常見密碼拒絕、recovery、TOTP／recovery code、session、auth throttling、組織與角色治理 |
 | 3 | 部分實作；完整 PCR 規則 #21／全球係數 #27 未整合 | 版本化單位／alias／複合單位、PCR／係數治理、staging 匯入 |
 | 4 | 部分實作；allocation #24、transport #26、evidence #28／#58 待完成 | 五階段活動、適用性、供應商／情境、估算、基本資料品質、Evidence SHA-256／ClamAV／S3 |
-| 5 | 部分實作；品質／不確定性 #23、公式 #25、獨立 reference suite #57 待完成 | decimal、受控換算、基本分配、canonical manifest/hash、不可變 run、lineage/diff |
+| 5 | 部分實作；品質／不確定性 #23、公式 #25 待完成；#57 工程參考套件 `golden-suite-v1` 已建立，待領域簽核 | decimal、受控換算、基本分配、canonical manifest/hash、不可變 run、lineage/diff |
 | 6 | 部分實作；readiness #22、查驗工作流 #29、封存包 #30、稽核 #54 待完成 | 基本送審／補正／核准、角色限制、CSV、Evidence index、manifest、HTML 報告與 audit |
 | 7 | 係數 staging 已實作；完整 inventory bulk import #60、歷史案例領域對帳待完成 | Legacy raw／staging／validate／conflict、checksum、防重、CLI、映射與差異分類 |
 | 8 | 部分工程驗證；readiness #56、安全 #58、發布 #59、正式環境與外部 UAT 閘門未完成 | threat model、CI／SBOM、環境範例、runbooks、遷移／備份還原、效能與 WCAG 基礎稽核 |

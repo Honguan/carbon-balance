@@ -1,0 +1,283 @@
+{
+  "suiteVersion": "golden-suite-v1",
+  "description": "成功計算的參考案例。預期值為人工逐式手算（見 derivation），不得以引擎輸出覆寫；比較規則為 decimal 完全相等（容差 0）。",
+  "versions": { "pcr": "pcr-golden-fixture-1", "ruleSet": "pcr-formulas-v1", "gwp": "gwp-ar6-100y-fixture", "unitCatalogue": "units-p0-v2" },
+  "cases": [
+    {
+      "id": "GC-001",
+      "title": "單一係數、單一階段",
+      "covers": ["single-factor", "not-applicable-stage"],
+      "applicableStages": ["RawMaterial"],
+      "factors": [{ "key": "steel", "version": 1, "value": 1.8, "denominator": "kg", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a1", "stage": "RawMaterial", "kind": "Material", "factor": "steel", "rawValue": 250, "rawUnit": "kg", "canonicalUnit": "kg" }],
+      "derivation": "250 kg × 1.8 kgCO2e/kg × 1 = 450",
+      "expected": {
+        "lines": [{ "activity": "a1", "canonicalValue": 250, "emissions": 450 }],
+        "stages": { "RawMaterial": 450, "Manufacturing": 0, "Distribution": 0, "Use": 0, "EndOfLife": 0 },
+        "productTotal": 450,
+        "warnings": ["STAGE_NOT_APPLICABLE", "STAGE_NOT_APPLICABLE", "STAGE_NOT_APPLICABLE", "STAGE_NOT_APPLICABLE"],
+        "readinessBlocking": []
+      }
+    },
+    {
+      "id": "GC-002",
+      "title": "多階段，配送與使用階段不適用；資料品質統計",
+      "covers": ["multi-stage", "not-applicable-stage", "data-quality"],
+      "applicableStages": ["RawMaterial", "Manufacturing", "EndOfLife"],
+      "factors": [
+        { "key": "resin", "version": 1, "value": 2.4, "denominator": "kg", "datasetVersion": "ds-2026" },
+        { "key": "grid", "version": 1, "value": 0.494, "denominator": "kWh", "datasetVersion": "ds-2026" },
+        { "key": "scrap", "version": 1, "value": 0.35, "denominator": "kg", "datasetVersion": "ds-2026" },
+        { "key": "landfill", "version": 1, "value": 0.12, "denominator": "kg", "datasetVersion": "ds-2026" }
+      ],
+      "activities": [
+        { "key": "m1", "stage": "RawMaterial", "kind": "Material", "factor": "resin", "rawValue": 12.5, "rawUnit": "kg", "canonicalUnit": "kg" },
+        { "key": "e1", "stage": "Manufacturing", "kind": "Energy", "factor": "grid", "rawValue": 40, "rawUnit": "kWh", "canonicalUnit": "kWh" },
+        { "key": "w1", "stage": "Manufacturing", "kind": "ManufacturingWaste", "factor": "scrap", "rawValue": 0.8, "rawUnit": "kg", "canonicalUnit": "kg", "dataQuality": "secondary" },
+        { "key": "t1", "stage": "EndOfLife", "kind": "EndOfLifeTreatment", "factor": "landfill", "rawValue": 12.5, "rawUnit": "kg", "canonicalUnit": "kg" }
+      ],
+      "derivation": "12.5×2.4=30；40×0.494=19.76；0.8×0.35=0.28；12.5×0.12=1.5；製造=19.76+0.28=20.04；總計=30+20.04+1.5=51.54",
+      "expected": {
+        "lines": [
+          { "activity": "m1", "canonicalValue": 12.5, "emissions": 30 },
+          { "activity": "e1", "canonicalValue": 40, "emissions": 19.76 },
+          { "activity": "w1", "canonicalValue": 0.8, "emissions": 0.28 },
+          { "activity": "t1", "canonicalValue": 12.5, "emissions": 1.5 }
+        ],
+        "stages": { "RawMaterial": 30, "Manufacturing": 20.04, "Distribution": 0, "Use": 0, "EndOfLife": 1.5 },
+        "productTotal": 51.54,
+        "warnings": ["STAGE_NOT_APPLICABLE", "STAGE_NOT_APPLICABLE"],
+        "dataQuality": { "primary": 3, "secondary": 1 }
+      }
+    },
+    {
+      "id": "GC-003",
+      "title": "單位換算：g、tonne、別名換算為 canonical 單位",
+      "covers": ["unit-conversion"],
+      "applicableStages": ["RawMaterial", "Manufacturing"],
+      "factors": [
+        { "key": "alu", "version": 1, "value": 3.2, "denominator": "kg", "datasetVersion": "ds-2026" },
+        { "key": "sand", "version": 1, "value": 0.004, "denominator": "kg", "datasetVersion": "ds-2026" },
+        { "key": "grid", "version": 1, "value": 0.5, "denominator": "kWh", "datasetVersion": "ds-2026" }
+      ],
+      "activities": [
+        { "key": "g1", "stage": "RawMaterial", "kind": "Material", "factor": "alu", "rawValue": 2500, "rawUnit": "g", "canonicalUnit": "kg" },
+        { "key": "g2", "stage": "RawMaterial", "kind": "Material", "factor": "alu", "rawValue": 1, "rawUnit": "grams", "canonicalUnit": "kg" },
+        { "key": "t1", "stage": "RawMaterial", "kind": "Material", "factor": "sand", "rawValue": 0.75, "rawUnit": "tonne", "canonicalUnit": "kg" },
+        { "key": "e1", "stage": "Manufacturing", "kind": "Energy", "factor": "grid", "rawValue": 1.5, "rawUnit": "kilowatt-hour", "canonicalUnit": "kWh" }
+      ],
+      "derivation": "2500 g×0.001=2.5 kg，×3.2=8；1 g=0.001 kg，×3.2=0.0032；0.75 t×1000=750 kg，×0.004=3；1.5 kWh×0.5=0.75；原料=11.0032；總計=11.7532",
+      "expected": {
+        "lines": [
+          { "activity": "g1", "canonicalValue": 2.5, "emissions": 8 },
+          { "activity": "g2", "canonicalValue": 0.001, "emissions": 0.0032 },
+          { "activity": "t1", "canonicalValue": 750, "emissions": 3 },
+          { "activity": "e1", "canonicalValue": 1.5, "emissions": 0.75 }
+        ],
+        "stages": { "RawMaterial": 11.0032, "Manufacturing": 0.75, "Distribution": 0, "Use": 0, "EndOfLife": 0 },
+        "productTotal": 11.7532
+      }
+    },
+    {
+      "id": "GC-004",
+      "title": "邊界日期：活動期間與係數有效期首尾日皆含",
+      "covers": ["boundary-date"],
+      "applicableStages": ["RawMaterial"],
+      "factors": [
+        { "key": "year", "version": 1, "value": 1.25, "denominator": "kg", "datasetVersion": "ds-2026", "validFrom": "2026-01-01", "validTo": "2026-12-31" },
+        { "key": "day", "version": 1, "value": 0.5, "denominator": "kg", "datasetVersion": "ds-2026", "validFrom": "2026-01-01", "validTo": "2026-01-01" }
+      ],
+      "activities": [
+        { "key": "last", "stage": "RawMaterial", "kind": "Material", "factor": "year", "rawValue": 1, "rawUnit": "kg", "canonicalUnit": "kg", "periodStart": "2026-12-31", "periodEnd": "2026-12-31" },
+        { "key": "first", "stage": "RawMaterial", "kind": "Material", "factor": "day", "rawValue": 2, "rawUnit": "kg", "canonicalUnit": "kg", "periodStart": "2026-01-01", "periodEnd": "2026-01-01" }
+      ],
+      "derivation": "1×1.25=1.25；2×0.5=1；總計=2.25",
+      "expected": {
+        "lines": [
+          { "activity": "last", "canonicalValue": 1, "emissions": 1.25 },
+          { "activity": "first", "canonicalValue": 2, "emissions": 1 }
+        ],
+        "stages": { "RawMaterial": 2.25, "Manufacturing": 0, "Distribution": 0, "Use": 0, "EndOfLife": 0 },
+        "productTotal": 2.25
+      }
+    },
+    {
+      "id": "GC-005",
+      "title": "共用資源與共同產品分配比例",
+      "covers": ["allocation"],
+      "applicableStages": ["RawMaterial", "Manufacturing"],
+      "factors": [
+        { "key": "grid", "version": 1, "value": 0.5, "denominator": "kWh", "datasetVersion": "ds-2026" },
+        { "key": "pulp", "version": 1, "value": 1.5, "denominator": "kg", "datasetVersion": "ds-2026" },
+        { "key": "fibre", "version": 1, "value": 2, "denominator": "kg", "datasetVersion": "ds-2026" }
+      ],
+      "activities": [
+        { "key": "shared", "stage": "Manufacturing", "kind": "Energy", "factor": "grid", "rawValue": 1000, "rawUnit": "kWh", "canonicalUnit": "kWh", "allocation": 0.25 },
+        { "key": "co1", "stage": "RawMaterial", "kind": "Material", "factor": "pulp", "rawValue": 40, "rawUnit": "kg", "canonicalUnit": "kg", "allocation": 0.6 },
+        { "key": "co2", "stage": "RawMaterial", "kind": "Material", "factor": "fibre", "rawValue": 30, "rawUnit": "kg", "canonicalUnit": "kg", "allocation": 0.333333333333 }
+      ],
+      "derivation": "1000×0.5×0.25=125；40×1.5×0.6=36；30×2×0.333333333333=19.99999999998；原料=55.99999999998；總計=180.99999999998",
+      "expected": {
+        "lines": [
+          { "activity": "shared", "canonicalValue": 1000, "emissions": 125 },
+          { "activity": "co1", "canonicalValue": 40, "emissions": 36 },
+          { "activity": "co2", "canonicalValue": 30, "emissions": 19.99999999998 }
+        ],
+        "stages": { "RawMaterial": 55.99999999998, "Manufacturing": 125, "Distribution": 0, "Use": 0, "EndOfLife": 0 },
+        "productTotal": 180.99999999998
+      }
+    },
+    {
+      "id": "GC-006",
+      "title": "多段運輸：每段為獨立運輸活動（距離 × 重量 ÷ 1000）",
+      "covers": ["multi-leg-transport"],
+      "applicableStages": ["RawMaterial", "Distribution"],
+      "factors": [
+        { "key": "truck", "version": 1, "value": 0.1, "denominator": "tonne-km", "datasetVersion": "ds-2026" },
+        { "key": "lorry", "version": 1, "value": 0.12, "denominator": "tonne-km", "datasetVersion": "ds-2026" },
+        { "key": "van", "version": 1, "value": 0.25, "denominator": "tonne-km", "datasetVersion": "ds-2026" }
+      ],
+      "activities": [
+        { "key": "inbound", "stage": "RawMaterial", "kind": "MaterialTransport", "factor": "truck", "distanceKm": 80, "weightKg": 2000, "canonicalUnit": "tonne-km" },
+        { "key": "leg1", "stage": "Distribution", "kind": "DistributionTransport", "factor": "lorry", "distanceKm": 120, "weightKg": 500, "canonicalUnit": "tonne-km" },
+        { "key": "leg2", "stage": "Distribution", "kind": "DistributionTransport", "factor": "van", "distanceKm": 35, "weightKg": 500, "canonicalUnit": "tonne-km" }
+      ],
+      "derivation": "80×2000÷1000=160 tkm，×0.1=16；120×500÷1000=60，×0.12=7.2；35×500÷1000=17.5，×0.25=4.375；配送=11.575；總計=27.575",
+      "expected": {
+        "lines": [
+          { "activity": "inbound", "canonicalValue": 160, "emissions": 16 },
+          { "activity": "leg1", "canonicalValue": 60, "emissions": 7.2 },
+          { "activity": "leg2", "canonicalValue": 17.5, "emissions": 4.375 }
+        ],
+        "stages": { "RawMaterial": 16, "Manufacturing": 0, "Distribution": 11.575, "Use": 0, "EndOfLife": 0 },
+        "productTotal": 27.575
+      }
+    },
+    {
+      "id": "GC-007",
+      "title": "使用階段情境：壽命 × 頻率 × 每次消耗",
+      "covers": ["use-phase"],
+      "applicableStages": ["Use"],
+      "factors": [
+        { "key": "grid", "version": 1, "value": 0.494, "denominator": "kWh", "datasetVersion": "ds-2026" },
+        { "key": "filter", "version": 1, "value": 0.8, "denominator": "kg", "datasetVersion": "ds-2026" }
+      ],
+      "activities": [
+        { "key": "power", "stage": "Use", "kind": "UseEnergy", "factor": "grid", "lifetime": 5, "frequency": 365, "consumptionPerUse": 0.02, "canonicalUnit": "kWh" },
+        { "key": "consumable", "stage": "Use", "kind": "UseConsumable", "factor": "filter", "lifetime": 5, "frequency": 12, "consumptionPerUse": 0.1, "canonicalUnit": "kg" }
+      ],
+      "derivation": "5×365×0.02=36.5 kWh，×0.494=18.031；5×12×0.1=6 kg，×0.8=4.8；使用=22.831",
+      "expected": {
+        "lines": [
+          { "activity": "power", "canonicalValue": 36.5, "emissions": 18.031 },
+          { "activity": "consumable", "canonicalValue": 6, "emissions": 4.8 }
+        ],
+        "stages": { "RawMaterial": 0, "Manufacturing": 0, "Distribution": 0, "Use": 22.831, "EndOfLife": 0 },
+        "productTotal": 22.831
+      }
+    },
+    {
+      "id": "GC-008",
+      "title": "廢棄階段：處理與清運運輸",
+      "covers": ["end-of-life"],
+      "applicableStages": ["EndOfLife"],
+      "factors": [
+        { "key": "incinerate", "version": 1, "value": 0.45, "denominator": "kg", "datasetVersion": "ds-2026" },
+        { "key": "collect", "version": 1, "value": 0.15, "denominator": "tonne-km", "datasetVersion": "ds-2026" }
+      ],
+      "activities": [
+        { "key": "treat", "stage": "EndOfLife", "kind": "EndOfLifeTreatment", "factor": "incinerate", "rawValue": 1.2, "rawUnit": "kg", "canonicalUnit": "kg" },
+        { "key": "haul", "stage": "EndOfLife", "kind": "EndOfLifeTransport", "factor": "collect", "distanceKm": 50, "weightKg": 1.2, "canonicalUnit": "tonne-km" }
+      ],
+      "derivation": "1.2×0.45=0.54；50×1.2÷1000=0.06 tkm，×0.15=0.009；廢棄=0.549",
+      "expected": {
+        "lines": [
+          { "activity": "treat", "canonicalValue": 1.2, "emissions": 0.54 },
+          { "activity": "haul", "canonicalValue": 0.06, "emissions": 0.009 }
+        ],
+        "stages": { "RawMaterial": 0, "Manufacturing": 0, "Distribution": 0, "Use": 0, "EndOfLife": 0.549 },
+        "productTotal": 0.549
+      }
+    },
+    {
+      "id": "GC-009",
+      "title": "精度：零值、極小係數、大數值；引擎不捨入",
+      "covers": ["zero-value", "large-decimal", "rounding-precision", "cutoff"],
+      "applicableStages": ["RawMaterial", "Manufacturing"],
+      "project": { "cutoffThresholdPercent": 1, "roundingDecimalPlaces": 3, "exclusions": "低於 1% 截斷之包材" },
+      "factors": [
+        { "key": "triple", "version": 1, "value": 3, "denominator": "kg", "datasetVersion": "ds-2026" },
+        { "key": "double", "version": 1, "value": 2, "denominator": "kg", "datasetVersion": "ds-2026" },
+        { "key": "bulk", "version": 1, "value": 2.5, "denominator": "kg", "datasetVersion": "ds-2026" },
+        { "key": "tiny", "version": 1, "value": 0.000000000000001, "denominator": "kWh", "datasetVersion": "ds-2026" }
+      ],
+      "activities": [
+        { "key": "third", "stage": "RawMaterial", "kind": "Material", "factor": "triple", "rawValue": 0.333333333333, "rawUnit": "kg", "canonicalUnit": "kg" },
+        { "key": "zero", "stage": "RawMaterial", "kind": "Material", "factor": "double", "rawValue": 0, "rawUnit": "kg", "canonicalUnit": "kg" },
+        { "key": "large", "stage": "RawMaterial", "kind": "Material", "factor": "bulk", "rawValue": 999999999999.999, "rawUnit": "kg", "canonicalUnit": "kg" },
+        { "key": "small", "stage": "Manufacturing", "kind": "Energy", "factor": "tiny", "rawValue": 1000000, "rawUnit": "kWh", "canonicalUnit": "kWh" }
+      ],
+      "derivation": "0.333333333333×3=0.999999999999；0×2=0；999999999999.999×2.5=2499999999999.9975；1000000×1e-15=0.000000001；原料=2500000000000.997499999999；總計=2500000000000.997500000999（捨入僅於報表輸出，不影響計算值）",
+      "expected": {
+        "lines": [
+          { "activity": "third", "canonicalValue": 0.333333333333, "emissions": 0.999999999999 },
+          { "activity": "zero", "canonicalValue": 0, "emissions": 0 },
+          { "activity": "large", "canonicalValue": 999999999999.999, "emissions": 2499999999999.9975 },
+          { "activity": "small", "canonicalValue": 1000000, "emissions": 0.000000001 }
+        ],
+        "stages": { "RawMaterial": 2500000000000.997499999999, "Manufacturing": 0.000000001, "Distribution": 0, "Use": 0, "EndOfLife": 0 },
+        "productTotal": 2500000000000.997500000999,
+        "warnings": ["INVENTORY_EXCLUSIONS", "STAGE_NOT_APPLICABLE", "STAGE_NOT_APPLICABLE", "STAGE_NOT_APPLICABLE"]
+      }
+    },
+    {
+      "id": "GC-010A",
+      "title": "係數改版前（v1）",
+      "covers": ["supersession"],
+      "applicableStages": ["Manufacturing"],
+      "factors": [{ "key": "grid", "version": 1, "value": 0.5, "denominator": "kWh", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "e1", "stage": "Manufacturing", "kind": "Energy", "factor": "grid", "rawValue": 200, "rawUnit": "kWh", "canonicalUnit": "kWh" }],
+      "derivation": "200×0.5=100",
+      "expected": {
+        "lines": [{ "activity": "e1", "canonicalValue": 200, "emissions": 100 }],
+        "stages": { "RawMaterial": 0, "Manufacturing": 100, "Distribution": 0, "Use": 0, "EndOfLife": 0 },
+        "productTotal": 100
+      }
+    },
+    {
+      "id": "GC-010B",
+      "title": "係數改版後（v2 取代 v1）",
+      "covers": ["supersession"],
+      "applicableStages": ["Manufacturing"],
+      "factors": [{ "key": "grid", "version": 2, "value": 0.42, "denominator": "kWh", "datasetVersion": "ds-2027" }],
+      "activities": [{ "key": "e1", "stage": "Manufacturing", "kind": "Energy", "factor": "grid", "rawValue": 200, "rawUnit": "kWh", "canonicalUnit": "kWh" }],
+      "derivation": "200×0.42=84",
+      "expected": {
+        "lines": [{ "activity": "e1", "canonicalValue": 200, "emissions": 84 }],
+        "stages": { "RawMaterial": 0, "Manufacturing": 84, "Distribution": 0, "Use": 0, "EndOfLife": 0 },
+        "productTotal": 84
+      }
+    },
+    {
+      "id": "GC-012",
+      "title": "可計算但送審就緒檢查阻擋：缺佐證、佐證未通過掃描",
+      "covers": ["readiness"],
+      "applicableStages": ["RawMaterial"],
+      "factors": [{ "key": "steel", "version": 1, "value": 1, "denominator": "kg", "datasetVersion": "ds-2026" }],
+      "activities": [
+        { "key": "missing", "stage": "RawMaterial", "kind": "Material", "factor": "steel", "rawValue": 10, "rawUnit": "kg", "canonicalUnit": "kg", "evidence": "missing" },
+        { "key": "unscanned", "stage": "RawMaterial", "kind": "Material", "factor": "steel", "rawValue": 5, "rawUnit": "kg", "canonicalUnit": "kg", "evidence": "pending-scan" }
+      ],
+      "derivation": "10×1=10；5×1=5；總計=15；佐證問題不改變計算值，只阻擋送審",
+      "expected": {
+        "lines": [
+          { "activity": "missing", "canonicalValue": 10, "emissions": 10 },
+          { "activity": "unscanned", "canonicalValue": 5, "emissions": 5 }
+        ],
+        "stages": { "RawMaterial": 15, "Manufacturing": 0, "Distribution": 0, "Use": 0, "EndOfLife": 0 },
+        "productTotal": 15,
+        "readinessBlocking": ["RDY-EVIDENCE-INTEGRITY", "RDY-EVIDENCE-MISSING"]
+      }
+    }
+  ]
+}
