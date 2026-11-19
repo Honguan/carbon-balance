@@ -115,48 +115,99 @@ public sealed class InventoryProjectServiceTests
         seed.Products.Add(new ProductRecord { Id = productId, OrganizationId = organizationId, Name = "Inventory", CategoryCode = "ELECTRONICS-1" });
         seed.ProductVersions.Add(new ProductVersionRecord
         {
-            Id = productVersionId, OrganizationId = organizationId, ProductId = productId, VersionNumber = 1, NameZhTw = "Inventory"
+            Id = productVersionId,
+            OrganizationId = organizationId,
+            ProductId = productId,
+            VersionNumber = 1,
+            NameZhTw = "Inventory"
         });
         seed.PcrVersions.Add(new PcrVersionRecord
         {
-            Id = pcrId, OrganizationId = organizationId, RuleSetId = Guid.NewGuid(), RegistrationNumber = $"PCR-{pcrId:N}", VersionNumber = 1,
-            Title = "Inventory PCR", PublicationStatus = "Draft", SourceReference = "https://example.test/pcr"
+            Id = pcrId,
+            OrganizationId = organizationId,
+            RuleSetId = Guid.NewGuid(),
+            RegistrationNumber = $"PCR-{pcrId:N}",
+            VersionNumber = 1,
+            Title = "Inventory PCR",
+            PublicationStatus = "Draft",
+            SourceReference = "https://example.test/pcr"
         });
         seed.PcrStageRules.Add(new PcrStageRuleRecord
         {
-            Id = Guid.NewGuid(), OrganizationId = organizationId, PcrVersionId = pcrId,
-            LifecycleStage = (int)LifecycleStage.RawMaterial, Requirement = "Mandatory"
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            PcrVersionId = pcrId,
+            LifecycleStage = (int)LifecycleStage.RawMaterial,
+            Requirement = "Mandatory"
         });
         seed.InventoryProjectVersions.Add(new InventoryProjectVersionRecord
         {
-            Id = projectId, OrganizationId = organizationId, ProductVersionId = productVersionId, VersionNumber = 1,
-            PeriodStart = new DateOnly(2026, 1, 1), PeriodEnd = new DateOnly(2026, 12, 31),
-            FunctionalUnit = "1 piece", PcrVersion = "none", WorkflowStatus = status, PcrVersionId = pcrId
+            Id = projectId,
+            OrganizationId = organizationId,
+            ProductVersionId = productVersionId,
+            VersionNumber = 1,
+            PeriodStart = new DateOnly(2026, 1, 1),
+            PeriodEnd = new DateOnly(2026, 12, 31),
+            FunctionalUnit = "1 piece",
+            PcrVersion = "none",
+            WorkflowStatus = status,
+            PcrVersionId = pcrId
         });
         seed.LifecycleStageDeclarations.AddRange(stageIds.Select(pair => new LifecycleStageDeclarationRecord
         {
-            Id = pair.Value, OrganizationId = organizationId, InventoryProjectVersionId = projectId, LifecycleStage = (int)pair.Key, IsApplicable = true
+            Id = pair.Value,
+            OrganizationId = organizationId,
+            InventoryProjectVersionId = projectId,
+            LifecycleStage = (int)pair.Key,
+            IsApplicable = true
         }));
         if (withActivityOnManufacturing)
         {
             var factorId = Guid.NewGuid();
             seed.EmissionFactorVersions.Add(new EmissionFactorVersionRecord
             {
-                Id = factorId, OrganizationId = organizationId, FactorId = Guid.NewGuid(), VersionNumber = 1, Name = "Energy", Value = 1m,
-                NumeratorUnitCode = "kgCO2e", DenominatorUnitCode = "kWh", Geography = "TW", ValidFrom = new DateOnly(2026, 1, 1),
-                PublicationStatus = "Published", SourceDatasetVersion = "v1", LicenseCode = "CC0", SourceType = "government-database",
-                SourceName = "MOENV", SourceReference = "https://example.test/factor", DatasetName = "dataset",
-                OriginalDocumentName = "factor.csv", OriginalDocumentSha256 = new string('a', 64), Applicability = "global",
+                Id = factorId,
+                OrganizationId = organizationId,
+                FactorId = Guid.NewGuid(),
+                VersionNumber = 1,
+                Name = "Energy",
+                Value = 1m,
+                NumeratorUnitCode = "kgCO2e",
+                DenominatorUnitCode = "kWh",
+                Geography = "TW",
+                ValidFrom = new DateOnly(2026, 1, 1),
+                PublicationStatus = "Published",
+                SourceDatasetVersion = "v1",
+                LicenseCode = "CC0",
+                SourceType = "government-database",
+                SourceName = "MOENV",
+                SourceReference = "https://example.test/factor",
+                DatasetName = "dataset",
+                OriginalDocumentName = "factor.csv",
+                OriginalDocumentSha256 = new string('a', 64),
+                Applicability = "global",
                 ReviewStatus = "Approved"
             });
             seed.ActivityData.Add(new ActivityDataRecord
             {
-                Id = Guid.NewGuid(), OrganizationId = organizationId, InventoryProjectVersionId = projectId,
-                LifecycleStage = (int)LifecycleStage.Manufacturing, Name = "Electricity", ActivityKind = "Energy",
-                RawValue = 1m, RawUnitCode = "kWh", CanonicalValue = 1m, CanonicalUnitCode = "kWh",
-                AmountFormulaId = CarbonFootprint.Domain.Modules.Calculations.ActivityAmountFormula.DirectFormulaId, FormulaInputsJson = "{}",
-                ConversionRuleVersion = "units-p0-v2", PeriodStart = new DateOnly(2026, 1, 1), PeriodEnd = new DateOnly(2026, 12, 31),
-                FactorVersionId = factorId, AllocationFactor = 1m, DataQuality = "measured"
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationId,
+                InventoryProjectVersionId = projectId,
+                LifecycleStage = (int)LifecycleStage.Manufacturing,
+                Name = "Electricity",
+                ActivityKind = "Energy",
+                RawValue = 1m,
+                RawUnitCode = "kWh",
+                CanonicalValue = 1m,
+                CanonicalUnitCode = "kWh",
+                AmountFormulaId = CarbonFootprint.Domain.Modules.Calculations.ActivityAmountFormula.DirectFormulaId,
+                FormulaInputsJson = "{}",
+                ConversionRuleVersion = "units-p0-v2",
+                PeriodStart = new DateOnly(2026, 1, 1),
+                PeriodEnd = new DateOnly(2026, 12, 31),
+                FactorVersionId = factorId,
+                AllocationFactor = 1m,
+                DataQuality = "measured"
             });
         }
         await seed.SaveChangesAsync();

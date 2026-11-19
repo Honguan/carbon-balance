@@ -97,7 +97,11 @@ public sealed class WorkspaceQueryScopeTests(ITestOutputHelper output)
             db.Products.Add(new ProductRecord { Id = productId, OrganizationId = organizationId, Name = "Scope" });
             db.ProductVersions.Add(new ProductVersionRecord
             {
-                Id = productVersionId, OrganizationId = organizationId, ProductId = productId, VersionNumber = 1, NameZhTw = "Scope"
+                Id = productVersionId,
+                OrganizationId = organizationId,
+                ProductId = productId,
+                VersionNumber = 1,
+                NameZhTw = "Scope"
             });
             await db.SaveChangesAsync();
         }
@@ -113,12 +117,26 @@ public sealed class WorkspaceQueryScopeTests(ITestOutputHelper output)
                 factorIds.Add(id);
                 db.EmissionFactorVersions.Add(new EmissionFactorVersionRecord
                 {
-                    Id = id, OrganizationId = organizationId, FactorId = Guid.NewGuid(), VersionNumber = 1,
-                    Name = index == 4321 ? "Needle_% factor" : $"Factor {index:D5}", Value = 1m,
-                    NumeratorUnitCode = "kgCO2e", DenominatorUnitCode = "kg", Geography = "TW", ValidFrom = new DateOnly(2026, 1, 1),
-                    PublicationStatus = "Published", SourceDatasetVersion = "v1", LicenseCode = "CC0", SourceType = "government-database",
-                    SourceName = "MOENV", SourceReference = "https://example.test/factor", DatasetName = "dataset",
-                    OriginalDocumentName = "factor.csv", OriginalDocumentSha256 = new string('a', 64), Applicability = "global",
+                    Id = id,
+                    OrganizationId = organizationId,
+                    FactorId = Guid.NewGuid(),
+                    VersionNumber = 1,
+                    Name = index == 4321 ? "Needle_% factor" : $"Factor {index:D5}",
+                    Value = 1m,
+                    NumeratorUnitCode = "kgCO2e",
+                    DenominatorUnitCode = "kg",
+                    Geography = "TW",
+                    ValidFrom = new DateOnly(2026, 1, 1),
+                    PublicationStatus = "Published",
+                    SourceDatasetVersion = "v1",
+                    LicenseCode = "CC0",
+                    SourceType = "government-database",
+                    SourceName = "MOENV",
+                    SourceReference = "https://example.test/factor",
+                    DatasetName = "dataset",
+                    OriginalDocumentName = "factor.csv",
+                    OriginalDocumentSha256 = new string('a', 64),
+                    Applicability = "global",
                     ReviewStatus = "Approved"
                 });
             }
@@ -134,30 +152,56 @@ public sealed class WorkspaceQueryScopeTests(ITestOutputHelper output)
             projectIds.Add(projectId);
             db.InventoryProjectVersions.Add(new InventoryProjectVersionRecord
             {
-                Id = projectId, OrganizationId = organizationId, ProductVersionId = productVersionId, VersionNumber = projectIndex + 1,
-                PeriodStart = new DateOnly(2026, 1, 1), PeriodEnd = new DateOnly(2026, 12, 31), FunctionalUnit = "1 kg product",
-                PcrVersion = "none", WorkflowStatus = "Draft", CreatedAt = DateTimeOffset.UtcNow.AddSeconds(projectIndex)
+                Id = projectId,
+                OrganizationId = organizationId,
+                ProductVersionId = productVersionId,
+                VersionNumber = projectIndex + 1,
+                PeriodStart = new DateOnly(2026, 1, 1),
+                PeriodEnd = new DateOnly(2026, 12, 31),
+                FunctionalUnit = "1 kg product",
+                PcrVersion = "none",
+                WorkflowStatus = "Draft",
+                CreatedAt = DateTimeOffset.UtcNow.AddSeconds(projectIndex)
             });
             for (var index = 0; index < ActivitiesPerProject; index++)
             {
                 var activityId = Guid.NewGuid();
                 db.ActivityData.Add(new ActivityDataRecord
                 {
-                    Id = activityId, OrganizationId = organizationId, InventoryProjectVersionId = projectId,
-                    LifecycleStage = (int)LifecycleStage.RawMaterial, Name = $"Material {index:D3}", ActivityKind = "Material",
-                    RawValue = 1m, RawUnitCode = "kg", CanonicalValue = 1m, CanonicalUnitCode = "kg",
-                    AmountFormulaId = ActivityAmountFormula.DirectFormulaId, FormulaInputsJson = "{}", ConversionRuleVersion = "units-p0-v2",
-                    PeriodStart = new DateOnly(2026, 1, 1), PeriodEnd = new DateOnly(2026, 12, 31),
+                    Id = activityId,
+                    OrganizationId = organizationId,
+                    InventoryProjectVersionId = projectId,
+                    LifecycleStage = (int)LifecycleStage.RawMaterial,
+                    Name = $"Material {index:D3}",
+                    ActivityKind = "Material",
+                    RawValue = 1m,
+                    RawUnitCode = "kg",
+                    CanonicalValue = 1m,
+                    CanonicalUnitCode = "kg",
+                    AmountFormulaId = ActivityAmountFormula.DirectFormulaId,
+                    FormulaInputsJson = "{}",
+                    ConversionRuleVersion = "units-p0-v2",
+                    PeriodStart = new DateOnly(2026, 1, 1),
+                    PeriodEnd = new DateOnly(2026, 12, 31),
                     FactorVersionId = factorIds[(projectIndex * ActivitiesPerProject + index) % factorIds.Count],
-                    AllocationFactor = 1m, EvidenceSha256 = new string('b', 64), DataQuality = "measured"
+                    AllocationFactor = 1m,
+                    EvidenceSha256 = new string('b', 64),
+                    DataQuality = "measured"
                 });
                 if (index % 4 == 0)
                 {
                     db.EvidenceFiles.Add(new EvidenceFileRecord
                     {
-                        Id = Guid.NewGuid(), OrganizationId = organizationId, ActivityDataId = activityId, ObjectKey = $"scope/{activityId:N}",
-                        OriginalFileName = "evidence.pdf", ContentType = "application/pdf", SizeBytes = 1, Sha256 = new string('b', 64),
-                        ScanStatus = "Clean", CreatedAt = DateTimeOffset.UtcNow
+                        Id = Guid.NewGuid(),
+                        OrganizationId = organizationId,
+                        ActivityDataId = activityId,
+                        ObjectKey = $"scope/{activityId:N}",
+                        OriginalFileName = "evidence.pdf",
+                        ContentType = "application/pdf",
+                        SizeBytes = 1,
+                        Sha256 = new string('b', 64),
+                        ScanStatus = "Clean",
+                        CreatedAt = DateTimeOffset.UtcNow
                     });
                 }
             }
@@ -186,7 +230,11 @@ public sealed class WorkspaceQueryScopeTests(ITestOutputHelper output)
         {
             PageContext = new PageContext { HttpContext = http },
             TempData = new TempDataDictionary(http, new NoTempData()),
-            Section = section, Stage = stage, ProjectVersionId = projectId, FactorPage = factorPage, FactorQuery = factorQuery
+            Section = section,
+            Stage = stage,
+            ProjectVersionId = projectId,
+            FactorPage = factorPage,
+            FactorQuery = factorQuery
         };
         await page.OnGetAsync(default); // warm-up compiles the queries so the measured run is steady-state
         counter.Reset();

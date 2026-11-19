@@ -112,9 +112,17 @@ public sealed class OrganizationAdministrationService(
         {
             settings = new OrganizationMailSettingsRecord
             {
-                Id = Guid.NewGuid(), OrganizationId = OrganizationId, Host = host, Port = input.Port, EnableSsl = input.EnableSsl,
-                Username = username, EncryptedPassword = string.IsNullOrWhiteSpace(password) ? string.Empty : _passwordProtector.Protect(password),
-                FromAddress = fromAddress, FromName = fromName, UpdatedAt = DateTimeOffset.UtcNow, UpdatedBy = context.ActorId
+                Id = Guid.NewGuid(),
+                OrganizationId = OrganizationId,
+                Host = host,
+                Port = input.Port,
+                EnableSsl = input.EnableSsl,
+                Username = username,
+                EncryptedPassword = string.IsNullOrWhiteSpace(password) ? string.Empty : _passwordProtector.Protect(password),
+                FromAddress = fromAddress,
+                FromName = fromName,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                UpdatedBy = context.ActorId
             };
             db.OrganizationMailSettings.Add(settings);
         }

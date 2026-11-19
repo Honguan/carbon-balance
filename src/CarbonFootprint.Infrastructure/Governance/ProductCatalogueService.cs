@@ -24,7 +24,11 @@ public sealed class ProductCatalogueService(CarbonFootprintDbContext db, IOperat
         var facilityId = Guid.NewGuid();
         db.Facilities.Add(new FacilityRecord
         {
-            Id = facilityId, OrganizationId = OrganizationId, Code = normalizedCode, Name = name.Trim(), CreatedAt = DateTimeOffset.UtcNow
+            Id = facilityId,
+            OrganizationId = OrganizationId,
+            Code = normalizedCode,
+            Name = name.Trim(),
+            CreatedAt = DateTimeOffset.UtcNow
         });
         OperationAudit.AppendTracked(db, context, OrganizationId, "facility.created", "Facility", facilityId);
         await db.SaveChangesAsync(cancellationToken);
@@ -47,12 +51,20 @@ public sealed class ProductCatalogueService(CarbonFootprintDbContext db, IOperat
         var versionId = Guid.NewGuid();
         db.Products.Add(new ProductRecord
         {
-            Id = productId, OrganizationId = organizationId, Name = name.Trim(), CategoryCode = categoryCode.Trim().ToUpperInvariant(),
-            FacilityId = facilityId, CreatedAt = DateTimeOffset.UtcNow
+            Id = productId,
+            OrganizationId = organizationId,
+            Name = name.Trim(),
+            CategoryCode = categoryCode.Trim().ToUpperInvariant(),
+            FacilityId = facilityId,
+            CreatedAt = DateTimeOffset.UtcNow
         });
         db.ProductVersions.Add(new ProductVersionRecord
         {
-            Id = versionId, OrganizationId = organizationId, ProductId = productId, VersionNumber = 1, NameZhTw = name.Trim(),
+            Id = versionId,
+            OrganizationId = organizationId,
+            ProductId = productId,
+            VersionNumber = 1,
+            NameZhTw = name.Trim(),
             CreatedAt = DateTimeOffset.UtcNow
         });
         OperationAudit.AppendTracked(db, context, organizationId, "product.version.created", "ProductVersion", versionId);

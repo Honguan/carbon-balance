@@ -133,13 +133,23 @@ public sealed class InventoryWorkflowServiceTests
         seed.Products.Add(new ProductRecord { Id = productId, OrganizationId = organizationId, Name = "Workflow" });
         seed.ProductVersions.Add(new ProductVersionRecord
         {
-            Id = productVersionId, OrganizationId = organizationId, ProductId = productId, VersionNumber = 1, NameZhTw = "Workflow"
+            Id = productVersionId,
+            OrganizationId = organizationId,
+            ProductId = productId,
+            VersionNumber = 1,
+            NameZhTw = "Workflow"
         });
         seed.InventoryProjectVersions.Add(new InventoryProjectVersionRecord
         {
-            Id = projectId, OrganizationId = organizationId, ProductVersionId = productVersionId, VersionNumber = 1,
-            PeriodStart = new DateOnly(2026, 1, 1), PeriodEnd = new DateOnly(2026, 12, 31),
-            FunctionalUnit = "1 kg product", PcrVersion = "none", WorkflowStatus = status
+            Id = projectId,
+            OrganizationId = organizationId,
+            ProductVersionId = productVersionId,
+            VersionNumber = 1,
+            PeriodStart = new DateOnly(2026, 1, 1),
+            PeriodEnd = new DateOnly(2026, 12, 31),
+            FunctionalUnit = "1 kg product",
+            PcrVersion = "none",
+            WorkflowStatus = status
         });
         await seed.SaveChangesAsync();
         return (organizationId, projectId, reviewer);

@@ -115,44 +115,88 @@ public sealed class ActivityDataServiceTests
         seed.Products.Add(new ProductRecord { Id = productId, OrganizationId = organizationId, Name = "Activity" });
         seed.ProductVersions.Add(new ProductVersionRecord
         {
-            Id = productVersionId, OrganizationId = organizationId, ProductId = productId, VersionNumber = 1, NameZhTw = "Activity"
+            Id = productVersionId,
+            OrganizationId = organizationId,
+            ProductId = productId,
+            VersionNumber = 1,
+            NameZhTw = "Activity"
         });
         seed.InventoryProjectVersions.Add(new InventoryProjectVersionRecord
         {
-            Id = projectId, OrganizationId = organizationId, ProductVersionId = productVersionId, VersionNumber = 1,
-            PeriodStart = new DateOnly(2026, 1, 1), PeriodEnd = new DateOnly(2026, 12, 31),
-            FunctionalUnit = "1 kg product", PcrVersion = "none", WorkflowStatus = status
+            Id = projectId,
+            OrganizationId = organizationId,
+            ProductVersionId = productVersionId,
+            VersionNumber = 1,
+            PeriodStart = new DateOnly(2026, 1, 1),
+            PeriodEnd = new DateOnly(2026, 12, 31),
+            FunctionalUnit = "1 kg product",
+            PcrVersion = "none",
+            WorkflowStatus = status
         });
         seed.LifecycleStageDeclarations.AddRange(
             new LifecycleStageDeclarationRecord
             {
-                Id = Guid.NewGuid(), OrganizationId = organizationId, InventoryProjectVersionId = projectId,
-                LifecycleStage = (int)LifecycleStage.RawMaterial, IsApplicable = true
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationId,
+                InventoryProjectVersionId = projectId,
+                LifecycleStage = (int)LifecycleStage.RawMaterial,
+                IsApplicable = true
             },
             new LifecycleStageDeclarationRecord
             {
-                Id = Guid.NewGuid(), OrganizationId = organizationId, InventoryProjectVersionId = projectId,
-                LifecycleStage = (int)LifecycleStage.Distribution, IsApplicable = false, Reason = "not shipped"
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationId,
+                InventoryProjectVersionId = projectId,
+                LifecycleStage = (int)LifecycleStage.Distribution,
+                IsApplicable = false,
+                Reason = "not shipped"
             });
         seed.EmissionFactorVersions.Add(new EmissionFactorVersionRecord
         {
-            Id = factorId, OrganizationId = organizationId, FactorId = Guid.NewGuid(), VersionNumber = 1, Name = "Steel factor", Value = 2m,
-            NumeratorUnitCode = "kgCO2e", DenominatorUnitCode = "kg", Geography = "TW", ValidFrom = new DateOnly(2026, 1, 1),
-            PublicationStatus = "Published", SourceDatasetVersion = "v1", LicenseCode = "CC0", SourceType = "government-database",
-            SourceName = "MOENV", SourceReference = "https://example.test/factor", DatasetName = "dataset",
-            OriginalDocumentName = "factor.csv", OriginalDocumentSha256 = new string('a', 64), Applicability = "global",
+            Id = factorId,
+            OrganizationId = organizationId,
+            FactorId = Guid.NewGuid(),
+            VersionNumber = 1,
+            Name = "Steel factor",
+            Value = 2m,
+            NumeratorUnitCode = "kgCO2e",
+            DenominatorUnitCode = "kg",
+            Geography = "TW",
+            ValidFrom = new DateOnly(2026, 1, 1),
+            PublicationStatus = "Published",
+            SourceDatasetVersion = "v1",
+            LicenseCode = "CC0",
+            SourceType = "government-database",
+            SourceName = "MOENV",
+            SourceReference = "https://example.test/factor",
+            DatasetName = "dataset",
+            OriginalDocumentName = "factor.csv",
+            OriginalDocumentSha256 = new string('a', 64),
+            Applicability = "global",
             ReviewStatus = "Approved"
         });
         if (withActivity)
         {
             seed.ActivityData.Add(new ActivityDataRecord
             {
-                Id = activityId, OrganizationId = organizationId, InventoryProjectVersionId = projectId,
-                LifecycleStage = (int)LifecycleStage.RawMaterial, Name = "Seeded", ActivityKind = "Material",
-                RawValue = 1m, RawUnitCode = "kg", CanonicalValue = 1m, CanonicalUnitCode = "kg",
-                AmountFormulaId = ActivityAmountFormula.DirectFormulaId, FormulaInputsJson = "{}", ConversionRuleVersion = "units-p0-v2",
-                PeriodStart = new DateOnly(2026, 1, 1), PeriodEnd = new DateOnly(2026, 12, 31),
-                FactorVersionId = factorId, AllocationFactor = 1m, DataQuality = "measured"
+                Id = activityId,
+                OrganizationId = organizationId,
+                InventoryProjectVersionId = projectId,
+                LifecycleStage = (int)LifecycleStage.RawMaterial,
+                Name = "Seeded",
+                ActivityKind = "Material",
+                RawValue = 1m,
+                RawUnitCode = "kg",
+                CanonicalValue = 1m,
+                CanonicalUnitCode = "kg",
+                AmountFormulaId = ActivityAmountFormula.DirectFormulaId,
+                FormulaInputsJson = "{}",
+                ConversionRuleVersion = "units-p0-v2",
+                PeriodStart = new DateOnly(2026, 1, 1),
+                PeriodEnd = new DateOnly(2026, 12, 31),
+                FactorVersionId = factorId,
+                AllocationFactor = 1m,
+                DataQuality = "measured"
             });
         }
         await seed.SaveChangesAsync();

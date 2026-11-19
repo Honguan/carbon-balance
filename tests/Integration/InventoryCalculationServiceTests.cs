@@ -84,21 +84,38 @@ public sealed class InventoryCalculationServiceTests
         seed.Products.Add(new ProductRecord { Id = productId, OrganizationId = organizationId, Name = "Calculation" });
         seed.ProductVersions.Add(new ProductVersionRecord
         {
-            Id = productVersionId, OrganizationId = organizationId, ProductId = productId, VersionNumber = 1, NameZhTw = "Calculation"
+            Id = productVersionId,
+            OrganizationId = organizationId,
+            ProductId = productId,
+            VersionNumber = 1,
+            NameZhTw = "Calculation"
         });
         if (withPcr)
         {
             seed.PcrVersions.Add(new PcrVersionRecord
             {
-                Id = pcrId, OrganizationId = organizationId, RuleSetId = Guid.NewGuid(), RegistrationNumber = $"PCR-{pcrId:N}",
-                VersionNumber = 1, Title = "Calculation PCR", PublicationStatus = "Draft", SourceReference = "https://example.test/pcr"
+                Id = pcrId,
+                OrganizationId = organizationId,
+                RuleSetId = Guid.NewGuid(),
+                RegistrationNumber = $"PCR-{pcrId:N}",
+                VersionNumber = 1,
+                Title = "Calculation PCR",
+                PublicationStatus = "Draft",
+                SourceReference = "https://example.test/pcr"
             });
         }
         seed.InventoryProjectVersions.Add(new InventoryProjectVersionRecord
         {
-            Id = projectId, OrganizationId = organizationId, ProductVersionId = productVersionId, VersionNumber = 1,
-            PeriodStart = new DateOnly(2026, 1, 1), PeriodEnd = new DateOnly(2026, 12, 31),
-            FunctionalUnit = "1 kg product", PcrVersion = "none", WorkflowStatus = status, PcrVersionId = withPcr ? pcrId : null
+            Id = projectId,
+            OrganizationId = organizationId,
+            ProductVersionId = productVersionId,
+            VersionNumber = 1,
+            PeriodStart = new DateOnly(2026, 1, 1),
+            PeriodEnd = new DateOnly(2026, 12, 31),
+            FunctionalUnit = "1 kg product",
+            PcrVersion = "none",
+            WorkflowStatus = status,
+            PcrVersionId = withPcr ? pcrId : null
         });
         await seed.SaveChangesAsync();
         return (organizationId, projectId);

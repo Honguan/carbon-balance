@@ -120,11 +120,27 @@ public sealed class GovernanceAuthoringTests
         await using var seed = Db(organizationId);
         seed.EmissionFactorVersions.Add(new EmissionFactorVersionRecord
         {
-            Id = id, OrganizationId = organizationId, FactorId = Guid.NewGuid(), VersionNumber = 1, Name = "Grid", Value = 0.5m,
-            NumeratorUnitCode = "kgCO2e", DenominatorUnitCode = "kWh", Geography = "TW", ValidFrom = new DateOnly(2026, 1, 1),
-            PublicationStatus = status, SourceDatasetVersion = "v1", LicenseCode = "CC0", SourceType = "government-database",
-            SourceName = "MOENV", SourceReference = "https://example.test/factor", DatasetName = "dataset",
-            OriginalDocumentName = "factor.csv", OriginalDocumentSha256 = new string('a', 64), Applicability = "global", ReviewStatus = "Approved"
+            Id = id,
+            OrganizationId = organizationId,
+            FactorId = Guid.NewGuid(),
+            VersionNumber = 1,
+            Name = "Grid",
+            Value = 0.5m,
+            NumeratorUnitCode = "kgCO2e",
+            DenominatorUnitCode = "kWh",
+            Geography = "TW",
+            ValidFrom = new DateOnly(2026, 1, 1),
+            PublicationStatus = status,
+            SourceDatasetVersion = "v1",
+            LicenseCode = "CC0",
+            SourceType = "government-database",
+            SourceName = "MOENV",
+            SourceReference = "https://example.test/factor",
+            DatasetName = "dataset",
+            OriginalDocumentName = "factor.csv",
+            OriginalDocumentSha256 = new string('a', 64),
+            Applicability = "global",
+            ReviewStatus = "Approved"
         });
         await seed.SaveChangesAsync();
         return id;

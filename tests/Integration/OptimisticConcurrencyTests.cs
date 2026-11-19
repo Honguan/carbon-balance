@@ -121,19 +121,34 @@ public sealed class OptimisticConcurrencyTests
         seed.Products.Add(new ProductRecord { Id = productId, OrganizationId = organizationId, Name = "Concurrency" });
         seed.ProductVersions.Add(new ProductVersionRecord
         {
-            Id = productVersionId, OrganizationId = organizationId, ProductId = productId, VersionNumber = 1, NameZhTw = "Concurrency"
+            Id = productVersionId,
+            OrganizationId = organizationId,
+            ProductId = productId,
+            VersionNumber = 1,
+            NameZhTw = "Concurrency"
         });
         seed.InventoryProjectVersions.Add(new InventoryProjectVersionRecord
         {
-            Id = projectId, OrganizationId = organizationId, ProductVersionId = productVersionId, VersionNumber = 1,
-            PeriodStart = new DateOnly(2026, 1, 1), PeriodEnd = new DateOnly(2026, 12, 31),
-            FunctionalUnit = "1 kg product", PcrVersion = "none", WorkflowStatus = "Draft"
+            Id = projectId,
+            OrganizationId = organizationId,
+            ProductVersionId = productVersionId,
+            VersionNumber = 1,
+            PeriodStart = new DateOnly(2026, 1, 1),
+            PeriodEnd = new DateOnly(2026, 12, 31),
+            FunctionalUnit = "1 kg product",
+            PcrVersion = "none",
+            WorkflowStatus = "Draft"
         });
         if (withMailSettings)
             seed.OrganizationMailSettings.Add(new OrganizationMailSettingsRecord
             {
-                Id = Guid.NewGuid(), OrganizationId = organizationId, Host = "initial.example.test", Port = 587,
-                FromAddress = "initial@example.test", FromName = "initial", UpdatedAt = DateTimeOffset.UtcNow
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationId,
+                Host = "initial.example.test",
+                Port = 587,
+                FromAddress = "initial@example.test",
+                FromName = "initial",
+                UpdatedAt = DateTimeOffset.UtcNow
             });
         await seed.SaveChangesAsync();
         return projectId;

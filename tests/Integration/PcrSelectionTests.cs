@@ -44,12 +44,18 @@ public sealed class PcrSelectionTests
             seed.Organizations.Add(new OrganizationRecord { Id = organizationId, Name = "PCR selection fixture" });
             seed.Products.Add(new ProductRecord
             {
-                Id = productId, OrganizationId = organizationId, Name = "PCR product",
+                Id = productId,
+                OrganizationId = organizationId,
+                Name = "PCR product",
                 CategoryCode = scenario == "wrong-product" ? "FOOD-001" : "ELECTRONICS-001"
             });
             seed.ProductVersions.Add(new ProductVersionRecord
             {
-                Id = productVersionId, OrganizationId = organizationId, ProductId = productId, VersionNumber = 1, NameZhTw = "PCR"
+                Id = productVersionId,
+                OrganizationId = organizationId,
+                ProductId = productId,
+                VersionNumber = 1,
+                NameZhTw = "PCR"
             });
             seed.PcrVersions.Add(Pcr(organizationId, pcrId, scenario));
             await seed.SaveChangesAsync();

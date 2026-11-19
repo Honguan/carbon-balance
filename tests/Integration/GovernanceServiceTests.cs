@@ -134,9 +134,18 @@ public sealed class GovernanceServiceTests
         await using var seed = Db(organizationId);
         var pcr = new PcrVersionRecord
         {
-            Id = Guid.NewGuid(), OrganizationId = organizationId, RuleSetId = Guid.NewGuid(), RegistrationNumber = $"PCR-{Guid.NewGuid():N}",
-            VersionNumber = 1, Title = "Governance fixture", PublicationStatus = "Draft", SourceReference = "https://example.test/pcr",
-            ReviewStatus = "Pending", CustomApprovalStatus = "NotRequired", CreatedBy = creator, CreatedAt = DateTimeOffset.UtcNow
+            Id = Guid.NewGuid(),
+            OrganizationId = organizationId,
+            RuleSetId = Guid.NewGuid(),
+            RegistrationNumber = $"PCR-{Guid.NewGuid():N}",
+            VersionNumber = 1,
+            Title = "Governance fixture",
+            PublicationStatus = "Draft",
+            SourceReference = "https://example.test/pcr",
+            ReviewStatus = "Pending",
+            CustomApprovalStatus = "NotRequired",
+            CreatedBy = creator,
+            CreatedAt = DateTimeOffset.UtcNow
         };
         seed.PcrVersions.Add(pcr);
         await seed.SaveChangesAsync();
@@ -145,11 +154,27 @@ public sealed class GovernanceServiceTests
 
     private static EmissionFactorVersionRecord Factor(Guid organizationId, Guid factorId, int version, string status, string review) => new()
     {
-        Id = Guid.NewGuid(), OrganizationId = organizationId, FactorId = factorId, VersionNumber = version, Name = "Steel", Value = 2m,
-        NumeratorUnitCode = "kgCO2e", DenominatorUnitCode = "kg", Geography = "TW", ValidFrom = new DateOnly(2026, 1, 1),
-        PublicationStatus = status, SourceDatasetVersion = "v1", LicenseCode = "CC0", SourceType = "government-database", SourceName = "MOENV",
-        SourceReference = "https://example.test/factor", DatasetName = "dataset", OriginalDocumentName = "factor.csv",
-        OriginalDocumentSha256 = new string('a', 64), Applicability = "global", ReviewStatus = review
+        Id = Guid.NewGuid(),
+        OrganizationId = organizationId,
+        FactorId = factorId,
+        VersionNumber = version,
+        Name = "Steel",
+        Value = 2m,
+        NumeratorUnitCode = "kgCO2e",
+        DenominatorUnitCode = "kg",
+        Geography = "TW",
+        ValidFrom = new DateOnly(2026, 1, 1),
+        PublicationStatus = status,
+        SourceDatasetVersion = "v1",
+        LicenseCode = "CC0",
+        SourceType = "government-database",
+        SourceName = "MOENV",
+        SourceReference = "https://example.test/factor",
+        DatasetName = "dataset",
+        OriginalDocumentName = "factor.csv",
+        OriginalDocumentSha256 = new string('a', 64),
+        Applicability = "global",
+        ReviewStatus = review
     };
 
     private static OperationContext Context(Guid actor) =>

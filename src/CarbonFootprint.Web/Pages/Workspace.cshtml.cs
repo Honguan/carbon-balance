@@ -154,8 +154,7 @@ public sealed class WorkspaceModel : PageModel
     public PcrImpactReason PcrImpact(PcrVersionRecord pcr, InventoryProjectVersionRecord project) =>
         PcrImpactAnalysis.Classify(
             // Raw status: a withdrawn version stays withdrawn even when its source file is no longer verified.
-            PcrRuleSetMapper.ToRuleSet(pcr, PcrStageRules.Where(rule => rule.PcrVersionId == pcr.Id))
-                with { PublicationStatus = Enum.Parse<PcrPublicationStatus>(pcr.PublicationStatus) },
+            PcrRuleSetMapper.ToRuleSet(pcr, PcrStageRules.Where(rule => rule.PcrVersionId == pcr.Id)) with { PublicationStatus = Enum.Parse<PcrPublicationStatus>(pcr.PublicationStatus) },
             project.PeriodEnd);
 
     public IReadOnlyDictionary<Guid, int> PcrAffectedProjectCounts { get; private set; } =
