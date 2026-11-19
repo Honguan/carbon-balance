@@ -102,7 +102,7 @@ public sealed class OptimisticConcurrencyTests
         var page = new WorkspaceModel(db, new Scope(organizationId), null!, null!, emailSender,
             services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new InventorySnapshotReader(db),
             new AllowedAuthorization(), null!, null!, new EphemeralDataProtectionProvider(),
-            CalculationBuildProvenance.Create("concurrency-fixture", new string('a', 40)), null!, null!, InventoryServices.Workflow(db, new AllowedAuthorization(), new Scope(organizationId)), InventoryServices.Readiness(db))
+            CalculationBuildProvenance.Create("concurrency-fixture", new string('a', 40)), null!, null!, InventoryServices.Workflow(db, new AllowedAuthorization(), new Scope(organizationId)), InventoryServices.Readiness(db), InventoryServices.Activities(db, new AllowedAuthorization(), new Scope(organizationId)))
         {
             PageContext = new PageContext { HttpContext = http },
             TempData = new TempDataDictionary(http, new FixtureTempData())

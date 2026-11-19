@@ -153,7 +153,7 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
             };
             var page = new WorkspaceModel(requestContext, new TestOrganizationScope(organizationId), null!, null!, null!,
                 services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new InventorySnapshotReader(requestContext),
-                new AllowAuthorization(), null!, null!, new EphemeralDataProtectionProvider(), provenance, null!, null!, InventoryServices.Workflow(requestContext, new AllowAuthorization(), new TestOrganizationScope(organizationId)), InventoryServices.Readiness(requestContext))
+                new AllowAuthorization(), null!, null!, new EphemeralDataProtectionProvider(), provenance, null!, null!, InventoryServices.Workflow(requestContext, new AllowAuthorization(), new TestOrganizationScope(organizationId)), InventoryServices.Readiness(requestContext), InventoryServices.Activities(requestContext, new AllowAuthorization(), new TestOrganizationScope(organizationId)))
             {
                 PageContext = new PageContext { HttpContext = http },
                 TempData = new TempDataDictionary(http, new MemoryTempDataProvider()),
@@ -569,7 +569,7 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
         var workspace = new WorkspaceModel(context, new TestOrganizationScope(organizationId), null!, null!, null!,
             identityServices.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, reader,
             permissions, null!, null!, new EphemeralDataProtectionProvider(),
-            CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)), null!, null!, InventoryServices.Workflow(context, permissions, new TestOrganizationScope(organizationId)), InventoryServices.Readiness(context))
+            CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)), null!, null!, InventoryServices.Workflow(context, permissions, new TestOrganizationScope(organizationId)), InventoryServices.Readiness(context), InventoryServices.Activities(context, permissions, new TestOrganizationScope(organizationId)))
         {
             PageContext = new PageContext { HttpContext = http },
             TempData = new TempDataDictionary(http, new MemoryTempDataProvider()),
@@ -606,7 +606,7 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
             var foreignWorkspace = new WorkspaceModel(foreignContext, new TestOrganizationScope(foreignOrganizationId),
                 null!, null!, null!, identityServices.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!,
                 new InventorySnapshotReader(foreignContext), new AllowAuthorization(), null!, null!,
-                new EphemeralDataProtectionProvider(), CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)), null!, null!, InventoryServices.Workflow(foreignContext, new AllowAuthorization(), new TestOrganizationScope(foreignOrganizationId)), InventoryServices.Readiness(foreignContext))
+                new EphemeralDataProtectionProvider(), CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)), null!, null!, InventoryServices.Workflow(foreignContext, new AllowAuthorization(), new TestOrganizationScope(foreignOrganizationId)), InventoryServices.Readiness(foreignContext), InventoryServices.Activities(foreignContext, new AllowAuthorization(), new TestOrganizationScope(foreignOrganizationId)))
             {
                 PageContext = new PageContext { HttpContext = new DefaultHttpContext() }
             };

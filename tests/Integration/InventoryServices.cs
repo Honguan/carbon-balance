@@ -1,4 +1,5 @@
 using CarbonFootprint.Application.Governance;
+using CarbonFootprint.Application.Inventories;
 using CarbonFootprint.Application.Readiness;
 using CarbonFootprint.Infrastructure.Governance;
 using CarbonFootprint.Infrastructure.Persistence;
@@ -15,4 +16,8 @@ internal static class InventoryServices
 
     public static IInventoryWorkflow Workflow(CarbonFootprintDbContext db, IAuthorizationService authorization, IOrganizationScope scope) =>
         new InventoryWorkflowService(db, new OperationAuthorizer(authorization), scope, Readiness(db));
+
+    // Evidence storage is left out: page-level tests that upload evidence build their own service.
+    public static IActivityData Activities(CarbonFootprintDbContext db, IAuthorizationService authorization, IOrganizationScope scope) =>
+        new ActivityDataService(db, new OperationAuthorizer(authorization), scope, null!);
 }

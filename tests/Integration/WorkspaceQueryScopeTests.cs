@@ -183,7 +183,7 @@ public sealed class WorkspaceQueryScopeTests(ITestOutputHelper output)
             services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new InventorySnapshotReader(db),
             authorization, null!, null!, new EphemeralDataProtectionProvider(),
             CalculationBuildProvenance.Create("scope-test", new string('c', 40)), null!, null!,
-            InventoryServices.Workflow(db, authorization, new Scope(organizationId)), InventoryServices.Readiness(db))
+            InventoryServices.Workflow(db, authorization, new Scope(organizationId)), InventoryServices.Readiness(db), InventoryServices.Activities(db, authorization, new Scope(organizationId)))
         {
             PageContext = new PageContext { HttpContext = http },
             TempData = new TempDataDictionary(http, new NoTempData()),

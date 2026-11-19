@@ -1,6 +1,7 @@
 using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Application.Exports;
 using CarbonFootprint.Application.Governance;
+using CarbonFootprint.Application.Inventories;
 using CarbonFootprint.Application.Operations;
 using CarbonFootprint.Application.Readiness;
 using CarbonFootprint.Domain.Modules.Calculations;
@@ -34,6 +35,7 @@ public sealed class WorkspaceModel : PageModel
     private readonly IFactorGovernance _factorGovernance;
     private readonly IInventoryWorkflow _inventoryWorkflow;
     private readonly IInventoryReadiness _readiness;
+    private readonly IActivityData _activities;
     private const string CurrentUnitCatalogueVersion = "units-p0-v2";
 
     private readonly CarbonFootprintDbContext _dbContext;
@@ -69,8 +71,10 @@ public sealed class WorkspaceModel : PageModel
         IPcrGovernance pcrGovernance,
         IFactorGovernance factorGovernance,
         IInventoryWorkflow inventoryWorkflow,
-        IInventoryReadiness readiness)
+        IInventoryReadiness readiness,
+        IActivityData activities)
     {
+        _activities = activities;
         _inventoryWorkflow = inventoryWorkflow;
         _readiness = readiness;
         _pcrGovernance = pcrGovernance;
@@ -1365,236 +1369,21 @@ public sealed class WorkspaceModel : PageModel
         string dataQuality,
         CancellationToken cancellationToken,
         Guid? activityId = null)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
-        {
-            return Forbid();
-        }
-
-        var organizationId = RequireOrganization();
-        var existingActivity = activityId.HasValue
-            ? await _dbContext.ActivityData.SingleOrDefaultAsync(
-                item => item.Id == activityId.Value && item.InventoryProjectVersionId == inventoryProjectVersionId
-                    && item.RetiredAt == null, cancellationToken)
-            : null;
-        if (activityId.HasValue && existingActivity is null)
-        {
-            return NotFound();
-        }
-        if (inventoryProjectVersionId == Guid.Empty || factorVersionId == Guid.Empty)
-        {
-            ModelState.AddModelError("activity", "請先建立盤查版本並選擇已發布排放係數。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var project = await _dbContext.InventoryProjectVersions.SingleOrDefaultAsync(
-            item => item.Id == inventoryProjectVersionId && item.OrganizationId == organizationId,
-            cancellationToken);
-        var factor = await _dbContext.EmissionFactorVersions.SingleOrDefaultAsync(
-            item =>
-                item.Id == factorVersionId
-                && item.OrganizationId == organizationId
-                && item.PublicationStatus == FactorPublicationStatus.Published.ToString(),
-            cancellationToken);
-        if (project is null || factor is null)
-        {
-            ModelState.AddModelError("activity", "所選盤查版本或排放係數不存在於目前組織。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        if (!InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus)))
-        {
-            ModelState.AddModelError("activity", "盤查已送審或核准，不可再新增活動資料。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var stageDeclaration = await _dbContext.LifecycleStageDeclarations.SingleOrDefaultAsync(
-            item => item.InventoryProjectVersionId == project.Id && item.LifecycleStage == (int)lifecycleStage,
-            cancellationToken);
-        if (stageDeclaration is null || !stageDeclaration.IsApplicable)
-        {
-            ModelState.AddModelError("activity", "不適用階段不可新增活動數據。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var factorVersion = new EmissionFactorVersion(
-            factor.Id,
-            factor.FactorId,
-            factor.VersionNumber,
-            factor.Name,
-            factor.Value,
-            factor.NumeratorUnitCode,
-            factor.DenominatorUnitCode,
-            factor.Geography,
-            factor.ValidFrom,
-            factor.ValidTo,
-            Enum.Parse<FactorPublicationStatus>(factor.PublicationStatus),
-            factor.SourceDatasetVersion,
-            factor.LicenseCode,
-            Enum.Parse<FactorReviewStatus>(factor.ReviewStatus),
-            factor.Applicability);
-        if (!factorVersion.IsSelectableOn(project.PeriodEnd))
-        {
-            ModelState.AddModelError("activity", "係數版本未發布、已撤回或不在盤查期間有效範圍。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var hasName = TryResolveControlledValue(activityName, activityNameOther, out var resolvedName);
-        var hasEquipment = TryResolveOptionalControlledValue(equipmentCategory, equipmentCategoryOther, out var equipment);
-        var hasSource = TryResolveControlledValue(dataSourceType, dataSourceTypeOther, out var sourceType);
-        var hasProvider = TryResolveControlledValue(dataProviderType, dataProviderOther, out var provider);
-        var hasMethod = TryResolveControlledValue(collectionMethod, collectionMethodOther, out var method);
-        if (!hasName
-            || !hasEquipment
-            || !hasSource
-            || !hasProvider
-            || !hasMethod
-            || string.IsNullOrWhiteSpace(sourceReference)
-            || !ActivityKindRules.IsAllowed(lifecycleStage, activityKind)
-            || allocationFactor is null or <= 0m or > 1m
-            || string.IsNullOrWhiteSpace(dataQuality)
-            || (isEstimated && string.IsNullOrWhiteSpace(activityEstimationReason)))
-        {
-            ModelState.AddModelError("activity", "活動項目、來源類型、提供者、取得方式與來源參照皆為必填。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        try
-        {
-            var unitCatalogueVersion = await GetProjectUnitCatalogueVersionAsync(project.Id, cancellationToken);
-            var derivedAmount = ActivityAmountFormula.Derive(
-                activityKind,
-                rawValue,
-                rawUnitCode,
-                transportDistanceKm,
-                transportWeightKg,
-                useLifetime,
-                useFrequency,
-                useConsumptionPerUse);
-            var effectiveCanonicalUnitCode = ActivityAmountFormula.IsTransport(activityKind)
-                ? derivedAmount.UnitCode
-                : canonicalUnitCode;
-            var unitRecords = await _dbContext.Units
-                .Where(item => item.CatalogueVersion == unitCatalogueVersion
-                    && (item.Code == derivedAmount.UnitCode || item.Code == effectiveCanonicalUnitCode))
-                .ToArrayAsync(cancellationToken);
-            var catalogue = new UnitCatalogue(
-                unitCatalogueVersion,
-                unitRecords.Select(item => new UnitDefinition(
-                    item.Id,
-                    item.Code,
-                    item.Dimension,
-                    item.ScaleToCanonical,
-                    item.OffsetToCanonical,
-                    item.CanonicalCode,
-                    item.CatalogueVersion,
-                    item.AliasesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-                    string.IsNullOrWhiteSpace(item.CompositeExpression) ? null : item.CompositeExpression)));
-            var canonicalValue = catalogue.Convert(
-                derivedAmount.Value,
-                derivedAmount.UnitCode,
-                effectiveCanonicalUnitCode);
-            if (!string.Equals(effectiveCanonicalUnitCode, factor.DenominatorUnitCode, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("活動標準單位必須等於係數分母單位。");
-            }
-
-            var newActivityId = Guid.NewGuid();
-            if (existingActivity is not null)
-            {
-                existingActivity.RetiredAt = DateTimeOffset.UtcNow;
-                AddAudit("activity.version.superseded", "ActivityDataVersion", existingActivity.Id);
-            }
-            _dbContext.ActivityData.Add(new ActivityDataRecord
-            {
-                Id = newActivityId,
-                OrganizationId = organizationId,
-                InventoryProjectVersionId = project.Id,
-                LifecycleStage = (int)lifecycleStage,
-                Name = resolvedName,
-                ActivityKind = activityKind.ToString(),
-                SupplierOrScenario = string.Join(
-                    "｜",
-                    new[] { supplierOrScenario?.Trim(), $"計算基礎：{derivedAmount.FormulaTrace}" }
-                        .Where(item => !string.IsNullOrWhiteSpace(item))),
-                EquipmentCategory = equipment,
-                DataSourceType = sourceType,
-                DataProvider = provider,
-                CollectionMethod = method,
-                SourceReference = sourceReference.Trim(),
-                RawValue = derivedAmount.Value,
-                RawUnitCode = derivedAmount.UnitCode,
-                CanonicalValue = canonicalValue,
-                CanonicalUnitCode = effectiveCanonicalUnitCode,
-                ConversionRuleVersion = unitCatalogueVersion,
-                AmountFormulaId = derivedAmount.FormulaId,
-                FormulaInputsJson = JsonSerializer.Serialize(derivedAmount.Inputs),
-                PeriodStart = project.PeriodStart,
-                PeriodEnd = project.PeriodEnd,
-                FactorVersionId = factor.Id,
-                AllocationFactor = allocationFactor.Value,
-                IsEstimated = isEstimated,
-                EstimationReason = activityEstimationReason?.Trim() ?? string.Empty,
-                DataQuality = dataQuality.Trim(),
-                EvidenceSha256 = null
-            });
-            AddAudit("activity.version.created", "ActivityDataVersion", newActivityId);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            StatusMessage = existingActivity is null ? "活動數據已保存。" : "活動數據已更正；舊資料與佐證保留，新版本請重新附上適用佐證。";
-            return RedirectToPage(new { section = Section, stage = Stage, projectVersionId = project.Id });
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            _dbContext.ChangeTracker.Clear();
-            ModelState.AddModelError("activity", "此活動已由另一個操作更正或移除，請重新載入後再操作。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-        catch (InvalidOperationException exception)
-        {
-            ModelState.AddModelError("activity", exception.Message);
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-    }
+        => await CompleteAsync(await _activities.SaveAsync(Operation(), new ActivityInput(
+                inventoryProjectVersionId, lifecycleStage, activityKind, activityName, activityNameOther, supplierOrScenario,
+                equipmentCategory, equipmentCategoryOther, dataSourceType, dataSourceTypeOther, dataProviderType, dataProviderOther,
+                collectionMethod, collectionMethodOther, sourceReference, rawValue, transportDistanceKm, transportWeightKg,
+                useLifetime, useFrequency, useConsumptionPerUse, rawUnitCode, canonicalUnitCode, factorVersionId, allocationFactor,
+                isEstimated, activityEstimationReason, dataQuality), activityId, cancellationToken),
+            cancellationToken, stage: Stage);
 
     public async Task<IActionResult> OnPostRemoveActivityAsync(Guid activityId, CancellationToken cancellationToken)
     {
-        if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
-        {
-            return Forbid();
-        }
-        var activity = await _dbContext.ActivityData.SingleOrDefaultAsync(
-            item => item.Id == activityId && item.RetiredAt == null, cancellationToken);
-        if (activity is null)
-        {
-            return NotFound();
-        }
-        var project = await _dbContext.InventoryProjectVersions.SingleAsync(
-            item => item.Id == activity.InventoryProjectVersionId, cancellationToken);
-        if (!InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus)))
-        {
-            return BadRequest();
-        }
-        activity.RetiredAt = DateTimeOffset.UtcNow;
-        AddAudit("activity.retired", "ActivityDataVersion", activity.Id);
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            _dbContext.ChangeTracker.Clear();
-            return StatusCode(StatusCodes.Status409Conflict);
-        }
-        StatusMessage = "活動已從目前盤查移除；歷史資料與佐證仍保留。";
-        return RedirectToPage(new { section = Section, stage = Stage, projectVersionId = project.Id });
+        var result = await _activities.RetireAsync(Operation(), activityId, cancellationToken);
+        // Removal is a single-button post: a lost race answers 409 without re-rendering the page.
+        return result.Status == OperationStatus.Conflict
+            ? StatusCode(StatusCodes.Status409Conflict)
+            : await CompleteAsync(result, cancellationToken, stage: Stage);
     }
 
     public async Task<IActionResult> OnPostUploadEvidenceAsync(
@@ -1602,82 +1391,11 @@ public sealed class WorkspaceModel : PageModel
         IFormFile evidenceFile,
         CancellationToken cancellationToken)
     {
-        if (!await IsAllowedAsync(OrganizationPermission.EditInventory))
-        {
-            return Forbid();
-        }
-
-        var activity = await _dbContext.ActivityData.SingleOrDefaultAsync(
-            item => item.Id == activityDataId && item.RetiredAt == null,
-            cancellationToken);
-        if (activity is null)
-        {
-            return NotFound();
-        }
-
-        var evidenceProject = await _dbContext.InventoryProjectVersions.SingleAsync(
-            item => item.Id == activity.InventoryProjectVersionId,
-            cancellationToken);
-        if (!InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(evidenceProject.WorkflowStatus)))
-        {
-            ModelState.AddModelError("evidence", "盤查已送審或核准，不可再變更佐證檔案。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        if (evidenceFile is null || evidenceFile.Length <= 0)
-        {
-            ModelState.AddModelError("evidence", "請選擇非空白佐證檔案。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        if (await _dbContext.EvidenceFiles.AnyAsync(item => item.ActivityDataId == activity.Id, cancellationToken))
-        {
-            ModelState.AddModelError("evidence", "每筆活動僅允許一份佐證檔案；請建立活動資料新版本以更換。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        try
-        {
-            await using var content = evidenceFile.OpenReadStream();
-            var stored = await _evidenceStorageService.StoreAsync(
-                RequireOrganization(),
-                content,
-                evidenceFile.FileName,
-                evidenceFile.ContentType,
-                cancellationToken);
-            _dbContext.EvidenceFiles.Add(new EvidenceFileRecord
-            {
-                Id = stored.Id,
-                OrganizationId = RequireOrganization(),
-                ActivityDataId = activity.Id,
-                ObjectKey = stored.ObjectKey,
-                OriginalFileName = stored.OriginalFileName,
-                ContentType = stored.ContentType,
-                SizeBytes = stored.SizeBytes,
-                Sha256 = stored.Sha256,
-                ScanStatus = stored.ScanStatus.ToString(),
-                CreatedAt = DateTimeOffset.UtcNow
-            });
-            activity.EvidenceSha256 = stored.Sha256;
-            AddAudit("evidence.uploaded", "EvidenceFile", stored.Id);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            StatusMessage = "佐證檔案已通過惡意程式掃描、寫入物件儲存並綁定活動。";
-            return RedirectToPage(new
-            {
-                section = Section,
-                stage = Stage,
-                projectVersionId = activity.InventoryProjectVersionId
-            });
-        }
-        catch (EvidenceUploadException exception)
-        {
-            ModelState.AddModelError("evidence", $"佐證檔案未保存：{exception.Message}");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
+        await using var content = evidenceFile is { Length: > 0 } ? evidenceFile.OpenReadStream() : null;
+        return await CompleteAsync(await _activities.AttachEvidenceAsync(Operation(), activityDataId,
+                new EvidenceUpload(content, evidenceFile?.Length ?? 0, evidenceFile?.FileName ?? string.Empty, evidenceFile?.ContentType ?? string.Empty),
+                cancellationToken),
+            cancellationToken, stage: Stage);
     }
 
     public async Task<IActionResult> OnPostSubmitInventoryAsync(Guid inventoryProjectVersionId, uint rowVersion,
@@ -2118,16 +1836,6 @@ public sealed class WorkspaceModel : PageModel
         _ => geography
     };
 
-    private async Task<string> GetProjectUnitCatalogueVersionAsync(Guid projectVersionId, CancellationToken cancellationToken)
-    {
-        var versions = await _dbContext.ActivityData
-            .Where(item => item.InventoryProjectVersionId == projectVersionId && item.RetiredAt == null)
-            .Select(item => item.ConversionRuleVersion)
-            .Distinct()
-            .ToArrayAsync(cancellationToken);
-        return GetActivityUnitCatalogueVersion(versions);
-    }
-
     private static string GetActivityUnitCatalogueVersion(IEnumerable<ActivityDataRecord> activities) =>
         GetActivityUnitCatalogueVersion(activities.Select(item => item.ConversionRuleVersion));
 
@@ -2147,12 +1855,6 @@ public sealed class WorkspaceModel : PageModel
         }
         value = other?.Trim() ?? string.Empty;
         return !string.IsNullOrWhiteSpace(value);
-    }
-
-    private static bool TryResolveOptionalControlledValue(string? selected, string? other, out string value)
-    {
-        value = string.Empty;
-        return string.IsNullOrWhiteSpace(selected) || TryResolveControlledValue(selected, other, out value);
     }
 
     private static string NormalizeSection(string? section) => section?.Trim().ToLowerInvariant() switch
@@ -2287,7 +1989,8 @@ public sealed class WorkspaceModel : PageModel
         return Page();
     }
 
-    private async Task<IActionResult> CompleteAsync(OperationResult result, CancellationToken cancellationToken, Guid? projectVersionId = null)
+    private async Task<IActionResult> CompleteAsync(
+        OperationResult result, CancellationToken cancellationToken, Guid? projectVersionId = null, string? stage = null)
     {
         switch (result.Status)
         {
@@ -2296,7 +1999,7 @@ public sealed class WorkspaceModel : PageModel
                 {
                     StatusMessage = result.Message;
                 }
-                return RedirectToPage(new { section = Section, projectVersionId = projectVersionId ?? ProjectVersionId });
+                return RedirectToPage(new { section = Section, stage, projectVersionId = result.ProjectVersionId ?? projectVersionId ?? ProjectVersionId });
             case OperationStatus.Forbidden:
                 return Forbid();
             case OperationStatus.NotFound:

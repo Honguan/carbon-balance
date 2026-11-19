@@ -31,6 +31,16 @@ public sealed class CriticalAuditPathTests
         var workflow = File.ReadAllText(Path.Combine(root, "src/CarbonFootprint.Infrastructure/Governance/InventoryWorkflowService.cs"));
         Assert.Contains("OperationAudit.AppendTracked(", workflow);
         Assert.True(workflow.IndexOf("OperationAudit.AppendTracked(", StringComparison.Ordinal) < workflow.IndexOf("SaveChangesAsync", StringComparison.Ordinal));
+
+        // Activity save/retire and evidence upload moved behind IActivityData; each operation audits before it saves.
+        var activities = File.ReadAllText(Path.Combine(root, "src/CarbonFootprint.Infrastructure/Governance/ActivityDataService.cs"));
+        var operations = activities.Split("public async Task<OperationResult> ")[1..];
+        Assert.Equal(3, operations.Length);
+        foreach (var operation in operations)
+        {
+            var audit = operation.IndexOf("OperationAudit.AppendTracked(", StringComparison.Ordinal);
+            Assert.True(audit >= 0 && audit < operation.IndexOf("db.SaveChangesAsync", StringComparison.Ordinal), operation[..operation.IndexOf('(')]);
+        }
     }
 
     [Fact]

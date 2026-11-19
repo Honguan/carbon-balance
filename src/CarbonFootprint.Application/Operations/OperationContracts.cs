@@ -20,11 +20,14 @@ public enum OperationStatus
 }
 
 public sealed record OperationResult(
-    OperationStatus Status, string Key = "", string Message = "", IReadOnlyList<string>? Details = null)
+    OperationStatus Status, string Key = "", string Message = "", IReadOnlyList<string>? Details = null,
+    Guid? ProjectVersionId = null)
 {
     public bool Succeeded => Status == OperationStatus.Succeeded;
 
-    public static OperationResult Success(string message = "") => new(OperationStatus.Succeeded, Message: message);
+    /// <param name="projectVersionId">The inventory the caller should return to, when the request did not name it.</param>
+    public static OperationResult Success(string message = "", Guid? projectVersionId = null) =>
+        new(OperationStatus.Succeeded, Message: message, ProjectVersionId: projectVersionId);
     public static readonly OperationResult Forbidden = new(OperationStatus.Forbidden);
     public static readonly OperationResult NotFound = new(OperationStatus.NotFound);
     public static readonly OperationResult BadRequest = new(OperationStatus.BadRequest);
