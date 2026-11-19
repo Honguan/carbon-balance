@@ -89,6 +89,16 @@ public sealed class GovernanceAuthoringTests
         Assert.False(await verify.AuditEvents.AnyAsync());
     }
 
+    [Fact]
+    public async Task MoenvSync_DeniedCallerNeverReachesTheOfficialSource()
+    {
+        // A null synchronization service proves the authorization check runs first.
+        var result = await new CarbonFootprint.Web.Services.MoenvFactorSyncOperation(null!, new Authorizer(false), new Scope(Guid.NewGuid()))
+            .SynchronizeAsync(Context(), default);
+
+        Assert.Equal(OperationStatus.Forbidden, result.Status);
+    }
+
     private static uint Version(Guid organizationId, Guid factorId)
     {
         using var db = Db(organizationId);

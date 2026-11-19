@@ -7,7 +7,7 @@
 
 ### 應用邊界（#48）
 
-狀態轉換不留在 Razor handler：PCR 與係數治理（`IPcrGovernance`、`IFactorGovernance`）、盤查提交與審查（`IInventoryWorkflow`）、可提交性與計算時效判斷（`IInventoryReadiness`）、建立計算版本（`IInventoryCalculation`）、活動資料新增／更正／移除與佐證上傳（`IActivityData`，以 `ActivityInput` 作為請求 DTO）、成員邀請／撤銷與 SMTP 設定（`IOrganizationAdministration`）、廠場與產品建立（`IProductCatalogue`）、盤查版本建立與階段適用性（`IInventoryProjects`）、Excel 匯出（`IInventoryExport`，唯讀）、PCR 草稿建立（`IPcrGovernance.CreateAsync`）、係數草稿建立與更新草稿（`IFactorGovernance.CreateAsync`／`SupersedeAsync`）都在 Application 定義介面、Infrastructure 實作。每個操作自行負責授權（`IOperationAuthorizer`）、驗證、稽核與 xmin 衝突處理，PageModel 只轉換 HTTP 輸入與結果。`tests/Architecture/RazorHandlerBoundaryTests` 以棘輪限制：已抽出的轉換不得回到 PageModel，`Workspace.cshtml.cs` 行數只可下降。
+狀態轉換不留在 Razor handler：PCR 與係數治理（`IPcrGovernance`、`IFactorGovernance`）、盤查提交與審查（`IInventoryWorkflow`）、可提交性與計算時效判斷（`IInventoryReadiness`）、建立計算版本（`IInventoryCalculation`）、活動資料新增／更正／移除與佐證上傳（`IActivityData`，以 `ActivityInput` 作為請求 DTO）、成員邀請／撤銷與 SMTP 設定（`IOrganizationAdministration`）、廠場與產品建立（`IProductCatalogue`）、盤查版本建立與階段適用性（`IInventoryProjects`）、Excel 匯出（`IInventoryExport`，唯讀）、PCR 草稿建立（`IPcrGovernance.CreateAsync`）、係數草稿建立與更新草稿（`IFactorGovernance.CreateAsync`／`SupersedeAsync`）、環境部係數同步（`IFactorCatalogueSync`，Web 層實作，因官方來源用戶端在 Web）。建立組織仍在 PageModel，因其需刷新目前使用者的登入 cookie，屬 Web 身分驗證邊界都在 Application 定義介面、Infrastructure 實作。每個操作自行負責授權（`IOperationAuthorizer`）、驗證、稽核與 xmin 衝突處理，PageModel 只轉換 HTTP 輸入與結果。`tests/Architecture/RazorHandlerBoundaryTests` 以棘輪限制：已抽出的轉換不得回到 PageModel，`Workspace.cshtml.cs` 行數只可下降。
 
 尚留在 PageModel 的功能（組織／產品／盤查建立、活動、證據、計算、匯出、SMTP 設定）有稽核與並行測試保護，但尚未抽出，列為後續切片。
 

@@ -1,5 +1,6 @@
 using CarbonFootprint.Application.Calculations;
 using CarbonFootprint.Application.Exports;
+using CarbonFootprint.Application.Factors;
 using CarbonFootprint.Application.Governance;
 using CarbonFootprint.Application.Inventories;
 using CarbonFootprint.Application.Organizations;
@@ -44,7 +45,7 @@ public sealed class WorkspaceModel : PageModel
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly IInventoryCalculation _calculation;
     private readonly IAuthorizationService _authorizationService;
-    private readonly MoenvFactorSynchronizationService _moenvFactorSynchronizationService;
+    private readonly IFactorCatalogueSync _factorSync;
     private readonly IOrganizationAdministration _organization;
     private readonly IProductCatalogue _products;
     private readonly IInventoryProjects _inventories;
@@ -58,7 +59,7 @@ public sealed class WorkspaceModel : PageModel
         SignInManager<ApplicationUser> signInManager,
         IInventoryCalculation calculation,
         IAuthorizationService authorizationService,
-        MoenvFactorSynchronizationService moenvFactorSynchronizationService,
+        IFactorCatalogueSync factorSync,
         IPcrGovernance pcrGovernance,
         IFactorGovernance factorGovernance,
         IInventoryWorkflow inventoryWorkflow,
@@ -85,7 +86,7 @@ public sealed class WorkspaceModel : PageModel
         _signInManager = signInManager;
         _calculation = calculation;
         _authorizationService = authorizationService;
-        _moenvFactorSynchronizationService = moenvFactorSynchronizationService;
+        _factorSync = factorSync;
     }
 
     public Guid? OrganizationId => _organizationScope.OrganizationId;
@@ -516,30 +517,9 @@ public sealed class WorkspaceModel : PageModel
 
     public async Task<IActionResult> OnPostSyncMoenvFactorsAsync(CancellationToken cancellationToken)
     {
-        if (!await IsAllowedAsync(OrganizationPermission.ManageFactors) || !await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-
-        try
-        {
-            var organizationId = RequireOrganization();
-            Guid? actorId = Guid.TryParse(_userManager.GetUserId(User), out var userId) ? userId : null;
-            var result = await _moenvFactorSynchronizationService.SynchronizeOrganizationAsync(
-                organizationId,
-                actorId,
-                HttpContext.TraceIdentifier,
-                cancellationToken);
-            StatusMessage = $"環境部係數同步完成：新增並發布 {result.CreatedCount} 筆、啟用舊草稿 {result.PublishedExistingCount} 筆、未變更 {result.UnchangedCount} 筆、略過 {result.SkippedCount} 筆無法對應的資料。";
-            return RedirectToPage(new { section = "factors", projectVersionId = ProjectVersionId });
-        }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
-        {
-            ModelState.AddModelError("factor", $"環境部係數同步失敗：{exception.Message}");
-            Section = "factors";
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
+        // Both the success redirect and a sync failure belong to the factor catalogue tab.
+        Section = "factors";
+        return await CompleteAsync(await _factorSync.SynchronizeAsync(Operation(), cancellationToken), cancellationToken);
     }
 
     public async Task<IActionResult> OnPostReviewFactorAsync(Guid factorVersionId, uint rowVersion,
