@@ -12,7 +12,7 @@ public sealed class RazorHandlerBoundaryTests
     private const int RemainingWorkflowStatusAssignments = 0;
 
     // Lower as handlers are extracted; never raise it.
-    private const int MaxWorkspacePageModelLines = 2413;
+    private const int MaxWorkspacePageModelLines = 2347;
 
     [Fact]
     public void ExtractedGovernanceTransitions_DoNotReappearInRazorPageModels()

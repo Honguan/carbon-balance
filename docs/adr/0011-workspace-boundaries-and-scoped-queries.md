@@ -7,7 +7,7 @@
 
 ### 應用邊界（#48）
 
-狀態轉換不留在 Razor handler：PCR 與係數治理（`IPcrGovernance`、`IFactorGovernance`）、盤查提交與審查（`IInventoryWorkflow`）、可提交性與計算時效判斷（`IInventoryReadiness`）都在 Application 定義介面、Infrastructure 實作。每個操作自行負責授權（`IOperationAuthorizer`）、驗證、稽核與 xmin 衝突處理，PageModel 只轉換 HTTP 輸入與結果。`tests/Architecture/RazorHandlerBoundaryTests` 以棘輪限制：已抽出的轉換不得回到 PageModel，`Workspace.cshtml.cs` 行數只可下降。
+狀態轉換不留在 Razor handler：PCR 與係數治理（`IPcrGovernance`、`IFactorGovernance`）、盤查提交與審查（`IInventoryWorkflow`）、可提交性與計算時效判斷（`IInventoryReadiness`）、建立計算版本（`IInventoryCalculation`）都在 Application 定義介面、Infrastructure 實作。每個操作自行負責授權（`IOperationAuthorizer`）、驗證、稽核與 xmin 衝突處理，PageModel 只轉換 HTTP 輸入與結果。`tests/Architecture/RazorHandlerBoundaryTests` 以棘輪限制：已抽出的轉換不得回到 PageModel，`Workspace.cshtml.cs` 行數只可下降。
 
 尚留在 PageModel 的功能（組織／產品／盤查建立、活動、證據、計算、匯出、SMTP 設定）有稽核與並行測試保護，但尚未抽出，列為後續切片。
 

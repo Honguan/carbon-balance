@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.AddScoped<IFactorGovernance, FactorGovernanceService>();
         services.AddScoped<IInventoryReadiness, InventoryReadinessService>();
         services.AddScoped<IInventoryWorkflow, InventoryWorkflowService>();
+        services.AddScoped<IInventoryCalculation, InventoryCalculationService>();
         services.AddScoped<OrganizationOnboardingService>();
         services.AddScoped<OrganizationInvitationService>();
         services.Configure<AdministratorBootstrapOptions>(

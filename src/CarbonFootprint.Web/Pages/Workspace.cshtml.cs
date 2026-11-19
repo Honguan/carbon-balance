@@ -43,7 +43,7 @@ public sealed class WorkspaceModel : PageModel
     private readonly SmtpEmailSender _emailSender;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
-    private readonly CalculateInventoryHandler _calculateHandler;
+    private readonly IInventoryCalculation _calculation;
     private readonly IInventorySnapshotReader _snapshotReader;
     private readonly IAuthorizationService _authorizationService;
     private readonly EvidenceStorageService _evidenceStorageService;
@@ -59,7 +59,7 @@ public sealed class WorkspaceModel : PageModel
         SmtpEmailSender emailSender,
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        CalculateInventoryHandler calculateHandler,
+        IInventoryCalculation calculation,
         IInventorySnapshotReader snapshotReader,
         IAuthorizationService authorizationService,
         EvidenceStorageService evidenceStorageService,
@@ -82,7 +82,7 @@ public sealed class WorkspaceModel : PageModel
         _emailSender = emailSender;
         _userManager = userManager;
         _signInManager = signInManager;
-        _calculateHandler = calculateHandler;
+        _calculation = calculation;
         _snapshotReader = snapshotReader;
         _authorizationService = authorizationService;
         _evidenceStorageService = evidenceStorageService;
@@ -1825,75 +1825,9 @@ public sealed class WorkspaceModel : PageModel
             $"碳足跡盤查-{(run?.Id ?? project.Id):N}.xlsx");
     }
 
-    public async Task<IActionResult> OnPostCalculateAsync(Guid inventoryProjectVersionId, CancellationToken cancellationToken)
-    {
-        if (!await IsAllowedAsync(OrganizationPermission.CreateCalculationRun))
-        {
-            return Forbid();
-        }
-        if (!await IsMfaEnabledAsync())
-        {
-            return Forbid();
-        }
-
-        var project = await _dbContext.InventoryProjectVersions.SingleOrDefaultAsync(
-            item => item.Id == inventoryProjectVersionId,
-            cancellationToken);
-        if (project is null)
-        {
-            return NotFound();
-        }
-
-        if (!InventoryWorkflow.AllowsEditing(Enum.Parse<InventoryWorkflowStatus>(project.WorkflowStatus)))
-        {
-            ModelState.AddModelError("calculation", "盤查已送審或核准，不可建立新計算版本。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        if (!project.PcrVersionId.HasValue)
-        {
-            ModelState.AddModelError("calculation", "盤查版本未綁定受治理的 PCR 版本。");
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        var pcrViolations = await _readiness.ValidatePcrAsync(
-            project.Id,
-            requireCompleteInventory: true,
-            cancellationToken);
-        if (pcrViolations.Count > 0)
-        {
-            foreach (var violation in pcrViolations)
-            {
-                ModelState.AddModelError("calculation", $"{violation.Code}：{violation.Message}");
-            }
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-
-        try
-        {
-            var snapshot = await _snapshotReader.ReadAsync(project.Id, cancellationToken);
-
-            var supersedesRunId = await _dbContext.CalculationRuns
-                .Where(item => item.ProjectVersionId == project.Id)
-                .OrderByDescending(item => item.CreatedAt)
-                .Select(item => (Guid?)item.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-            await _calculateHandler.HandleAsync(
-                new CalculateInventoryCommand(Guid.NewGuid(), snapshot, _buildProvenance, supersedesRunId),
-                cancellationToken);
-            StatusMessage = "不可變計算版本已建立。";
-            return RedirectToPage(new { section = Section, projectVersionId = project.Id });
-        }
-        catch (InvalidOperationException exception)
-        {
-            ModelState.AddModelError("calculation", exception.Message);
-            await LoadAsync(cancellationToken);
-            return Page();
-        }
-    }
+    public async Task<IActionResult> OnPostCalculateAsync(Guid inventoryProjectVersionId, CancellationToken cancellationToken) =>
+        await CompleteAsync(await _calculation.CalculateAsync(Operation(), inventoryProjectVersionId, cancellationToken),
+            cancellationToken, inventoryProjectVersionId);
 
     private const int MaxAffectedProjects = 500;
     public const int FactorPageSize = WorkspaceQueries.FactorPageSize;
