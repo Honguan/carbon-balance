@@ -37,7 +37,7 @@ $dockerArguments += @(
     '--env', "RCLONE_CONFIG_SOURCE_ENDPOINT=$($SourceEndpoint.AbsoluteUri.TrimEnd('/'))",
     '--env', 'RCLONE_CONFIG_TARGET_TYPE=s3', '--env', 'RCLONE_CONFIG_TARGET_PROVIDER=Other',
     '--env', "RCLONE_CONFIG_TARGET_ENDPOINT=$($TargetEndpoint.AbsoluteUri.TrimEnd('/'))",
-    'rclone/rclone:beta@sha256:c40ac99161882238065bea01ae678f0ddc75e85004a2b60a3d1e58fd7f181dba'
+    'rclone/rclone:beta@sha256:ac304dd088f6407a9e07bb3fd7190dd53c4b1aa0f25a674e57302877b56a2e12'
 )
 $sourceSize = & docker @dockerArguments size "source:$SourceBucket" --json
 if ($LASTEXITCODE -ne 0) {
