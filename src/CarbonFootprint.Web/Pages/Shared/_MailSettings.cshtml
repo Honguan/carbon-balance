@@ -19,6 +19,7 @@
         else
         {
             <form method="post" asp-page-handler="SaveMailSettings" preserve-input-for="SaveMailSettings" asp-route-section="settings" asp-route-stage="mail" class="workspace-subpanel" asp-route-projectVersionId="@Model.ProjectVersionId">
+                <input type="hidden" name="rowVersion" value="@(Model.MailSettings?.RowVersion ?? 0u)" />
                 <div class="row g-3">
                     <div class="col-md-8">
                         <label class="form-label" for="mailHost">SMTP 主機</label>

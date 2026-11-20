@@ -83,9 +83,23 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
                 };
                 projects.Add(project);
                 context.InventoryProjectVersions.Add(project);
-                context.ActivityData.Add(new ActivityDataRecord
+                var seededActivityId = Guid.NewGuid();
+                context.EvidenceFiles.Add(new EvidenceFileRecord
                 {
                     Id = Guid.NewGuid(),
+                    OrganizationId = organizationId,
+                    ActivityDataId = seededActivityId,
+                    ObjectKey = $"test/{seededActivityId:N}",
+                    OriginalFileName = "evidence.pdf",
+                    ContentType = "application/pdf",
+                    SizeBytes = 1,
+                    Sha256 = new string('b', 64),
+                    ScanStatus = "Clean",
+                    CreatedAt = DateTimeOffset.UtcNow
+                });
+                context.ActivityData.Add(new ActivityDataRecord
+                {
+                    Id = seededActivityId,
                     OrganizationId = organizationId,
                     InventoryProjectVersionId = project.Id,
                     LifecycleStage = (int)LifecycleStage.RawMaterial,
@@ -137,9 +151,9 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
             {
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, reviewerId.ToString())], "test"))
             };
-            var page = new WorkspaceModel(requestContext, new TestOrganizationScope(organizationId), null!, null!, null!,
-                services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new InventorySnapshotReader(requestContext),
-                new AllowAuthorization(), null!, null!, new EphemeralDataProtectionProvider(), provenance)
+            var page = new WorkspaceModel(requestContext, new TestOrganizationScope(organizationId), null!,
+                services.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!,
+                new AllowAuthorization(), null!, null!, null!, InventoryServices.Workflow(requestContext, new AllowAuthorization(), new TestOrganizationScope(organizationId)), InventoryServices.Readiness(requestContext), InventoryServices.Activities(requestContext, new AllowAuthorization(), new TestOrganizationScope(organizationId)), InventoryServices.Organization(requestContext, new AllowAuthorization(), new TestOrganizationScope(organizationId), null!, services.GetRequiredService<UserManager<ApplicationUser>>()), InventoryServices.Products(requestContext, new AllowAuthorization(), new TestOrganizationScope(organizationId)), InventoryServices.Inventories(requestContext, new AllowAuthorization(), new TestOrganizationScope(organizationId)), InventoryServices.Export(requestContext, new AllowAuthorization(), new InventorySnapshotReader(requestContext), provenance))
             {
                 PageContext = new PageContext { HttpContext = http },
                 TempData = new TempDataDictionary(http, new MemoryTempDataProvider()),
@@ -170,6 +184,7 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
             item.InventoryProjectVersionId == selected.Id && item.LifecycleStage == (int)LifecycleStage.Manufacturing);
         var originalRun = await context.CalculationRuns.SingleAsync(item => item.ProjectVersionId == selected.Id);
         var originalManifest = originalRun.CanonicalInputManifest;
+        async Task<uint> CurrentRowVersion() { await context.Entry(selected).ReloadAsync(); return selected.RowVersion; }
         var replacementPcr = CreatePcrVersion(organizationId, PcrPublicationStatus.Published);
         replacementPcr.FormulaRuleSetVersion = "changed-formula-rules-v2";
         context.PcrVersions.Add(replacementPcr);
@@ -199,13 +214,15 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
             mutation.Change();
             await context.SaveChangesAsync();
             Assert.Empty((await Request()).Page.CurrentRunProjectIds);
-            var submission = await Request(page => page.OnPostSubmitInventoryAsync(selected.Id, CancellationToken.None));
+            var rv1 = await CurrentRowVersion();
+            var submission = await Request(page => page.OnPostSubmitInventoryAsync(selected.Id, rv1, CancellationToken.None));
             Assert.IsType<PageResult>(submission.Result);
             Assert.False(submission.Page.ModelState.IsValid);
             selected.WorkflowStatus = "Submitted";
             await context.SaveChangesAsync();
+            var rv2 = await CurrentRowVersion();
             var approval = await Request(page => page.OnPostReviewInventoryAsync(selected.Id,
-                InventoryWorkflowStatus.Approved, "Reviewed", CancellationToken.None));
+                InventoryWorkflowStatus.Approved, "Reviewed", rv2, CancellationToken.None));
             Assert.IsType<PageResult>(approval.Result);
             Assert.False(approval.Page.ModelState.IsValid);
             await context.Entry(selected).ReloadAsync();
@@ -220,21 +237,32 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
         selected.WorkflowStatus = "Submitted";
         factor.PublicationStatus = "Withdrawn";
         await context.SaveChangesAsync();
+        var rv3 = await CurrentRowVersion();
         Assert.IsType<RedirectToPageResult>((await Request(page => page.OnPostReviewInventoryAsync(selected.Id,
-            InventoryWorkflowStatus.ChangesRequested, "Replace withdrawn factor", CancellationToken.None))).Result);
+            InventoryWorkflowStatus.ChangesRequested, "Replace withdrawn factor", rv3, CancellationToken.None))).Result);
         await context.Entry(selected).ReloadAsync();
         Assert.Equal("ChangesRequested", selected.WorkflowStatus);
         factor.PublicationStatus = "Published";
         await context.SaveChangesAsync();
+        var rv4 = await CurrentRowVersion();
         Assert.IsType<RedirectToPageResult>((await Request(page =>
-            page.OnPostSubmitInventoryAsync(selected.Id, CancellationToken.None))).Result);
+            page.OnPostSubmitInventoryAsync(selected.Id, rv4, CancellationToken.None))).Result);
+        var rv5 = await CurrentRowVersion();
         Assert.IsType<RedirectToPageResult>((await Request(page => page.OnPostReviewInventoryAsync(selected.Id,
-            InventoryWorkflowStatus.Approved, "Reviewed", CancellationToken.None))).Result);
+            InventoryWorkflowStatus.Approved, "Reviewed", rv5, CancellationToken.None))).Result);
         await context.Entry(selected).ReloadAsync();
         Assert.Equal("Approved", selected.WorkflowStatus);
         var workflowAudits = await context.AuditEvents.AsNoTracking().Where(item => item.ResourceId == selected.Id
             && (item.Action == "inventory.submitted" || item.Action == "inventory.approved" || item.Action == "inventory.changes-requested")).ToArrayAsync();
         Assert.Contains(workflowAudits, item => item.Action == "inventory.submitted");
+        foreach (var submitted in workflowAudits.Where(item => item.Action == "inventory.submitted"))
+        {
+            using var submittedMetadata = JsonDocument.Parse(submitted.MetadataJson);
+            Assert.Equal(64, submittedMetadata.RootElement.GetProperty("readinessReportSha256").GetString()!.Length);
+            Assert.True(submittedMetadata.RootElement.TryGetProperty("readinessFindingCounts", out _));
+        }
+        var readinessApi = Assert.IsType<JsonResult>((await Request(page => page.OnGetReadinessAsync(selected.Id, CancellationToken.None))).Result);
+        Assert.NotNull(readinessApi.Value);
         Assert.Contains(workflowAudits, item => item.Action == "inventory.approved");
         foreach (var workflowAudit in workflowAudits)
         {
@@ -269,11 +297,13 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
         var corrupted = await Request();
         Assert.Empty(corrupted.Page.CurrentRunProjectIds);
         Assert.False(corrupted.Page.LatestManifestHashValid);
-        Assert.IsType<PageResult>((await Request(page => page.OnPostSubmitInventoryAsync(selected.Id, CancellationToken.None))).Result);
+        var rv6 = await CurrentRowVersion();
+        Assert.IsType<PageResult>((await Request(page => page.OnPostSubmitInventoryAsync(selected.Id, rv6, CancellationToken.None))).Result);
         selected.WorkflowStatus = "Submitted";
         await context.SaveChangesAsync();
+        var rv7 = await CurrentRowVersion();
         Assert.IsType<PageResult>((await Request(page => page.OnPostReviewInventoryAsync(selected.Id,
-            InventoryWorkflowStatus.Approved, "Reviewed", CancellationToken.None))).Result);
+            InventoryWorkflowStatus.Approved, "Reviewed", rv7, CancellationToken.None))).Result);
         var export = await Request(page => page.OnGetExportExcelAsync(selected.Id, CancellationToken.None));
         Assert.Equal(StatusCodes.Status409Conflict, Assert.IsType<ObjectResult>(export.Result).StatusCode);
     }
@@ -536,10 +566,9 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
             .Services.BuildServiceProvider();
         var http = new DefaultHttpContext();
         var permissions = new AllowAuthorization();
-        var workspace = new WorkspaceModel(context, new TestOrganizationScope(organizationId), null!, null!, null!,
-            identityServices.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, reader,
-            permissions, null!, null!, new EphemeralDataProtectionProvider(),
-            CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)))
+        var workspace = new WorkspaceModel(context, new TestOrganizationScope(organizationId), null!,
+            identityServices.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!,
+            permissions, null!, null!, null!, InventoryServices.Workflow(context, permissions, new TestOrganizationScope(organizationId)), InventoryServices.Readiness(context), InventoryServices.Activities(context, permissions, new TestOrganizationScope(organizationId)), InventoryServices.Organization(context, permissions, new TestOrganizationScope(organizationId), null!, identityServices.GetRequiredService<UserManager<ApplicationUser>>()), InventoryServices.Products(context, permissions, new TestOrganizationScope(organizationId)), InventoryServices.Inventories(context, permissions, new TestOrganizationScope(organizationId)), InventoryServices.Export(context, permissions, reader, CalculationBuildProvenance.Create("snapshot-test", new string('c', 40))))
         {
             PageContext = new PageContext { HttpContext = http },
             TempData = new TempDataDictionary(http, new MemoryTempDataProvider()),
@@ -574,9 +603,7 @@ public sealed class PostgreSqlPersistenceTests(ITestOutputHelper output)
         await using (var foreignContext = CreateContext(foreignOrganizationId))
         {
             var foreignWorkspace = new WorkspaceModel(foreignContext, new TestOrganizationScope(foreignOrganizationId),
-                null!, null!, null!, identityServices.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!,
-                new InventorySnapshotReader(foreignContext), new AllowAuthorization(), null!, null!,
-                new EphemeralDataProtectionProvider(), CalculationBuildProvenance.Create("snapshot-test", new string('c', 40)))
+                null!, identityServices.GetRequiredService<UserManager<ApplicationUser>>(), null!, null!, new AllowAuthorization(), null!, null!, null!, InventoryServices.Workflow(foreignContext, new AllowAuthorization(), new TestOrganizationScope(foreignOrganizationId)), InventoryServices.Readiness(foreignContext), InventoryServices.Activities(foreignContext, new AllowAuthorization(), new TestOrganizationScope(foreignOrganizationId)), InventoryServices.Organization(foreignContext, new AllowAuthorization(), new TestOrganizationScope(foreignOrganizationId), null!, identityServices.GetRequiredService<UserManager<ApplicationUser>>()), InventoryServices.Products(foreignContext, new AllowAuthorization(), new TestOrganizationScope(foreignOrganizationId)), InventoryServices.Inventories(foreignContext, new AllowAuthorization(), new TestOrganizationScope(foreignOrganizationId)), InventoryServices.Export(foreignContext, new AllowAuthorization(), new InventorySnapshotReader(foreignContext), CalculationBuildProvenance.Create("snapshot-test", new string('c', 40))))
             {
                 PageContext = new PageContext { HttpContext = new DefaultHttpContext() }
             };

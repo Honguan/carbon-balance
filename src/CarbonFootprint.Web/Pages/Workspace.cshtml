@@ -1,5 +1,6 @@
 @page "{section?}/{stage?}"
 @model CarbonFootprint.Web.Pages.WorkspaceModel
+@using CarbonFootprint.Application.Readiness
 @using CarbonFootprint.Domain.Modules.Calculations
 @using CarbonFootprint.Domain.Modules.Factors
 @using CarbonFootprint.Domain.Modules.Inventories
@@ -15,7 +16,7 @@
     string FormatReportingDecimal(decimal value) =>
         value.ToString(Model.LatestReportingRules is { } rules ? $"F{rules.RoundingDecimalPlaces}" : "G29");
     string DisplayAmount(decimal value) => value.ToString("0.############################");
-    var factorsById = Model.Factors.ToDictionary(item => item.Id);
+    var factorsById = Model.ReferencedFactors;
     var hasFacilities = Model.Facilities.Count > 0;
     var hasProductVersions = Model.ProductVersions.Count > 0;
     var hasSelectablePcrVersions = Model.SelectablePcrVersions.Count > 0;
@@ -35,6 +36,13 @@
         InventoryWorkflowStatus.ChangesRequested => "退回補正",
         InventoryWorkflowStatus.Approved => "已核准",
         _ => "其他狀態"
+    };
+    static string ReadinessSeverityName(ReadinessSeverity severity) => severity switch
+    {
+        ReadinessSeverity.BlockingError => "阻擋",
+        ReadinessSeverity.RequiredExplanation => "須說明",
+        ReadinessSeverity.Warning => "警告",
+        _ => "建議"
     };
     string FormalStageName(LifecycleStage stage) => stage switch
     {
@@ -233,6 +241,7 @@ else
                                     <form class="d-inline" method="post" asp-page-handler="RevokeMember" preserve-input-for="RevokeMember-@membership.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
 <fieldset disabled="@(!(Model.CanManageOrganization && Model.HasVerifiedMfa))">
                                         <input type="hidden" name="membershipId" value="@membership.Id" />
+                                        <input type="hidden" name="rowVersion" value="@membership.RowVersion" />
                                         <button class="btn btn-sm btn-outline-danger" type="submit">撤銷</button>
 
 </fieldset></form>
@@ -251,6 +260,7 @@ else
                         <form class="d-inline" method="post" asp-page-handler="RevokeInvitation" preserve-input-for="RevokeInvitation-@invitation.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
 <fieldset disabled="@(!(Model.CanManageOrganization && Model.HasVerifiedMfa))">
                             <input type="hidden" name="invitationId" value="@invitation.Id" />
+                            <input type="hidden" name="rowVersion" value="@invitation.RowVersion" />
                             <button class="btn btn-sm btn-outline-danger" type="submit">撤銷邀請</button>
 
 </fieldset></form>
@@ -480,7 +490,7 @@ else
                             <li class="mb-2">
                                 @pcr.RegistrationNumber 第 @(pcr.VersionNumber) 版：@pcr.Title（@PublicationStatusName(pcr.PublicationStatus)）
                                 <span>｜有效期：@pcr.ValidFrom～@pcr.ValidTo</span>
-                                <span>｜受影響盤查：@(Model.PcrAffectedProjectCounts.GetValueOrDefault(pcr.Id))</span>
+                                <span>｜綁定盤查：@(Model.PcrAffectedProjectCounts.GetValueOrDefault(pcr.Id))</span>
                                 @if (pcr.DeprecatedAt.HasValue)
                                 {
                                     <span class="text-danger">｜已被取代：@pcr.DeprecationReason</span>
@@ -496,6 +506,18 @@ else
                                                 <li>
                                                     @project.FunctionalUnit（@project.PeriodStart～@project.PeriodEnd）
                                                     <code>@project.Id</code>
+                                                    @switch (Model.PcrImpact(pcr, project))
+                                                    {
+                                                        case PcrImpactReason.Withdrawn:
+                                                            <strong class="text-danger">｜受影響：PCR 已撤回</strong>
+                                                            break;
+                                                        case PcrImpactReason.Superseded:
+                                                            <strong class="text-danger">｜受影響：PCR 已被新版取代</strong>
+                                                            break;
+                                                        case PcrImpactReason.Expired:
+                                                            <strong class="text-danger">｜受影響：PCR 已早於盤查期間結束前到期</strong>
+                                                            break;
+                                                    }
                                                 </li>
                                             }
                                         </ul>
@@ -506,18 +528,21 @@ else
                                     <form class="d-inline" method="post" asp-page-handler="ReviewPcr" preserve-input-for="ReviewPcr-@pcr.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
 <fieldset disabled="@(!(Model.CanManageFactors && Model.HasVerifiedMfa))">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
+                                        <input type="hidden" name="rowVersion" value="@pcr.RowVersion" />
                                         <button class="btn btn-sm btn-outline-primary" type="submit">核准審查</button>
 
 </fieldset></form>
                                     <form class="d-inline" method="post" asp-page-handler="RejectPcr" preserve-input-for="RejectPcr-@pcr.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
 <fieldset disabled="@(!(Model.CanManageFactors && Model.HasVerifiedMfa))">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
+                                        <input type="hidden" name="rowVersion" value="@pcr.RowVersion" />
                                         <button class="btn btn-sm btn-outline-danger" type="submit">拒絕審查</button>
 
 </fieldset></form>
                                     <form class="d-inline" method="post" asp-page-handler="PublishPcr" preserve-input-for="PublishPcr-@pcr.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
 <fieldset disabled="@(!(Model.CanManageFactors))">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
+                                        <input type="hidden" name="rowVersion" value="@pcr.RowVersion" />
                                         <button class="btn btn-sm btn-success" type="submit">發布</button>
 
 </fieldset></form>
@@ -527,6 +552,7 @@ else
                                     <form class="d-inline" method="post" asp-page-handler="WithdrawPcr" preserve-input-for="WithdrawPcr-@pcr.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
 <fieldset disabled="@(!(Model.CanManageFactors))">
                                         <input type="hidden" name="pcrVersionId" value="@pcr.Id" />
+                                        <input type="hidden" name="rowVersion" value="@pcr.RowVersion" />
                                         <button class="btn btn-sm btn-outline-danger" type="submit">撤回</button>
 
 </fieldset></form>
@@ -644,6 +670,7 @@ else
                                     {
                                         <form class="mt-1 border rounded p-2" method="post" asp-page-handler="SetStageApplicability" preserve-input-for="SetStageApplicability-@declaration.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
                                             <input type="hidden" name="stageDeclarationId" value="@declaration.Id" />
+                                            <input type="hidden" name="rowVersion" value="@declaration.RowVersion" />
                                             <label class="form-check-label" for="stage-applicable-@declaration.Id">@FormalStageName((LifecycleStage)declaration.LifecycleStage)適用</label>
                                             <input class="form-check-input" id="stage-applicable-@declaration.Id" name="isApplicable" type="checkbox" value="true" checked="@declaration.IsApplicable" />
                                             <label class="form-label" for="stage-reason-@declaration.Id">不適用原因</label>
@@ -656,6 +683,7 @@ else
                                 {
                                     <form class="mt-1" method="post" asp-page-handler="ReviewInventory" preserve-input-for="ReviewInventory-@inventory.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
                                         <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
+                                        <input type="hidden" name="rowVersion" value="@inventory.RowVersion" />
                                         <label class="form-label" for="review-comment-@inventory.Id">審查意見</label>
                                         <input class="form-control" id="review-comment-@inventory.Id" name="reviewComment" maxlength="2000" />
                                         <button class="btn btn-sm btn-success mt-1" name="decision" value="Approved" type="submit">核准</button>
@@ -934,6 +962,10 @@ else
                                                     </option>
                                                 }
                                             </select>
+                                            @if (Model.SelectableFactorTotal > Model.SelectableFactors.Count)
+                                            {
+                                                <p class="workspace-select-help">已發布係數共 @Model.SelectableFactorTotal 筆，僅列出前 @Model.SelectableFactors.Count 筆；其餘請至係數資料庫查詢。</p>
+                                            }
                                             <p class="workspace-select-help" id="factor-@stageSection.Slug-help">
                                                 @if (!hasSelectableFactors)
                                                 {
@@ -1095,7 +1127,7 @@ else
         </div>
     </section>
 
-    @if (latestSelectedRun is not null)
+    @if (Model.Section == "calculation" && latestSelectedRun is not null)
     {
         var run = latestSelectedRun;
         <section class="card my-4 workspace-card" id="latest-result">
@@ -1157,6 +1189,10 @@ else
                         </tbody>
                     </table>
                 </div>
+                @if (Model.LatestLineTotal > Model.LatestLines.Count)
+                {
+                    <p class="workspace-select-help">僅顯示前 @Model.LatestLines.Count 筆，共 @Model.LatestLineTotal 筆；完整明細請匯出 Excel。</p>
+                }
                 <p class="alert alert-warning">此結果為系統內部盤查計算，不代表已查驗、ISO 認證或取得碳標籤。</p>
             </div>
         </section>
@@ -1182,12 +1218,8 @@ else
                     @foreach (var inventory in Model.InventoryProjects.Where(item => item.Id == Model.ProjectVersionId))
                     {
                         var workflowStatus = Enum.Parse<InventoryWorkflowStatus>(inventory.WorkflowStatus);
-                        var savedStageCount = Model.Activities
-                            .Where(item => item.InventoryProjectVersionId == inventory.Id)
-                            .Select(item => item.LifecycleStage)
-                            .Distinct()
-                            .Count();
-                        var hasRun = Model.Runs.Any(item => item.ProjectVersionId == inventory.Id);
+                        var savedStageCount = Model.SavedStageCount;
+                        var hasRun = Model.HasRun;
                         var hasCurrentRun = Model.CurrentRunProjectIds.Contains(inventory.Id);
                         var hasPendingFormulaRun = Model.PendingFormulaRunProjectIds.Contains(inventory.Id);
                         <li class="workspace-submit-item">
@@ -1199,7 +1231,41 @@ else
                             {
                                 <form method="post" asp-page-handler="SubmitInventory" asp-route-section="calculation" preserve-input-for="SubmitInventory-@inventory.Id" asp-route-projectVersionId="@Model.ProjectVersionId">
                                     <input type="hidden" name="inventoryProjectVersionId" value="@inventory.Id" />
-                                    <button class="btn btn-warning" type="submit" disabled="@(!hasCurrentRun || !Model.HasVerifiedMfa)">統一提交盤查</button>
+                                    <input type="hidden" name="rowVersion" value="@inventory.RowVersion" />
+                                    @if (Model.Readiness is { } readiness)
+                                    {
+                                        <section class="readiness-report" aria-labelledby="readiness-heading">
+                                            <h3 class="workspace-subheading" id="readiness-heading">提交前檢查（@(readiness.CanSubmit ? "可提交" : "尚不可提交")）</h3>
+                                            <p class="workspace-help">阻擋 @readiness.BlockingCount 項｜需說明 @readiness.Findings.Count(item => item.Severity == ReadinessSeverity.RequiredExplanation) 項｜基準日 @readiness.AsOf.ToString("yyyy-MM-dd")</p>
+                                            @foreach (var group in readiness.Findings.GroupBy(item => item.Stage))
+                                            {
+                                                <h4 class="h6 mt-2">@(group.Key is { } groupStage ? FormalStageName(groupStage) : "整體盤查")</h4>
+                                                <ul class="workspace-records">
+                                                    @foreach (var finding in group)
+                                                    {
+                                                        <li data-readiness-code="@finding.Code">
+                                                            <strong>[@ReadinessSeverityName(finding.Severity)] @finding.Code</strong>
+                                                            @finding.Message
+                                                            <span class="workspace-help">處理方式：@finding.Remediation@(string.IsNullOrWhiteSpace(finding.Owner) ? "" : $"｜資料負責：{finding.Owner}")</span>
+                                                            @if (finding.Stage is { } findingStage && finding.EntityType is "ActivityData" or "LifecycleStage")
+                                                            {
+                                                                <a asp-page="/Workspace" asp-route-section="lifecycle" asp-route-stage="@WorkspaceModel.StageSlug(findingStage)" asp-route-projectVersionId="@Model.ProjectVersionId">前往該階段</a>
+                                                            }
+                                                            @if (finding.Severity == ReadinessSeverity.RequiredExplanation)
+                                                            {
+                                                                var ackKey = $"{finding.Code}|{finding.EntityKey}";
+                                                                <div>
+                                                                    <label><input type="checkbox" name="acknowledge" value="@ackKey" /> 我已確認並說明</label>
+                                                                    <input class="form-control" name="justification_@ackKey" maxlength="2000" aria-label="說明 @finding.Code" />
+                                                                </div>
+                                                            }
+                                                        </li>
+                                                    }
+                                                </ul>
+                                            }
+                                        </section>
+                                    }
+                                    <button class="btn btn-warning" type="submit" disabled="@(!hasCurrentRun || !Model.HasVerifiedMfa || Model.Readiness is { BlockingCount: > 0 })">統一提交盤查</button>
                                 </form>
                             }
                             else

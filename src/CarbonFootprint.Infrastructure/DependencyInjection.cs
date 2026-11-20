@@ -1,4 +1,11 @@
 using CarbonFootprint.Application.Calculations;
+using CarbonFootprint.Application.Exports;
+using CarbonFootprint.Application.Governance;
+using CarbonFootprint.Application.Inventories;
+using CarbonFootprint.Application.Organizations;
+using CarbonFootprint.Application.Products;
+using CarbonFootprint.Application.Readiness;
+using CarbonFootprint.Infrastructure.Governance;
 using CarbonFootprint.Infrastructure.Identity;
 using CarbonFootprint.Infrastructure.Evidence;
 using CarbonFootprint.Infrastructure.Organizations;
@@ -27,6 +34,16 @@ public static class DependencyInjection
         services.TryAddScoped<IOrganizationScope, UnscopedOrganizationScope>();
         services.AddScoped<ICalculationRunStore, CalculationRunStore>();
         services.AddScoped<IInventorySnapshotReader, InventorySnapshotReader>();
+        services.AddScoped<IPcrGovernance, PcrGovernanceService>();
+        services.AddScoped<IFactorGovernance, FactorGovernanceService>();
+        services.AddScoped<IInventoryReadiness, InventoryReadinessService>();
+        services.AddScoped<IInventoryWorkflow, InventoryWorkflowService>();
+        services.AddScoped<IInventoryCalculation, InventoryCalculationService>();
+        services.AddScoped<IActivityData, ActivityDataService>();
+        services.AddScoped<IOrganizationAdministration, OrganizationAdministrationService>();
+        services.AddScoped<IProductCatalogue, ProductCatalogueService>();
+        services.AddScoped<IInventoryProjects, InventoryProjectService>();
+        services.AddScoped<IInventoryExport, InventoryExportService>();
         services.AddScoped<OrganizationOnboardingService>();
         services.AddScoped<OrganizationInvitationService>();
         services.Configure<AdministratorBootstrapOptions>(

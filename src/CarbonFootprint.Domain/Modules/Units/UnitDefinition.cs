@@ -38,6 +38,8 @@ public sealed class UnitCatalogue
         _units = indexedUnits;
     }
 
+    public const string CurrentVersion = "units-p0-v2";
+
     public string Version { get; }
 
     public static string ResolveVersion(IEnumerable<string> versions)
@@ -45,7 +47,7 @@ public sealed class UnitCatalogue
         var distinctVersions = versions.Distinct(StringComparer.Ordinal).ToArray();
         return distinctVersions.Length switch
         {
-            0 => "units-p0-v2",
+            0 => CurrentVersion,
             1 => distinctVersions[0],
             _ => throw new InvalidOperationException("同一盤查專案不可混用不同單位目錄版本。")
         };

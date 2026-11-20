@@ -19,6 +19,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Cases\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\CarbonFootprint.Domain\CarbonFootprint.Domain.csproj" />
     <ProjectReference Include="..\..\src\CarbonFootprint.Application\CarbonFootprint.Application.csproj" />
   </ItemGroup>

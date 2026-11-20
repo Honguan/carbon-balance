@@ -114,6 +114,22 @@ public sealed class PcrRuleEngineTests
         Assert.Contains(violations, item => item.Code == "PCR-CUTOFF-DISCLOSURE");
     }
 
+    [Fact]
+    public void ImpactAnalysis_ClassifiesWithdrawnSupersededExpiredAndCurrentVersions()
+    {
+        var periodEnd = new DateOnly(2026, 12, 31);
+        var current = CreateRuleSet();
+        Assert.Equal(PcrImpactReason.None, PcrImpactAnalysis.Classify(current, periodEnd));
+        Assert.Equal(PcrImpactReason.Withdrawn, PcrImpactAnalysis.Classify(
+            current with { PublicationStatus = PcrPublicationStatus.Withdrawn, DeprecatedAt = DateTimeOffset.UtcNow }, periodEnd));
+        Assert.Equal(PcrImpactReason.Superseded, PcrImpactAnalysis.Classify(
+            current with { DeprecatedAt = DateTimeOffset.UtcNow }, periodEnd));
+        Assert.Equal(PcrImpactReason.Expired, PcrImpactAnalysis.Classify(
+            current with { ExpiryDate = new DateOnly(2026, 6, 30) }, periodEnd));
+        Assert.Equal(PcrImpactReason.None, PcrImpactAnalysis.Classify(
+            current with { ExpiryDate = periodEnd }, periodEnd));
+    }
+
     private static PcrRuleSetVersion CreateRuleSet() => new(
         Guid.NewGuid(),
         Guid.NewGuid(),

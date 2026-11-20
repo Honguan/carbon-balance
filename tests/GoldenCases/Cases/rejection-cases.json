@@ -1,0 +1,182 @@
+{
+  "suiteVersion": "golden-suite-v1",
+  "description": "必須被拒絕、不得產生計算結果的參考案例。expected.error 為錯誤訊息中必須出現的穩定片段。",
+  "versions": { "pcr": "pcr-golden-fixture-1", "ruleSet": "pcr-formulas-v1", "gwp": "gwp-ar6-100y-fixture", "unitCatalogue": "units-p0-v2" },
+  "cases": [
+    {
+      "id": "GC-004-E1",
+      "title": "係數有效期迄日早於活動迄日一天",
+      "covers": ["boundary-date", "invalid-dependency"],
+      "applicableStages": ["RawMaterial"],
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kg", "datasetVersion": "ds-2026", "validFrom": "2026-01-01", "validTo": "2026-12-30" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Material", "factor": "f", "rawValue": 1, "rawUnit": "kg", "canonicalUnit": "kg" }],
+      "expected": { "error": "未發布、已撤回或不在有效期" }
+    },
+    {
+      "id": "GC-004-E2",
+      "title": "活動期間跨出盤查期間一天",
+      "covers": ["boundary-date"],
+      "applicableStages": ["RawMaterial"],
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kg", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Material", "factor": "f", "rawValue": 1, "rawUnit": "kg", "canonicalUnit": "kg", "periodStart": "2026-12-31", "periodEnd": "2027-01-01" }],
+      "expected": { "error": "活動數據期間必須落在盤查期間內" }
+    },
+    {
+      "id": "GC-005-E1",
+      "title": "分配比例為 0",
+      "covers": ["allocation", "zero-value"],
+      "applicableStages": ["RawMaterial"],
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kg", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Material", "factor": "f", "rawValue": 1, "rawUnit": "kg", "canonicalUnit": "kg", "allocation": 0 }],
+      "expected": { "error": "分配比例必須大於 0 且小於或等於 1" }
+    },
+    {
+      "id": "GC-005-E2",
+      "title": "分配比例大於 1",
+      "covers": ["allocation"],
+      "applicableStages": ["RawMaterial"],
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kg", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Material", "factor": "f", "rawValue": 1, "rawUnit": "kg", "canonicalUnit": "kg", "allocation": 1.0001 }],
+      "expected": { "error": "分配比例必須大於 0 且小於或等於 1" }
+    },
+    {
+      "id": "GC-009-E1",
+      "title": "截斷門檻超過 100%",
+      "covers": ["cutoff"],
+      "applicableStages": ["RawMaterial"],
+      "project": { "cutoffThresholdPercent": 100.5 },
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kg", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Material", "factor": "f", "rawValue": 1, "rawUnit": "kg", "canonicalUnit": "kg" }],
+      "expected": { "error": "cutoff threshold must be between 0 and 100" }
+    },
+    {
+      "id": "GC-009-E2",
+      "title": "報表捨入位數超過 12",
+      "covers": ["rounding-precision"],
+      "applicableStages": ["RawMaterial"],
+      "project": { "roundingDecimalPlaces": 13 },
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kg", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Material", "factor": "f", "rawValue": 1, "rawUnit": "kg", "canonicalUnit": "kg" }],
+      "expected": { "error": "rounding must be between 0 and 12" }
+    },
+    {
+      "id": "GC-010-E1",
+      "title": "已撤回係數",
+      "covers": ["supersession", "invalid-dependency"],
+      "applicableStages": ["Manufacturing"],
+      "factors": [{ "key": "grid", "version": 1, "value": 0.5, "denominator": "kWh", "datasetVersion": "ds-2026", "status": "Withdrawn" }],
+      "activities": [{ "key": "e1", "stage": "Manufacturing", "kind": "Energy", "factor": "grid", "rawValue": 200, "rawUnit": "kWh", "canonicalUnit": "kWh" }],
+      "expected": { "error": "未發布、已撤回或不在有效期" }
+    },
+    {
+      "id": "GC-010-E2",
+      "title": "草稿係數",
+      "covers": ["invalid-dependency"],
+      "applicableStages": ["Manufacturing"],
+      "factors": [{ "key": "grid", "version": 2, "value": 0.42, "denominator": "kWh", "datasetVersion": "ds-2027", "status": "Draft" }],
+      "activities": [{ "key": "e1", "stage": "Manufacturing", "kind": "Energy", "factor": "grid", "rawValue": 200, "rawUnit": "kWh", "canonicalUnit": "kWh" }],
+      "expected": { "error": "未發布、已撤回或不在有效期" }
+    },
+    {
+      "id": "GC-010-E3",
+      "title": "已發布但審查未核准的係數",
+      "covers": ["invalid-dependency"],
+      "applicableStages": ["Manufacturing"],
+      "factors": [{ "key": "grid", "version": 1, "value": 0.5, "denominator": "kWh", "datasetVersion": "ds-2026", "reviewStatus": "Pending" }],
+      "activities": [{ "key": "e1", "stage": "Manufacturing", "kind": "Energy", "factor": "grid", "rawValue": 200, "rawUnit": "kWh", "canonicalUnit": "kWh" }],
+      "expected": { "error": "未發布、已撤回或不在有效期" }
+    },
+    {
+      "id": "GC-010-E4",
+      "title": "未支援的 PCR 公式規則版本",
+      "covers": ["supersession", "invalid-dependency"],
+      "versions": { "pcr": "pcr-golden-fixture-2", "ruleSet": "pcr-formulas-v2", "gwp": "gwp-ar6-100y-fixture", "unitCatalogue": "units-p0-v2" },
+      "applicableStages": ["Manufacturing"],
+      "factors": [{ "key": "grid", "version": 1, "value": 0.5, "denominator": "kWh", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "e1", "stage": "Manufacturing", "kind": "Energy", "factor": "grid", "rawValue": 200, "rawUnit": "kWh", "canonicalUnit": "kWh" }],
+      "expected": { "error": "Unsupported PCR formula rule set" }
+    },
+    {
+      "id": "GC-011-E1",
+      "title": "負值活動量",
+      "covers": ["negative-value"],
+      "applicableStages": ["RawMaterial"],
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kg", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Material", "factor": "f", "rawValue": -1, "rawUnit": "kg", "canonicalUnit": "kg" }],
+      "expected": { "error": "不得為負值" }
+    },
+    {
+      "id": "GC-011-E2",
+      "title": "負值運輸距離",
+      "covers": ["negative-value", "multi-leg-transport"],
+      "applicableStages": ["Distribution"],
+      "factors": [{ "key": "f", "version": 1, "value": 0.1, "denominator": "tonne-km", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "Distribution", "kind": "DistributionTransport", "factor": "f", "distanceKm": -5, "weightKg": 100, "canonicalUnit": "tonne-km" }],
+      "expected": { "error": "運輸活動必須提供非負的運輸距離" }
+    },
+    {
+      "id": "GC-011-E3",
+      "title": "非受控單位",
+      "covers": ["invalid-unit"],
+      "applicableStages": ["RawMaterial"],
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kg", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Material", "factor": "f", "rawValue": 1, "rawUnit": "furlong", "canonicalUnit": "kg" }],
+      "expected": { "error": "找不到受控單位" }
+    },
+    {
+      "id": "GC-011-E4",
+      "title": "跨量綱換算（質量換算為能量）",
+      "covers": ["invalid-unit", "unit-conversion"],
+      "applicableStages": ["Manufacturing"],
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kWh", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "Manufacturing", "kind": "Energy", "factor": "f", "rawValue": 1, "rawUnit": "kg", "canonicalUnit": "kWh" }],
+      "expected": { "error": "不可將 mass 換算為 energy" }
+    },
+    {
+      "id": "GC-011-E5",
+      "title": "活動 canonical 單位與係數分母不一致",
+      "covers": ["invalid-unit", "invalid-dependency"],
+      "applicableStages": ["RawMaterial"],
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kWh", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Material", "factor": "f", "rawValue": 1, "rawUnit": "kg", "canonicalUnit": "kg" }],
+      "expected": { "error": "canonical 單位與係數分母不一致" }
+    },
+    {
+      "id": "GC-011-E6",
+      "title": "活動類型不屬於該階段",
+      "covers": ["invalid-dependency"],
+      "applicableStages": ["RawMaterial"],
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kWh", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Energy", "factor": "f", "rawValue": 1, "rawUnit": "kWh", "canonicalUnit": "kWh" }],
+      "expected": { "error": "不適用於 RawMaterial 階段" }
+    },
+    {
+      "id": "GC-011-E7",
+      "title": "適用階段沒有任何活動",
+      "covers": ["multi-stage"],
+      "applicableStages": ["RawMaterial", "Manufacturing"],
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kg", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Material", "factor": "f", "rawValue": 1, "rawUnit": "kg", "canonicalUnit": "kg" }],
+      "expected": { "error": "適用階段 Manufacturing 至少需要一筆活動數據" }
+    },
+    {
+      "id": "GC-011-E8",
+      "title": "不適用階段未提供理由",
+      "covers": ["not-applicable-stage"],
+      "applicableStages": ["RawMaterial"],
+      "notApplicableReason": "",
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kg", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Material", "factor": "f", "rawValue": 1, "rawUnit": "kg", "canonicalUnit": "kg" }],
+      "expected": { "error": "必須提供理由" }
+    },
+    {
+      "id": "GC-011-E9",
+      "title": "估算資料未提供估算理由",
+      "covers": ["data-quality"],
+      "applicableStages": ["RawMaterial"],
+      "factors": [{ "key": "f", "version": 1, "value": 1, "denominator": "kg", "datasetVersion": "ds-2026" }],
+      "activities": [{ "key": "a", "stage": "RawMaterial", "kind": "Material", "factor": "f", "rawValue": 1, "rawUnit": "kg", "canonicalUnit": "kg", "isEstimated": true }],
+      "expected": { "error": "估算活動數據必須提供估算或替代資料理由" }
+    }
+  ]
+}

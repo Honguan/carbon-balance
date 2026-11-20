@@ -13,3 +13,4 @@
 | DEC-005 | 正式環境 hosting、email、object storage 與 secrets provider | Owner／平台 | P0 hardened profile 已定義 TLS、網路與 secret 注入契約；仍須選定實際供應商 |
 | DEC-006 | 舊版各階段活動量公式的領域有效性 | 碳足跡領域審核者 | 既有活動量公式維持 `pending-domain-review`。公開標準已支持以物理等合理關係分配；仍需確認工廠實際基礎及每單位正規化。舊 `/3` 已確認是三家焚化廠替代估算平均，須確認代表性及回收重量假設，不可直接改為三筆加總。公式、來源與儲存格定位見 [old 分析](architecture/LEGACY_PURPOSE_ANALYSIS.md)，本次不以舊值定義正式答案 |
 | DEC-007 | PCR／公式／GWP／獨立參考案例及人工 UAT 的具名接受 | 領域審查者／產品負責人／外部查驗者 | 使用者確認未提供；工程預發布保持明確限制。依 [簽核範本](release/P0_UAT_SIGNOFF.md) 記錄版本、來源 hash、審查者、日期與適用範圍；不可由 CI 或工程完成百分比替代 |
+| DEC-008 | 提交前檢查的資料年限（目前 36 個月）與估算資料占比上限（目前 30%） | 碳足跡領域審查者 | 工程暫定預設，僅要求提交者說明並確認，不阻擋；見 [readiness 規則](data-model/READINESS_RULES.md) |

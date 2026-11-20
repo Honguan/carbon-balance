@@ -27,7 +27,7 @@ require_loopback(production, "production")
 
 storage = development.get("services", {}).get("object-storage", {})
 # 4.48 (latest numbered release) carries fixable High Go CVEs; this exact scanned snapshot digest replaces it.
-if storage.get("image", "") != "chrislusf/seaweedfs:dev@sha256:d490b0697f63417258de70d121bcf04a0d6ae38bde09b4fbc40757ab4dcd0a3f":
+if storage.get("image", "") != "chrislusf/seaweedfs:dev@sha256:b8d4b46ca0cb7f9ead62cf7a1bf8f8c1f4fe986676c60f613b52507d097ce09e":
     fail("development: object storage must use the pinned supported image")
 if {str(port.get("target")) for port in published_ports(storage)} != {"9000"}:
     fail("development: only the S3 API may be published, not storage administration services")

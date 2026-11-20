@@ -43,11 +43,28 @@ public sealed class CarbonFootprintDbContext : IdentityDbContext<ApplicationUser
     public DbSet<LegacyStagingRowRecord> LegacyStagingRows => Set<LegacyStagingRowRecord>();
     public DbSet<LegacyImportConflictRecord> LegacyImportConflicts => Set<LegacyImportConflictRecord>();
 
+    private static void ConfigureRowVersions(ModelBuilder builder)
+    {
+        // Mutable drafts/workflow rows use PostgreSQL xmin; immutable versions never update, so they carry no token.
+        foreach (var type in new[]
+                 {
+                     typeof(OrganizationMailSettingsRecord), typeof(OrganizationMembershipRecord),
+                     typeof(OrganizationInvitationRecord), typeof(InventoryProjectVersionRecord),
+                     typeof(PcrVersionRecord), typeof(LifecycleStageDeclarationRecord),
+                     typeof(EmissionFactorVersionRecord)
+                 })
+        {
+            builder.Entity(type).Property(nameof(InventoryProjectVersionRecord.RowVersion))
+                .HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
         builder.HasDefaultSchema("app");
         ConfigureIdentity(builder);
+        ConfigureRowVersions(builder);
         ConfigureOrganizations(builder);
         ConfigureProducts(builder);
         ConfigureInventories(builder);
