@@ -18,7 +18,7 @@ services:
       retries: 20
 
   object-storage:
-    image: chrislusf/seaweedfs:dev@sha256:d490b0697f63417258de70d121bcf04a0d6ae38bde09b4fbc40757ab4dcd0a3f
+    image: chrislusf/seaweedfs:dev@sha256:b8d4b46ca0cb7f9ead62cf7a1bf8f8c1f4fe986676c60f613b52507d097ce09e
     command: ["mini", "-dir=/data", "-s3.port=9000", "-webdav=false", "-admin.ui=false", "-s3.port.iceberg=0", "-s3.port.lance=0", "-master.telemetry=false"]
     environment:
       AWS_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY:-${MINIO_ROOT_USER:-carbon_storage}}
@@ -37,7 +37,7 @@ services:
   # Explicit provisioning: bucket, least-privilege application identity and readiness sentinel.
   # Admin access stays here; the web container only gets OBJECT_STORAGE_APP_* credentials.
   object-storage-provision:
-    image: chrislusf/seaweedfs:dev@sha256:d490b0697f63417258de70d121bcf04a0d6ae38bde09b4fbc40757ab4dcd0a3f
+    image: chrislusf/seaweedfs:dev@sha256:b8d4b46ca0cb7f9ead62cf7a1bf8f8c1f4fe986676c60f613b52507d097ce09e
     entrypoint: ["/bin/sh", "/provision/provision-object-storage.sh"]
     environment:
       OBJECT_STORAGE_BUCKET: ${OBJECTSTORAGE__BUCKET:-carbon-evidence}

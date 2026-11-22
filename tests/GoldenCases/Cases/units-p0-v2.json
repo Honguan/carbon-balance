@@ -1,0 +1,12 @@
+{
+  "catalogueVersion": "units-p0-v2",
+  "source": "與 CarbonFootprintDbContext 種子資料 units-p0-v2 相同的受控單位；變更種子時須同步更新本檔並重審所有案例。",
+  "units": [
+    { "code": "kg", "dimension": "mass", "scaleToCanonical": 1, "canonicalCode": "kg", "aliases": ["kilogram", "kilograms"] },
+    { "code": "g", "dimension": "mass", "scaleToCanonical": 0.001, "canonicalCode": "kg", "aliases": ["gram", "grams"] },
+    { "code": "tonne", "dimension": "mass", "scaleToCanonical": 1000, "canonicalCode": "kg", "aliases": ["ton", "tons", "tonnes"] },
+    { "code": "kWh", "dimension": "energy", "scaleToCanonical": 1, "canonicalCode": "kWh", "aliases": ["kilowatt-hour"] },
+    { "code": "tonne-km", "dimension": "transport-work", "scaleToCanonical": 1, "canonicalCode": "tonne-km", "aliases": ["t-km", "tkm"] },
+    { "code": "piece", "dimension": "count", "scaleToCanonical": 1, "canonicalCode": "piece", "aliases": ["pieces", "item", "items", "件", "個"] }
+  ]
+}

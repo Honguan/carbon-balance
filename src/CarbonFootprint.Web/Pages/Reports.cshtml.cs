@@ -249,27 +249,8 @@ public sealed class ReportsModel : PageModel
 
 internal static class RunExportValidation
 {
-    public static bool TryReadRules(CalculationRunRecord run, out CanonicalManifest.ReportingRules rules)
-    {
-        rules = null!;
-        if (!CanonicalManifest.HasValidSha256(run.CanonicalInputManifest, run.InputSha256)
-            || !CanonicalManifest.TryReadBuildProvenance(run.CanonicalInputManifest, out _))
-        {
-            return false;
-        }
-        try
-        {
-            rules = CanonicalManifest.ReadReportingRules(run.CanonicalInputManifest, run.InputSha256);
-            _ = CanonicalManifest.ReadEvidenceReferences(run.CanonicalInputManifest, run.InputSha256);
-            return rules.RoundingDecimalPlaces is >= 0 and <= 12
-                && rules.CutoffThresholdPercent is >= 0m and <= 100m;
-        }
-        catch (Exception exception) when (exception is JsonException or InvalidOperationException
-            or KeyNotFoundException or FormatException or ArgumentException or OverflowException)
-        {
-            return false;
-        }
-    }
+    public static bool TryReadRules(CalculationRunRecord run, out CanonicalManifest.ReportingRules rules) =>
+        CalculationRunIntegrity.TryReadRules(run, out rules);
 
     public static ObjectResult ConflictResult() => new(
         "此計算版本的輸入快照雜湊不符或格式不受支援，暫停匯出。請由管理者檢查原始資料與修復紀錄；本次操作未變更任何資料。")

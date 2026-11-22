@@ -16,14 +16,43 @@ public sealed class CriticalAuditPathTests
             var end = index + 1 < methods.Count ? methods[index + 1].Index : source.IndexOf("private async", methods[index].Index, StringComparison.Ordinal);
             if (end < 0) end = source.Length;
             var body = source[methods[index].Index..end];
-            if (!body.Contains("_dbContext.SaveChangesAsync", StringComparison.Ordinal)) continue;
+            var saveIndexes = new[] { "_dbContext.SaveChangesAsync", "SaveOrRejectStaleAsync(" }
+                .Select(marker => body.IndexOf(marker, StringComparison.Ordinal)).Where(position => position >= 0).ToArray();
+            if (saveIndexes.Length == 0) continue;
             mutations.Add(methods[index].Groups[1].Value);
             Assert.Contains("AddAudit(", body);
-            Assert.True(body.IndexOf("AddAudit(", StringComparison.Ordinal) < body.IndexOf("_dbContext.SaveChangesAsync", StringComparison.Ordinal), methods[index].Groups[1].Value);
+            Assert.True(body.IndexOf("AddAudit(", StringComparison.Ordinal) < saveIndexes.Min(), methods[index].Groups[1].Value);
         }
-        foreach (var critical in new[] { "OnPostSaveMailSettingsAsync", "OnPostCreateFacilityAsync", "OnPostRevokeInvitationAsync",
-                     "OnPostRevokeMemberAsync", "OnPostCreateProductAsync", "OnPostCreateInventoryAsync", "OnPostSubmitInventoryAsync", "OnPostReviewInventoryAsync" })
-            Assert.Contains(critical, mutations);
+        // Every Workspace mutation is behind an application operation now; the page must not persist directly again.
+        Assert.Empty(mutations);
+
+        // Submit/review moved behind IInventoryWorkflow; the service must keep audit routing before persistence.
+        var workflow = File.ReadAllText(Path.Combine(root, "src/CarbonFootprint.Infrastructure/Governance/InventoryWorkflowService.cs"));
+        Assert.Contains("OperationAudit.AppendTracked(", workflow);
+        Assert.True(workflow.IndexOf("OperationAudit.AppendTracked(", StringComparison.Ordinal) < workflow.IndexOf("SaveChangesAsync", StringComparison.Ordinal));
+
+        // Extracted operations: every one that persists must append its audit before the first save.
+        var persisting = new List<string>();
+        foreach (var service in new[] { "ActivityDataService", "OrganizationAdministrationService", "ProductCatalogueService", "InventoryProjectService",
+                     "PcrGovernanceService", "FactorGovernanceService" })
+        {
+            var serviceSource = File.ReadAllText(Path.Combine(root, $"src/CarbonFootprint.Infrastructure/Governance/{service}.cs"));
+            foreach (var operation in serviceSource.Split("public async Task<OperationResult> ")[1..])
+            {
+                var name = operation[..operation.IndexOf('(')];
+                var saves = new[] { "db.SaveChangesAsync", "await SaveAsync(" }
+                    .Select(marker => operation.IndexOf(marker, StringComparison.Ordinal)).Where(position => position >= 0).ToArray();
+                if (saves.Length == 0) continue;
+                persisting.Add(name);
+                var audit = new[] { "OperationAudit.AppendTracked(", "new AuditWriter(db).Append(", "Audit(context, " }
+                    .Select(marker => operation.IndexOf(marker, StringComparison.Ordinal)).Where(position => position >= 0).DefaultIfEmpty(-1).Min();
+                Assert.True(audit >= 0 && audit < saves.Min(), $"{service}.{name}");
+            }
+        }
+        foreach (var critical in new[] { "SaveAsync", "RetireAsync", "AttachEvidenceAsync", "SaveMailSettingsAsync", "SendTestMailAsync",
+                     "RevokeInvitationAsync", "RevokeMemberAsync", "CreateFacilityAsync", "CreateProductAsync",
+                     "CreateAsync", "SetStageApplicabilityAsync", "SupersedeAsync", "PublishAsync", "WithdrawAsync" })
+            Assert.Contains(critical, persisting);
     }
 
     [Fact]
